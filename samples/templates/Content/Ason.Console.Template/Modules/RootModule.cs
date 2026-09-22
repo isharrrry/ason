@@ -1,4 +1,4 @@
-﻿using Ason;
+using Ason;
 
 namespace Ason.Console.Template.Modules; 
 public class RootModule {
@@ -18,7 +18,8 @@ public class RootModule {
                 ordersModule ??= new OrdersModule(RootOperator);
                 break;
             default:
-                Console.WriteLine($"Unknown module: {moduleName}");
+                // Inside Ason.* the Ason.Console namespace shadows System.Console, so fully qualify it.
+                System.Console.WriteLine($"Unknown module: {moduleName}");
                 break;
         }
     }

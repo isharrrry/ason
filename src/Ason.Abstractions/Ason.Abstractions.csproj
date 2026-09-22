@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- netstandard2.0 defaults to C# 7.3, but the marker sources use file-scoped
+         namespaces (C# 10) and nullable reference types (C# 8). -->
+    <LangVersion>latest</LangVersion>
+    <BaseOutputPath>..\bin</BaseOutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <Authors>Alexgoon</Authors>
+    <PackageId>Ason.Abstractions</PackageId>
+    <Description>Marker attributes for ASON operators and models: [AsonOperator], [AsonMethod], [AsonModel]. Targets netstandard2.0 so any .NET Framework 4.6.1+, .NET Core, .NET 6/8/9/10 library can annotate its types without taking a dependency on the ASON runtime.</Description>
+    <RepositoryUrl>https://github.com/Alexgoon/ason</RepositoryUrl>
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -14,7 +14,7 @@ namespace Ason.RemoteRunner.Tests;
 public class RemoteRunnerIntegrationTests {
     private static OperatorsLibrary Snapshot = new OperatorBuilder()
         .AddAssemblies(typeof(RootOperator).Assembly)
-        .SetBaseFilter(mi => mi.GetCustomAttribute<ProxyMethodAttribute>() != null)
+        .SetBaseFilter(mi => mi.GetCustomAttribute<AsonMethodAttribute>() != null)
         .Build();
 
     private sealed class DummyChat : IChatCompletionService {
@@ -29,18 +29,33 @@ public class RemoteRunnerIntegrationTests {
         }
     }
 
-    [Fact]
+    [RemoteRunnerFact]
     public async Task EnableRemoteRunner_SetsFlags_And_StartsTransport() {
+        // A remote runner server must be reachable; its URL comes from ASON_REMOTE_RUNNER_URL.
+        var remoteUrl = Environment.GetEnvironmentVariable("ASON_REMOTE_RUNNER_URL")!;
         var chat = new DummyChat();
         var root = new RootOperator(new object());
-        var client = new AsonClient(chat, root, Snapshot, new AsonClientOptions { SkipAnswerAgent = true, RunnerMode = ExecutionMode.ExternalProcess });
+        var client = new AsonClient(chat, root, Snapshot, new AsonClientOptions { SkipExplainerAgent = true, ExecutionMode = ExecutionMode.ExternalProcess });
         var runnerField = typeof(AsonClient).GetField("_runner", BindingFlags.NonPublic|BindingFlags.Instance);
         var runner = runnerField!.GetValue(client)!;
         var useRemoteProp = runner.GetType().GetProperty("UseRemote");
         Assert.False((bool)useRemoteProp!.GetValue(runner)!);
-        await client.EnableRemoteRunnerAsync("http://localhost:5000", stopLocalIfRunning:true);
+        await client.EnableRemoteRunnerAsync(remoteUrl, stopLocalIfRunning:true);
         Assert.True((bool)useRemoteProp.GetValue(runner)!);
         var remoteUrlProp = runner.GetType().GetProperty("RemoteUrl");
-        Assert.Equal("http://localhost:5000", (string)remoteUrlProp!.GetValue(runner)!);
+        Assert.Equal(remoteUrl.TrimEnd('/'), (string)remoteUrlProp!.GetValue(runner)!);
+    }
+}
+
+/// <summary>
+/// Integration test that needs a reachable remote runner (see Ason.RemoteBridge and the MAUI template).
+/// Set ASON_REMOTE_RUNNER_URL (for example http://localhost:5222) to enable it; otherwise it is skipped
+/// instead of failing on a refused connection.
+/// </summary>
+public sealed class RemoteRunnerFactAttribute : FactAttribute {
+    public RemoteRunnerFactAttribute() {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASON_REMOTE_RUNNER_URL"))) {
+            Skip = "Needs a running remote runner. Start one and set ASON_REMOTE_RUNNER_URL to enable this test.";
+        }
     }
 }

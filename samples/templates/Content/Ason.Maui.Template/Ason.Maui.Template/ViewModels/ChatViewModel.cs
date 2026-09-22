@@ -1,4 +1,4 @@
-﻿using Ason;
+using Ason;
 using Ason.CodeGen;
 using Ason.Maui.Template.Operators;
 using AsonRunner;
@@ -36,8 +36,20 @@ public partial class ChatViewModel : ObservableObject {
 
     [MemberNotNull(nameof(asonChatClient))]
     void InitAsonClient() {
+        // Any OpenAI-compatible endpoint works: set MY_OPEN_AI_BASE_URL (e.g. https://api.deepseek.com)
+        // and MY_OPEN_AI_MODEL (e.g. deepseek-flash) together with MY_OPEN_AI_KEY.
         var apiKey = Environment.GetEnvironmentVariable("MY_OPEN_AI_KEY") ?? string.Empty;
-        IChatCompletionService chatService = new OpenAIChatCompletionService(modelId: "gpt-4.1-mini", apiKey: apiKey);
+        var baseUrl = Environment.GetEnvironmentVariable("MY_OPEN_AI_BASE_URL");
+        var modelId = Environment.GetEnvironmentVariable("MY_OPEN_AI_MODEL") ?? "gpt-4.1-mini";
+        IChatCompletionService chatService;
+        if (string.IsNullOrWhiteSpace(baseUrl)) {
+            chatService = new OpenAIChatCompletionService(modelId, apiKey);
+        }
+        else {
+#pragma warning disable SKEXP0010 // custom OpenAI-compatible endpoints are evaluation-only in SK 1.45
+            chatService = new OpenAIChatCompletionService(modelId, new Uri(baseUrl), apiKey);
+#pragma warning restore SKEXP0010
+        }
 
         OperatorsLibrary operatorLibrary = new OperatorBuilder()
                                                 .AddAssemblies(typeof(MainAppOperator).Assembly)

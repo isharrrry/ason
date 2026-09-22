@@ -1,4 +1,4 @@
-﻿<Window x:Class="WpfSampleApp.MainWindow"
+<Window x:Class="WpfSampleApp.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -38,9 +38,18 @@
             <ColumnDefinition Width="385" />
         </Grid.ColumnDefinitions>
         <ListBox ItemsSource="{Binding NavigatoinItems}"
+                 AutomationProperties.AutomationId="NavigationList"
                  SelectedItem="{Binding CurrentNavigationItem}"
                  Background="Transparent"
-                 DisplayMemberPath="Name"/>
+                 DisplayMemberPath="Name">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <!-- DisplayMemberPath only affects rendering: without this the UIA name of each
+                         item stays the CLR type name, which breaks screen readers and automation. -->
+                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                </Style>
+            </ListBox.ItemContainerStyle>
+        </ListBox>
         <GridSplitter Grid.Column="1"
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Stretch"

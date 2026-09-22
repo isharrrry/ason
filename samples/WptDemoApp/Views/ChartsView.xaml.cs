@@ -1,4 +1,4 @@
-﻿using ScottPlot;
+using ScottPlot;
 using ScottPlot.WPF;
 using Ason;
 using System.Windows;
@@ -11,7 +11,19 @@ namespace WpfSampleApp.Views;
 /// Interaction logic for AnalyticsView.xaml
 /// </summary>
 public partial class ChartsView : UserControl {
-    ScottPlot.Color accentPlotColor = new ScottPlot.Color(SystemColors.AccentColor.R, SystemColors.AccentColor.G, SystemColors.AccentColor.B, SystemColors.AccentColor.A);
+    // SystemColors.AccentColor is a .NET 9+ (Fluent) member; HighlightColor is the closest
+    // equivalent available on the net6.0-windows leg.
+    static System.Windows.Media.Color AccentColor {
+        get {
+#if NET9_0_OR_GREATER
+            return SystemColors.AccentColor;
+#else
+            return SystemColors.HighlightColor;
+#endif
+        }
+    }
+
+    ScottPlot.Color accentPlotColor = new ScottPlot.Color(AccentColor.R, AccentColor.G, AccentColor.B, AccentColor.A);
     RootOperator? rootOperator;
     public ChartsView() {
         InitializeComponent();

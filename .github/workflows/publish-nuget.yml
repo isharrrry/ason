@@ -35,6 +35,12 @@ jobs:
           VERSION=${VERSION#v}   # remove leading "v"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
+      # Ason.Abstractions must be packed before Ason: Ason takes a package dependency on it.
+      - name: Build & Pack Ason.Abstractions
+        run: |
+          dotnet build src/Ason.Abstractions/Ason.Abstractions.csproj --configuration Release
+          dotnet pack src/Ason.Abstractions/Ason.Abstractions.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
+
       - name: Build & Pack Ason.Runner.Core
         run: |
           dotnet build src/Ason.Runner.Core/Ason.Runner.Core.csproj --configuration Release

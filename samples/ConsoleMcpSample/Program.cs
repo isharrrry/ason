@@ -1,7 +1,6 @@
-﻿using Ason;
+using Ason;
 using Ason.CodeGen;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using ModelContextProtocol.Client;
 
 var context7McpClient = await CreateContext7ClientAsync();
@@ -10,8 +9,8 @@ var operatorLibrary = new OperatorBuilder()
     .AddMcp(context7McpClient)
     .Build();
 
-var apiKey = Environment.GetEnvironmentVariable("MY_OPEN_AI_KEY") ?? string.Empty;
-IChatCompletionService chatService = new OpenAIChatCompletionService(modelId: "gpt-4.1-mini", apiKey: apiKey);
+IChatCompletionService chatService = OpenAiCompatibleChatServiceFactory.FromEnvironment();
+Console.WriteLine($"Chat service: {OpenAiCompatibleChatServiceFactory.DescribeConfiguration()}");
 
 AsonClient client = new AsonClient(chatService, new RootOperator(new object()), operatorLibrary);
 

@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="WpfSampleApp.Views.EmployeesView"
+<UserControl x:Class="WpfSampleApp.Views.EmployeesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -40,6 +40,7 @@
             </ToolBar>
         </ToolBarTray>
         <DataGrid ItemsSource="{Binding Employees}"
+                  AutomationProperties.AutomationId="EmployeesGrid"
                   SelectedItem="{Binding SelectedEmployee}"
                   SelectionMode="Single"
                   IsReadOnly="True"

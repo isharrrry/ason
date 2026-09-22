@@ -16,7 +16,7 @@ builder.Services.AddSingleton<IAppDataService, InMemoryAppDataService>();
 builder.Services.AddScoped<SessionState>();
 
 builder.Services.AddAson(
-    defaultChatCompletionFactory: sp => new OpenAIChatCompletionService("gpt-4.1-mini", Environment.GetEnvironmentVariable("MY_OPEN_AI_KEY") ?? string.Empty),
+    defaultChatCompletionFactory: sp => OpenAiCompatibleChatServiceFactory.FromEnvironment(),
     rootOperatorFactory: sp => sp.GetRequiredService<SessionState>().MainAppOperator,
     operators: new OperatorBuilder()
                     .AddAssemblies(typeof(BlazorMainAppOperator).Assembly)

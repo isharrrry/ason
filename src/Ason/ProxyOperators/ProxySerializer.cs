@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Client; // MCP
@@ -158,6 +158,8 @@ public static class ProxySerializer {
     }
 
     private static void EmitRuntimeMethod(StringBuilder sb, MethodInfo mi, string target, bool isInstance) {
+        // Static operator modules emit a static proxy class, so their members must be static too.
+        string mod = isInstance ? "public" : "public static";
         var pars = mi.GetParameters();
         string paramSig = string.Join(", ", pars.Select((p,i)=> $"object? {p.Name ?? "arg"+i}"));
         string argsPack = pars.Length == 0 ? "Array.Empty<object?>()" : $"new object?[] {{ {string.Join(", ", pars.Select(p=>p.Name))} }}";
@@ -165,21 +167,21 @@ public static class ProxySerializer {
         string logicalName = TrimAsyncSuffix(rawName);
         Type rt = mi.ReturnType;
         if (rt == typeof(void) || rt == typeof(Task)) {
-            sb.AppendLine($"    public void {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<object>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
+            sb.AppendLine($"    {mod} void {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<object>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
         }
         else if (rt.IsGenericType && rt.GetGenericTypeDefinition() == typeof(Task<>)) {
             var tArg = rt.GetGenericArguments()[0];
             bool isOp = tArg.GetCustomAttribute<AsonOperatorAttribute>() != null;
             if (isOp) {
-                sb.AppendLine($"    public {tArg.Name} {logicalName}({paramSig}) {{ var handle = ProxyRuntime.Host.InvokeAsync<string>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult(); return new {tArg.Name}(handle); }}");
+                sb.AppendLine($"    {mod} {tArg.Name} {logicalName}({paramSig}) {{ var handle = ProxyRuntime.Host.InvokeAsync<string>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult(); return new {tArg.Name}(handle); }}");
             } else {
                 string tName = GetFriendlyTypeName(tArg);
-                sb.AppendLine($"    public {tName} {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<{tName}>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
+                sb.AppendLine($"    {mod} {tName} {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<{tName}>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
             }
         }
         else {
             string tName = GetFriendlyTypeName(rt);
-            sb.AppendLine($"    public {tName} {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<{tName}>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
+            sb.AppendLine($"    {mod} {tName} {logicalName}({paramSig}) => ProxyRuntime.Host.InvokeAsync<{tName}>(\"{target}\", \"{rawName}\", {argsPack}{(isInstance ? ", _handle" : string.Empty)}).GetAwaiter().GetResult();");
         }
     }
     #endregion
@@ -215,13 +217,15 @@ public static class ProxySerializer {
     }
 
     private static void EmitSignatureMethod(StringBuilder sb, MethodInfo mi, bool isInstance) {
+        // Keep the agent-facing signature consistent with the generated proxy: static modules read "static".
+        string mod = isInstance ? "public" : "public static";
         var attr = mi.GetCustomAttribute<AsonMethodAttribute>();
         if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr.Description!)) sb.AppendLine($"    // {line}");
         string logicalName = TrimAsyncSuffix(mi.Name);
         var pars = mi.GetParameters();
         string paramSig = string.Join(", ", pars.Select((p,i)=> $"{GetFriendlyTypeName(p.ParameterType)} {p.Name ?? "arg"+i}"));
         string retType = MapReturnSignature(mi.ReturnType);
-        sb.AppendLine($"    public {(retType=="void"?"void":retType)} {logicalName}({paramSig});");
+        sb.AppendLine($"    {mod} {(retType=="void"?"void":retType)} {logicalName}({paramSig});");
     }
     #endregion
 

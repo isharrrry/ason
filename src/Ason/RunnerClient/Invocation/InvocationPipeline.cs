@@ -14,6 +14,7 @@ internal sealed class InvocationPipeline {
     readonly JsonSerializerOptions _jsonOptions;
     readonly SynchronizationContext? _capturedContext;
     readonly ConcurrentDictionary<string, IMcpClient> _mcpClients;
+    readonly ConcurrentDictionary<string, object>? _singletonOperators;
 
     IInvocationScheduler _scheduler = new PassthroughInvocationScheduler();
     IOperatorInvoker? _operatorInvoker;
@@ -25,11 +26,13 @@ internal sealed class InvocationPipeline {
     public InvocationPipeline(ConcurrentDictionary<string, OperatorBase> handleToObject,
         JsonSerializerOptions jsonOptions,
         SynchronizationContext? capturedContext,
-        ConcurrentDictionary<string, IMcpClient> mcpClients) {
+        ConcurrentDictionary<string, IMcpClient> mcpClients,
+        ConcurrentDictionary<string, object>? singletonOperators = null) {
         _handleToObject = handleToObject;
         _jsonOptions = jsonOptions;
         _capturedContext = capturedContext;
         _mcpClients = mcpClients;
+        _singletonOperators = singletonOperators;
     }
 
     public JsonSerializerOptions JsonOptions => _jsonOptions;
@@ -56,7 +59,7 @@ internal sealed class InvocationPipeline {
                 ? new SynchronizationContextInvocationScheduler(_capturedContext)
                 : new PassthroughInvocationScheduler();
             _invokerCache = _methodCache;
-            _operatorInvoker = new OperatorInvoker(_handleToObject, _scheduler, _jsonOptions, _invokerCache);
+            _operatorInvoker = new OperatorInvoker(_handleToObject, _scheduler, _jsonOptions, _invokerCache, _singletonOperators);
         }
     }
 

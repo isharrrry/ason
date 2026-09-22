@@ -53,3 +53,7 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Local agent tooling (not part of the library). Plans under .agents/plans are kept in the
+# repository on purpose so design decisions can be reviewed alongside the code.
+.agents/skills/

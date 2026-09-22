@@ -1,8 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows;net9.0-windows;net6.0-windows</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -28,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
+    <ProjectReference Include="..\LibDemo\LibDemo.csproj" />
   </ItemGroup>
 
 </Project>

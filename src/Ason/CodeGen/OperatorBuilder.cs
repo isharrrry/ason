@@ -54,17 +54,25 @@ public sealed class OperatorBuilder {
             }
             return (proxies, signatures, cache);
         });
-        return new OperatorsLibrary(buildTask, _addExtractor, _mcpClients.ToArray());
+        return new OperatorsLibrary(buildTask, _addExtractor, _mcpClients.ToArray(), distinct);
     }
 
     IOperatorMethodCache BuildMethodCache(Assembly[] assemblies) {
         var entries = new Dictionary<OperatorMethodCache.Key, OperatorMethodEntry>();
+        var staticOperators = new Dictionary<string, Type>(StringComparer.Ordinal);
         foreach (var asm in assemblies) {
             Type[] types; try { types = asm.GetTypes(); } catch { continue; }
             foreach (var t in types) {
-                if (!Attribute.IsDefined(t, typeof(AsonOperatorAttribute)) && !typeof(OperatorBase).IsAssignableFrom(t)) continue;
+                bool hasMarker = Attribute.IsDefined(t, typeof(AsonOperatorAttribute));
+                if (!hasMarker && !typeof(OperatorBase).IsAssignableFrom(t)) continue;
                 if (t.FullName == typeof(ExtractionOperator).FullName && !_addExtractor) continue;
-                var methods = t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+
+                // Static classes are operator modules: no instance, addressed by type name over the wire.
+                bool isStaticOperator = hasMarker && t.IsAbstract && t.IsSealed;
+                if (isStaticOperator) staticOperators[t.Name] = t;
+
+                var methods = t.GetMethods(
+                    (isStaticOperator ? BindingFlags.Static : BindingFlags.Instance) | BindingFlags.Public | BindingFlags.DeclaredOnly);
                 foreach (var m in methods) {
                     if (!_baseFilter(m)) continue;
                     var key = new OperatorMethodCache.Key(t, m.Name, m.GetParameters().Length);
@@ -77,7 +85,7 @@ public sealed class OperatorBuilder {
                 }
             }
         }
-        return new OperatorMethodCache(entries);
+        return new OperatorMethodCache(entries, staticOperators);
     }
 
     sealed class OperatorMethodCache : IOperatorMethodCache {
@@ -89,9 +97,18 @@ public sealed class OperatorBuilder {
             public override int GetHashCode() => HashCode.Combine(Type, Name, ParamCount);
         }
         readonly Dictionary<Key, OperatorMethodEntry> _map;
+        readonly Dictionary<string, Type> _staticOperators;
         readonly ConcurrentDictionary<(MethodInfo open, string argsKey), OperatorMethodEntry> _closedGenericCache = new();
-        public OperatorMethodCache(Dictionary<Key, OperatorMethodEntry> map) { _map = map; }
+        public OperatorMethodCache(Dictionary<Key, OperatorMethodEntry> map, Dictionary<string, Type>? staticOperators = null) {
+            _map = map;
+            _staticOperators = staticOperators ?? new Dictionary<string, Type>(StringComparer.Ordinal);
+        }
         public bool TryGet(Type declaringType, string name, int argCount, out OperatorMethodEntry entry) => _map.TryGetValue(new Key(declaringType, name, argCount), out entry!);
+        public bool TryGetStatic(string targetTypeName, string name, int argCount, out OperatorMethodEntry entry) {
+            entry = null!;
+            return _staticOperators.TryGetValue(targetTypeName, out var type)
+                && _map.TryGetValue(new Key(type, name, argCount), out entry!);
+        }
         public OperatorMethodEntry GetOrAddClosedGeneric(OperatorMethodEntry openEntry, Type[] typeArguments) {
             if (!openEntry.IsGenericDefinition) return openEntry;
             string keyStr = String.Join("|", typeArguments.Select(t => t.FullName));
@@ -109,13 +126,21 @@ public sealed class OperatorBuilder {
 public sealed record OperatorsLibrary(
     Task<(string proxies, string signatures, IOperatorMethodCache cache)> BuildTask,
     bool HasExtractor,
-    IReadOnlyList<IMcpClient> McpClients);
+    IReadOnlyList<IMcpClient> McpClients,
+    // Assemblies the snapshot was built from. Used to materialise marker-only operators at runtime.
+    IReadOnlyList<Assembly>? Assemblies = null);
 
 internal sealed class FilteringMethodCache : IOperatorMethodCache {
     readonly IOperatorMethodCache _inner; readonly Func<MethodInfo, bool> _filter;
     public FilteringMethodCache(IOperatorMethodCache inner, Func<MethodInfo, bool> filter) { _inner = inner; _filter = filter; }
     public bool TryGet(Type declaringType, string name, int argCount, out OperatorMethodEntry entry) {
         if (_inner.TryGet(declaringType, name, argCount, out entry)) {
+            if (_filter(entry.Method)) return true; entry = null!; return false;
+        }
+        entry = null!; return false;
+    }
+    public bool TryGetStatic(string targetTypeName, string name, int argCount, out OperatorMethodEntry entry) {
+        if (_inner.TryGetStatic(targetTypeName, name, argCount, out entry)) {
             if (_filter(entry.Method)) return true; entry = null!; return false;
         }
         entry = null!; return false;

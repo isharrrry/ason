@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  # Any branch push, so a feature branch can turn green in a fork BEFORE a pull request is opened.
+  # (workflow_dispatch is only usable once this file exists on the default branch.)
+  push:
+    branches: [ '**' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Ason and Ason.Runner.Core multi-target net6.0 and net9.0, so both SDKs are installed.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            9.0.x
+
+      # Only cross-platform projects are built here. The WPF sample and the FlaUI UI tests target
+      # *-windows, and the sample that targets net10.0-windows additionally needs a .NET 10 SDK;
+      # those belong to a Windows job.
+      - name: Build libraries and samples
+        run: |
+          dotnet build src/Ason.Abstractions/Ason.Abstractions.csproj --configuration Release
+          dotnet build src/Ason.Runner.Core/Ason.Runner.Core.csproj --configuration Release
+          dotnet build src/Ason/Ason.csproj --configuration Release
+          dotnet build src/Ason.ExternalExecutor/Ason.ExternalExecutor.csproj --configuration Release
+          dotnet build src/Ason.RemoteBridge/Ason.RemoteBridge.csproj --configuration Release
+          dotnet build samples/LibDemo/LibDemo.csproj --configuration Release
+
+      # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test
+      # project is exercised on Windows (see the comment above).
+      - name: Smoke tests (net6.0 / net9.0)
+        run: |
+          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net6.0
+          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net9.0
+
+      # Excluded here:
+      #   * Docker      - those theory cases need a Docker daemon,
+      #   * McpClientTests - they need live MCP servers/network.
+      # Everything else in Ason.Tests runs in-process or via the external executor and is hermetic.
+      - name: Unit tests
+        run: |
+          dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release
+          dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release
+          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"

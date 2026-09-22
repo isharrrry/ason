@@ -1,8 +1,7 @@
-﻿using Ason;
+using Ason;
 using Ason.CodeGen;
 using ConsoleExtractorSample;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 string userMessage = "Use the information from the email to get John’s and Bob’s apples, and then calculate the total number of apples";
 
@@ -11,8 +10,8 @@ var operatorLibrary = new OperatorBuilder()
     .AddExtractor()
     .Build();
 
-var apiKey = Environment.GetEnvironmentVariable("MY_OPEN_AI_KEY") ?? string.Empty;
-IChatCompletionService chatService = new OpenAIChatCompletionService(modelId: "gpt-4.1-mini", apiKey: apiKey);
+IChatCompletionService chatService = OpenAiCompatibleChatServiceFactory.FromEnvironment();
+Console.WriteLine($"Chat service: {OpenAiCompatibleChatServiceFactory.DescribeConfiguration()}");
 
 var myOperator = new MyOperator(new object());
 AsonClient client = new AsonClient(chatService, myOperator, operatorLibrary);

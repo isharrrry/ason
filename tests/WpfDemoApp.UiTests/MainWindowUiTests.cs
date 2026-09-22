@@ -1,0 +1,122 @@
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Tools;
+using Xunit.Abstractions;
+
+namespace WpfDemoApp.UiTests;
+
+[Collection(WpfAppCollection.Name)]
+public class MainWindowUiTests {
+
+    const string NavigationListId = "NavigationList";
+    const string ChatInputId = "ChatInput";
+    const string ChatResponseId = "ChatResponseBox";
+    const string SendButtonId = "SendButton";
+
+    readonly WpfAppFixture _fixture;
+    readonly ITestOutputHelper _output;
+
+    public MainWindowUiTests(WpfAppFixture fixture, ITestOutputHelper output) {
+        _fixture = fixture;
+        _output = output;
+    }
+
+    Window Window => _fixture.MainWindow;
+
+    [Fact]
+    public void Main_window_is_shown_with_the_expected_title() {
+        _output.WriteLine($"driving {AppUnderTest.ExePath}");
+        Assert.Equal("MainWindow", Window.Title);
+        Assert.NotNull(Find(NavigationListId).AsListBox());
+    }
+
+    [Fact]
+    public void Navigation_switches_between_all_four_views() {
+        NavigateTo("Employees");
+        Assert.NotNull(Find("EmployeesGrid"));
+
+        NavigateTo("Calendar");
+        Assert.NotNull(Find("CalendarAppointments"));
+
+        NavigateTo("Emails");
+        Assert.NotNull(Find("EmailsList"));
+
+        NavigateTo("Analytics");
+        Assert.NotNull(Find("ChartsViewHint"));
+
+        NavigateTo("Employees");
+        Assert.NotNull(Find("EmployeesGrid"));
+    }
+
+    [MissingApiKeyFact]
+    public void Chat_panel_explains_that_the_api_key_is_missing() {
+        var response = Find(ChatResponseId).AsTextBox();
+
+        var text = Retry.WhileEmpty(
+            () => response.Text,
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(250)).Result;
+
+        _output.WriteLine($"chat panel says: {text}");
+        Assert.Contains(AppUnderTest.ApiKeyVariable, text);
+    }
+
+    [LiveEndpointFact]
+    public void Chat_answers_a_task_through_the_configured_endpoint() {
+        // The sample shows prompt suggestions until the first reply arrives.
+        var input = Find(ChatInputId).AsTextBox();
+        input.Text = "How many employees are in the app? Use the Employees view.";
+
+        Find(SendButtonId).AsButton().Invoke();
+
+        var response = Find(ChatResponseId).AsTextBox();
+        var reply = Retry.WhileEmpty(
+            () => response.Text,
+            TimeSpan.FromSeconds(180),
+            TimeSpan.FromSeconds(1)).Result;
+
+        _output.WriteLine("assistant reply: " + reply);
+
+        Assert.False(string.IsNullOrWhiteSpace(reply), "the assistant produced no reply");
+
+        // A non-empty reply is not enough: an auth/endpoint failure also paints text into the panel.
+        foreach (var failureMarker in new[] { "invalid_api_key", "Unauthorized", "401", "Exception", "No API key configured" }) {
+            Assert.False(
+                reply!.Contains(failureMarker, StringComparison.OrdinalIgnoreCase),
+                $"the reply looks like a configuration/endpoint failure (matched '{failureMarker}'): {reply}");
+        }
+
+        // The task asks for a count, so a digit proves the agent actually ran a script against the app.
+        Assert.Matches(@"\d", reply!);
+    }
+
+    void NavigateTo(string itemName) {
+        var list = Find(NavigationListId).AsListBox();
+        var item = list.Items.FirstOrDefault(i => string.Equals(i.Name, itemName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Navigation item '{itemName}' not found. Available: {string.Join(", ", list.Items.Select(i => i.Name))}");
+
+        var selectionItem = item.Patterns.SelectionItem.PatternOrDefault;
+        if (selectionItem is not null) {
+            selectionItem.Select();
+        }
+        else {
+            item.Click();
+        }
+
+        FlaUI.Core.Input.Wait.UntilInputIsProcessed();
+    }
+
+    AutomationElement Find(string automationId) {
+        var element = Window.FindFirstDescendant(cf => cf.ByAutomationId(automationId));
+        if (element is not null) return element;
+
+        var knownIds = Window.FindAllDescendants()
+            .Select(e => e.Properties.AutomationId.ValueOrDefault)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .OrderBy(id => id, StringComparer.Ordinal);
+
+        throw new InvalidOperationException(
+            $"No element with AutomationId '{automationId}' under the main window. Known AutomationIds: {string.Join(", ", knownIds)}");
+    }
+}

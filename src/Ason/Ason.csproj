@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net6.0;net9.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <BaseOutputPath>..\bin</BaseOutputPath>
@@ -24,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Ason.Runner.Core\Ason.Runner.Core.csproj" />
+    <ProjectReference Include="..\Ason.Abstractions\Ason.Abstractions.csproj" />
 	<None Include="icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 

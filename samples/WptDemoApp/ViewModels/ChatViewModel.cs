@@ -1,10 +1,9 @@
-﻿using Ason;
+using Ason;
 using Ason.CodeGen;
 using AsonRunner;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Diagnostics;
 using System.Reflection;
 using System.Collections.ObjectModel;
@@ -35,7 +34,7 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
     static OperatorsLibrary? _sharedSnapshot;
 
     async Task<OperatorsLibrary> GetOperatorsAsync() => _sharedSnapshot ??= new OperatorBuilder()
-        .AddAssemblies(typeof(MainAppOperator).Assembly)
+        .AddAssemblies(typeof(MainAppOperator).Assembly, typeof(LibDemo.LibDemoOperator).Assembly)
         //.AddExtractor()
         //.AddMcp(await CreateContext7ClientAsync())
         .SetBaseFilter(mi => mi.GetCustomAttribute<AsonMethodAttribute>() != null)
@@ -53,8 +52,16 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
 
     [RelayCommand]
     async Task Init() {
-        var apiKey = Environment.GetEnvironmentVariable("MY_OPEN_AI_KEY") ?? string.Empty;
-        IChatCompletionService chatService = new OpenAIChatCompletionService(modelId: "gpt-4.1-mini", apiKey: apiKey);
+        IChatCompletionService chatService;
+        try {
+            chatService = OpenAiCompatibleChatServiceFactory.FromEnvironment();
+        }
+        catch (InvalidOperationException ex) {
+            // A missing key or a malformed base URL must show up in the chat panel instead of
+            // tearing the whole window down on startup.
+            ChatResponse = ex.Message;
+            return;
+        }
         var operators = await GetOperatorsAsync();
         var options = new AsonClientOptions {
             MaxFixAttempts = 2,

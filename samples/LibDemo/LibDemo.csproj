@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net6.0 is what the WPF demo consumes; netstandard2.0 proves the markers can be
+         referenced from plain class libraries too (default LangVersion there is C# 7.3). -->
+    <TargetFrameworks>net6.0;netstandard2.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ason.Abstractions\Ason.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

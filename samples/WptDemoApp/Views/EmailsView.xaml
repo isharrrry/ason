@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="WpfSampleApp.Views.EmailsView"
+<UserControl x:Class="WpfSampleApp.Views.EmailsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -60,6 +60,7 @@
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
         <ListBox ItemsSource="{Binding Source={StaticResource EmailsViewSource}}"
+                 AutomationProperties.AutomationId="EmailsList"
                  SelectedItem="{Binding SelectedEmail}"
                  ItemTemplate="{StaticResource emamilTemplate}"
                  HorizontalContentAlignment="Stretch"

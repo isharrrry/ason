@@ -11,6 +11,9 @@
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>
+    <!-- This project only packs template content. Without this the SDK compiles Content/**/*.cs as
+         part of this project, which fails (multiple top-level statements, missing template deps). -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
 	<PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
   <ItemGroup>

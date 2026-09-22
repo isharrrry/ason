@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
@@ -33,6 +35,9 @@ public class AsonClient : IChatClient {
     ChatCompletionAgent? _receptionAgent;
     ChatCompletionAgent? _explainerAgent;
     RootOperator _rootOperator;
+
+    // Marker-only operators ([AsonOperator] without OperatorBase) live here, keyed by type name.
+    readonly ConcurrentDictionary<string, object> _singletonOperators = new(StringComparer.Ordinal);
 
     readonly AsonClientOptions _options;
     readonly OperatorsLibrary _operatorsLibrary;
@@ -90,12 +95,13 @@ public class AsonClient : IChatClient {
             var extractor = new ExtractionOperator();
             _rootOperator.OperatorInstances.TryAdd(extractor.Handle, extractor);
         }
+        RegisterMarkerOnlyOperators(_operatorsLibrary);
 
         _scriptKernel = BuildKernel(ScriptChatCompletion);
         _receptionKernel = BuildKernel(ReceptionChatCompletion);
         _explainerKernel = BuildKernel(ExplainerChatCompletion);
 
-        _runner = new RunnerClient(rootOperator.OperatorInstances, SynchronizationContext.Current) { Mode = _options.ExecutionMode };
+        _runner = new RunnerClient(rootOperator.OperatorInstances, SynchronizationContext.Current, _singletonOperators) { Mode = _options.ExecutionMode };
         if (!string.IsNullOrWhiteSpace(_options.RunnerExecutablePath)) {
             _runner.RunnerExecutablePath = _options.RunnerExecutablePath;
         }
@@ -182,9 +188,19 @@ public class AsonClient : IChatClient {
         var sb = new StringBuilder();
         sb.AppendLine();
         var typeInstanceCount = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        var instances = new List<(Type Type, string Handle)>();
         foreach (var instance in _rootOperator.OperatorInstances.Values) {
             var type = instance.GetType();
             if (type == typeof(RootOperator)) continue;
+            instances.Add((type, instance.Handle));
+        }
+        // Marker-only operators are singletons addressed by their type name.
+        foreach (var singleton in _singletonOperators) {
+            instances.Add((singleton.Value.GetType(), singleton.Key));
+        }
+
+        foreach (var (type, handle) in instances) {
             var typeName = type.Name;
             if (!typeInstanceCount.TryGetValue(typeName, out var count)) count = 0;
             string baseVar = char.ToLowerInvariant(typeName[0]) + typeName.Substring(1);
@@ -192,11 +208,48 @@ public class AsonClient : IChatClient {
             typeInstanceCount[typeName] = count + 1;
             string proxyName = typeName;
             bool isRootDerived = typeof(RootOperator).IsAssignableFrom(type) && type != typeof(RootOperator);
-            string ctor = isRootDerived ? $"new {proxyName}()" : $"new {proxyName}(\"{(instance as OperatorBase)?.Handle ?? typeName}\")";
+            string ctor = isRootDerived ? $"new {proxyName}()" : $"new {proxyName}(\"{handle}\")";
             sb.AppendLine($"{proxyName} {varName} = {ctor};");
         }
         sb.AppendLine();
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Marker-only operators ([AsonOperator] without OperatorBase) have no view lifecycle to attach to,
+    /// so they are materialised once and registered under their type name. Scripts then receive a proxy
+    /// variable for them exactly like for attached view operators, which makes them callable in every
+    /// execution mode (in-process, external process, Docker and remote runner).
+    /// Static operator modules do not need this: they are dispatched statically by type name.
+    /// </summary>
+    void RegisterMarkerOnlyOperators(OperatorsLibrary library) {
+        var assemblies = library.Assemblies;
+        if (assemblies is null || assemblies.Count == 0) return;
+
+        foreach (var assembly in assemblies) {
+            Type[] types;
+            try { types = assembly.GetTypes(); } catch { continue; }
+            foreach (var type in types) {
+                if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition) continue;
+                if (typeof(OperatorBase).IsAssignableFrom(type)) continue;
+                if (!Attribute.IsDefined(type, typeof(AsonOperatorAttribute))) continue;
+
+                if (type.GetConstructor(Type.EmptyTypes) is null) {
+                    OnLog(LogLevel.Warning, $"Operator '{type.FullName}' has [AsonOperator] but no public parameterless constructor, so it cannot be invoked.");
+                    continue;
+                }
+
+                string handle = type.Name;
+                if (_singletonOperators.ContainsKey(handle) || _rootOperator.OperatorInstances.ContainsKey(handle)) continue;
+
+                try {
+                    if (Activator.CreateInstance(type) is { } instance) _singletonOperators.TryAdd(handle, instance);
+                }
+                catch (Exception ex) {
+                    OnLog(LogLevel.Error, $"Failed to create marker-only operator '{type.FullName}'", ex);
+                }
+            }
+        }
     }
 
     Kernel BuildKernel(IChatCompletionService chat) {

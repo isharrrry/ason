@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -40,8 +40,8 @@ public sealed class RunnerClient {
     public event EventHandler<AsonLogEventArgs>? Log;
     public event EventHandler<RunnerMethodInvokingEventArgs>? MethodInvoking;
 
-    public RunnerClient(ConcurrentDictionary<string, OperatorBase> handleToObject, SynchronizationContext? synchronizationContext) {
-        _pipeline = new InvocationPipeline(handleToObject, JsonOptions, synchronizationContext, _mcpClients);
+    public RunnerClient(ConcurrentDictionary<string, OperatorBase> handleToObject, SynchronizationContext? synchronizationContext, ConcurrentDictionary<string, object>? singletonOperators = null) {
+        _pipeline = new InvocationPipeline(handleToObject, JsonOptions, synchronizationContext, _mcpClients, singletonOperators);
         _executionDispatcher = new ExecutionDispatcher(DebugLog);
         _logHandler = new LogHandler(RaiseLogEvent);
         _execResultHandler = new ExecResultHandler(_executionDispatcher, JsonOptions);
@@ -239,6 +239,7 @@ public sealed class RunnerClient {
 internal sealed class EmptyMethodCache : IOperatorMethodCache {
     public OperatorMethodEntry GetOrAddClosedGeneric(OperatorMethodEntry openEntry, Type[] typeArguments) => openEntry;
     public bool TryGet(Type declaringType, string name, int argCount, out OperatorMethodEntry entry) { entry = null!; return false; }
+    public bool TryGetStatic(string targetTypeName, string name, int argCount, out OperatorMethodEntry entry) { entry = null!; return false; }
 }
 
 public sealed class RunnerMethodInvokingEventArgs : CancelEventArgs {

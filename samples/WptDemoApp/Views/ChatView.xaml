@@ -1,4 +1,4 @@
-﻿<UserControl x:Class="WpfSampleApp.Views.ChatView"
+<UserControl x:Class="WpfSampleApp.Views.ChatView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -28,6 +28,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBox Text="{Binding ChatResponse}"
+                 AutomationProperties.AutomationId="ChatResponseBox"
                  TextWrapping="Wrap"
                  AcceptsReturn="True"
                  IsReadOnly="True"
@@ -81,6 +82,7 @@
             </ScrollViewer>
         </Grid>
         <TextBox x:Name="InputTextBox"
+                 AutomationProperties.AutomationId="ChatInput"
                  Text="{Binding UserInput, UpdateSourceTrigger=PropertyChanged}"
                  TextWrapping="Wrap"
                  AcceptsReturn="True"
@@ -96,13 +98,14 @@
             </TextBox.InputBindings>
         </TextBox>
         <Button Command="{Binding SendMessageCommand}"
+                AutomationProperties.AutomationId="SendButton"
                 IsDefault="True"
                 VerticalAlignment="Bottom"
                 Margin="8,0,0,10"
                 Padding="8"
                 Width="30"
                 BorderThickness="1"
-                Background="{DynamicResource {x:Static SystemColors.AccentColorBrushKey}}"
+                Background="{DynamicResource AsonAccentBrush}"
                 Grid.Row="2"
                 Grid.Column="1">
             <Image Source="/Images/send.png" />
