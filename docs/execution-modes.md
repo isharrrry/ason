@@ -65,6 +65,9 @@ A sample project demonstrating this setup is included in the **MAUI Project Temp
 `ExecutionMode` and `UseRemoteRunner` are orthogonal: the first selects how the script is isolated, the
 second selects where the script host runs. The transport follows from that combination:
 
+A third axis sits next to them in a split deployment: *which transport carries the call from the caller to the
+application* (gRPC, MCP, HTTP). It is chosen on the application side, and what a caller has to prepare for each
+choice is in [what a caller has to know and configure](app-agent-separation.md#what-a-caller-has-to-know-and-configure).
 ```csharp
 // RunnerTransportManager
 RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;

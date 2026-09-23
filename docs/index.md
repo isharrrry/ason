@@ -27,4 +27,5 @@ Every guide exists in English, Chinese and Spanish. The topic table below links 
 | build and test the repository | [Contributing](contributing.md) |
 | pick a mode and a deployment for my application | [Execution modes](execution-modes.md) |
 | drive my running application from a test, a CI job, another program — no model involved | [Application / agent separation](app-agent-separation.md#using-the-bridge-without-an-agent) |
+| work out what a caller needs before it can connect | [What a caller has to know and configure](app-agent-separation.md#what-a-caller-has-to-know-and-configure) |
 | run a working example of every shape, single-process or split | [Samples and how to run them](app-agent-separation.md#samples-and-how-to-run-them) |

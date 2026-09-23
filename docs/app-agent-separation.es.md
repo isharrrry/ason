@@ -260,6 +260,47 @@ Dos consecuencias que conviene conocer:
 El escenario con agente y este comparten todo: el mismo host, el mismo runtime, los mismos adaptadores y
 endpoints. Lo único que cambia es quién compone las llamadas — un modelo, o el propio programa.
 
+## Qué necesita saber y configurar un llamador
+
+El puente es deliberadamente ignorante en materia de descubrimiento: responde preguntas, no se anuncia. Así que
+la respuesta honesta a «¿qué hace falta para conectarse?» depende de la forma:
+
+| Forma | Qué prepara el llamador | Qué configura la aplicación | ¿Cero configuración? |
+|---|---|---|---|
+| HTTP + OpenAPI | Una URL (y la clave, si la aplicación la definió) — `curl`, Swagger UI, Postman o cualquier cliente HTTP | `AddAsonOpenApiBridge(runtime)` + `MapAsonOpenApiBridge()`, un puerto y, opcionalmente, `ApiKey` | ✅ basta una URL |
+| MCP por HTTP | Una URL terminada en `/mcp` y un cliente MCP | `AddAsonMcpBridge(runtime)` + `MapAsonMcpBridge()` y, opcionalmente, `requireAuthorization` | ✅ basta una URL |
+| gRPC, .NET | La URL y un envoltorio de cliente: `GrpcAsonBridgeClient.Connect(url)` (o el stub generado) | `AddAsonGrpcBridge(runtime)` + `MapAsonGrpcBridge()`, un listener HTTP/2 y, opcionalmente, una policy | ⚠️ necesita cliente, no fichero de configuración |
+| gRPC, otro lenguaje | La URL **y el contrato**: `ason_bridge.proto` del paquete y luego el stub generado — ver [Llamar al puente sin .NET](#llamar-al-puente-sin-net) | lo mismo, y opcionalmente reflexión (`enableReflection`) para no necesitar el `.proto` local | ⚠️ necesita el contrato |
+| MCP por stdio | **Un comando de arranque** (`Ason.Bridge.McpHost --url …`), porque en stdio MCP el cliente lanza el servidor | la aplicación debe estar en marcha y accesible por gRPC o MCP | ❌ el llamador escribe un comando |
+
+Tres premisas conviene decirlas sin rodeos, porque cada una produce un fallo desconcertante cuando se pasa por
+alto:
+
+1. **No hay registro, mDNS ni autodescubrimiento.** La URL es conocimiento fuera de banda: un argumento de línea
+   de comandos, un fichero de configuración, una variable de entorno. El manifiesto es el descubrimiento
+   *después* de saber a quién preguntar: dice qué expone la aplicación, no dónde está.
+2. **Un handle es estado en tiempo de ejecución.** Las instancias aparecen y desaparecen al abrirse y cerrarse
+   vistas, así que quien quiera dirigirse a una debe pedir `instances` antes (o aceptar `handle-required`,
+   `handle-ambiguous` o `handle-not-found`). `instancesRevision` es lo que le avisa de que su foto quedó
+   obsoleta.
+3. **`proxies` es una instantánea.** Un script que usa una variable de instancia solo es correcto en el momento
+   de leer el manifiesto; [Instancias vivas y frescura del manifiesto](#instancias-vivas-y-frescura-del-manifiesto)
+   tiene las tres maneras de seguir siendo correcto.
+
+Dos interruptores se quedan siempre del lado de la aplicación, y el llamador solo puede leerlos:
+
+- **Las capacidades** deciden qué existe: con `executeScript` desactivado, gRPC responde `Unimplemented`, la
+  herramienta MCP no se lista y la ruta HTTP es `404`. El manifiesto lo dice de antemano, así que el llamador se
+  adapta en vez de probar.
+- **La autorización** decide quién puede llamar: `AddAsonGrpcBridge(runtime, "<policy>")` y
+  `AddAsonMcpBridge(endpoint, requireAuthorization: true)` la activan, y un llamador no autorizado recibe
+  `Unauthenticated` / `401` — nunca `Unimplemented`, que sería indistinguible de una capacidad desactivada. Ver
+  [Exigir autenticación al llamador](#exigir-autenticación-al-llamador).
+
+Las fronteras que se cruzan están dibujadas en [architecture](architecture.es.md#separación-aplicación--agente-el-puente)
+(la frontera D es la del llamador) y el eje de ubicación de la ejecución — ortogonal a todo lo anterior — está en
+[modos de ejecución](execution-modes.es.md).
+
 ## Seguridad
 
 - Enlazar a loopback por defecto; un puente expuesto en red necesita autenticación delante.

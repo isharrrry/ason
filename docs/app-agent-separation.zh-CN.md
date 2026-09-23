@@ -300,6 +300,39 @@ dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost
 
 Agent 场景与这个场景**共用一切**：同一宿主、同一运行时、同一批适配器与端点。区别只在于由谁来组织调用 —— 模型，还是程序自己。
 
+## 调用方接入：需要知道什么、需要配置什么
+
+桥在"被发现"这件事上是刻意保持笨的：它只回答问题，不会主动广播自己。因此"要接入需要做什么"取决于形态：
+
+| 形态 | 调用方要准备 | 应用侧要配置 | 能否零配置接入 |
+|---|---|---|---|
+| HTTP + OpenAPI | 一个 URL（应用设了 key 就再带上 key）—— `curl`、Swagger UI、Postman 或任何 HTTP 客户端 | `AddAsonOpenApiBridge(runtime)` + `MapAsonOpenApiBridge()`、端口、可选 `ApiKey` | ✅ 一个 URL 就够 |
+| MCP over HTTP | 一个以 `/mcp` 结尾的 URL，以及一个 MCP 客户端 | `AddAsonMcpBridge(runtime)` + `MapAsonMcpBridge()`，可选 `requireAuthorization` | ✅ 一个 URL 就够 |
+| gRPC（.NET） | URL，外加一个客户端包装：`GrpcAsonBridgeClient.Connect(url)`（或用生成的 stub） | `AddAsonGrpcBridge(runtime)` + `MapAsonGrpcBridge()`、HTTP/2 监听，可选策略 | ⚠️ 需要客户端，但无需配置文件 |
+| gRPC（非 .NET） | URL **与契约本身**：从包里取 `ason_bridge.proto` 再生成 stub —— 见[不用 .NET 也能调用这座桥](#不用-net-也能调用这座桥) | 同上，可选开启反射（`enableReflection`），这样连本地 `.proto` 都不需要 | ⚠️ 需要契约 |
+| MCP over stdio | **一条启动命令**（`Ason.Bridge.McpHost --url …`），因为 stdio MCP 的契约就是"客户端启动服务进程" | 应用必须在跑，并且能通过 gRPC 或 MCP 访问到 | ❌ 调用方必须写启动配置 |
+
+有三条前提值得明说 —— 每一条被忽略时，都会以令人困惑的失败形式出现：
+
+1. **没有注册中心、mDNS 或自动发现。** URL 属于"带外知识"：命令行参数、配置文件、环境变量。manifest 是"你已经知道去哪问"
+   **之后**的发现机制 —— 它告诉你应用暴露了什么，而不是它在哪。
+2. **handle 是运行期状态。** 视图开关会带来实例的增删，因此想指定某个实例的调用方必须先取 `instances`（否则会撞上
+   `handle-required` / `handle-ambiguous` / `handle-not-found`）。判断自己那张快照是否过期，靠的就是 manifest 的
+   `instancesRevision`。
+3. **`proxies` 是快照。** 使用实例变量的脚本只在读取清单那一刻成立；[实例鲜度与清单过期](#实例鲜度与清单过期)给出三种
+   保持正确的办法。
+
+有两个开关始终留在应用侧，调用方只能读、不能改：
+
+- **能力开关**决定"存在什么"：关掉 `executeScript` 后，gRPC 返回 `Unimplemented`、MCP 不列出该工具、HTTP 路由 404。
+  manifest 会提前说明，调用方据此适配，而不必靠试。
+- **鉴权**决定"谁可以调"：`AddAsonGrpcBridge(runtime, "<policy>")` 与 `AddAsonMcpBridge(endpoint, requireAuthorization: true)`
+  负责开启；未通过鉴权的调用方拿到的是 `Unauthenticated` / `401`，**绝不会**是 `Unimplemented` —— 否则就与"能力未启用"
+  无法区分。见[要求调用方通过鉴权](#要求调用方通过鉴权)。
+
+这里涉及的边界画在[架构文档](architecture.zh-CN.md#应用--agent-分离桥)（调用方边界是 D），而与以上全部正交的"执行位置"轴见
+[执行模式](execution-modes.zh-CN.md)。
+
 ## 执行位置
 
 `AsonBridgeOptions.Execution` 与传输是正交的两件事：

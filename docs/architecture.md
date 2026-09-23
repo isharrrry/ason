@@ -200,6 +200,8 @@ its own Ason.ExternalExecutor, in a container or on a remote runner) is the appl
 
 Two hops appear in case 3 only, and only because stdio MCP means "the client spawns the server": a running
 application cannot be that child, so the relay owns the pipe and needs one channel back to the application.
+What a caller must prepare for each transport on boundary D is listed in
+[what a caller has to know and configure](app-agent-separation.md#what-a-caller-has-to-know-and-configure).
 
 For credentials the rule does not change, it moves with the operators: the model key stays where the model is
 (the agent) and operator data stays where the operators are (the application). What *does* change is that the

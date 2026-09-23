@@ -64,6 +64,9 @@ AsonClientOptions options = new() {
 
 `ExecutionMode` 和 `UseRemoteRunner` 是正交的：前者选择脚本如何被隔离，后者选择脚本宿主在哪里运行。传输方式则由这一组合决定：
 
+在分离部署下，它们旁边还有第三个轴：**调用方到应用这一段由哪种传输承载**（gRPC、MCP、HTTP）。它由应用侧选定，而每种选择
+下调用方需要准备什么见[调用方接入](app-agent-separation.zh-CN.md#调用方接入需要知道什么需要配置什么)。
+
 ```csharp
 // RunnerTransportManager
 RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;

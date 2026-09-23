@@ -355,6 +355,45 @@ Two consequences worth knowing:
 The agent scenario and this one share everything: the same host, runtime, adapters and endpoints. What differs
 is only who composes the calls — a model, or the program itself.
 
+## What a caller has to know and configure
+
+The bridge is deliberately dumb about discovery: it answers questions, it does not announce itself. So the
+honest answer to "what does it take to connect?" depends on the shape:
+
+| Shape | What the caller prepares | What the application configures | Zero-config? |
+|---|---|---|---|
+| HTTP + OpenAPI | One URL (and the key, if the application set one) — `curl`, Swagger UI, Postman or any HTTP client | `AddAsonOpenApiBridge(runtime)` + `MapAsonOpenApiBridge()`, a port, optionally `ApiKey` | ✅ a URL is enough |
+| MCP over HTTP | One URL ending in `/mcp`, plus an MCP client | `AddAsonMcpBridge(runtime)` + `MapAsonMcpBridge()`, optionally `requireAuthorization` | ✅ a URL is enough |
+| gRPC, .NET | The URL, and a client wrapper: `GrpcAsonBridgeClient.Connect(url)` (or the raw generated stub) | `AddAsonGrpcBridge(runtime)` + `MapAsonGrpcBridge()`, an HTTP/2 listener, optionally a policy | ⚠️ needs a client, no configuration file |
+| gRPC, another language | The URL **and the contract**: `ason_bridge.proto` from the package, then a generated stub — see [Calling the bridge without .NET](#calling-the-bridge-without-net) | the same, plus optionally reflection (`enableReflection`) so no local `.proto` is needed | ⚠️ needs the contract |
+| MCP over stdio | **A launch command** the agent can run (`Ason.Bridge.McpHost --url …`), because stdio MCP means "the client spawns the server" | the application must be running and reachable over gRPC or MCP | ❌ the caller writes a command |
+
+Three premises are worth stating plainly, because each one produces a confusing failure when it is missed:
+
+1. **There is no registry, mDNS or auto-discovery.** The URL is out-of-band knowledge: a command-line argument,
+   a configuration file, an environment variable. The manifest is discovery *after* you know where to ask — it
+   tells you what the application exposes, not where it is.
+2. **A handle is runtime state.** Instances appear and disappear as views open and close, so a caller that wants
+   to address one must ask for `instances` first (or accept `handle-required` / `handle-ambiguous` /
+   `handle-not-found`). The manifest's `instancesRevision` is how it notices that its picture went stale.
+3. **`proxies` is a snapshot.** A script that uses an instance variable is only correct for the moment the
+   manifest was read; [Live instances and manifest freshness](#live-instances-and-manifest-freshness) has the
+   three ways to stay correct.
+
+Two switches stay on the application's side of the line, and a caller can only read them, never change them:
+
+- **Capabilities** decide what exists at all: with `executeScript` off, gRPC answers `Unimplemented`, the MCP
+  tool is not listed and the HTTP route is `404`. The manifest says so in advance, so a caller can adapt instead
+  of probing.
+- **Authorization** decides who may call: `AddAsonGrpcBridge(runtime, "<policy>")` and
+  `AddAsonMcpBridge(endpoint, requireAuthorization: true)` turn it on, and a caller that is not authorized gets
+  `Unauthenticated` / `401` — never `Unimplemented`, which would be indistinguishable from a disabled
+  capability. See [Requiring a caller to authenticate](#requiring-a-caller-to-authenticate).
+
+The boundaries this crosses are drawn in [architecture](architecture.md#application--agent-split-the-bridge)
+(boundary D is the caller's), and the execution-location axis — which is orthogonal to all of the above — is in
+[execution modes](execution-modes.md).
+
 ## Execution location
 
 `AsonBridgeOptions.Execution` is orthogonal to the transport:

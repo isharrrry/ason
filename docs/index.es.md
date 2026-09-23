@@ -27,4 +27,5 @@ Todas las guías existen en inglés, chino y español. La tabla de temas enlaza 
 | compilar y probar el repositorio | [Contribuir](contributing.es.md) |
 | elegir un modo y un despliegue para mi aplicación | [Modos de ejecución](execution-modes.es.md) |
 | conducir mi aplicación en ejecución desde una prueba, un job de CI o otro programa — sin modelo | [Separación aplicación / agente](app-agent-separation.es.md#usar-el-puente-sin-un-agente) |
+| saber qué necesita un llamador antes de poder conectarse | [Qué necesita saber y configurar un llamador](app-agent-separation.es.md#qué-necesita-saber-y-configurar-un-llamador) |
 | ejecutar un ejemplo funcional de cada forma, en un proceso o separada | [Ejemplos y cómo ejecutarlos](app-agent-separation.es.md#ejemplos-y-cómo-ejecutarlos) |

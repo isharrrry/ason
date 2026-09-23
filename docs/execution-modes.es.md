@@ -65,6 +65,10 @@ En la **MAUI Project Template** se incluye un proyecto de ejemplo que demuestra 
 `ExecutionMode` y `UseRemoteRunner` son ortogonales: el primero selecciona cómo se aísla el script y el
 segundo selecciona dónde se ejecuta el host del script. El transporte se deriva de esa combinación:
 
+En un despliegue separado hay un tercer eje junto a ellos: *qué transporte lleva la llamada desde el llamador
+hasta la aplicación* (gRPC, MCP, HTTP). Lo elige el lado de la aplicación, y lo que debe preparar el llamador en
+cada caso está en [qué necesita saber y configurar un llamador](app-agent-separation.es.md#qué-necesita-saber-y-configurar-un-llamador).
+
 ```csharp
 // RunnerTransportManager
 RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;

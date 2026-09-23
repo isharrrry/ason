@@ -221,7 +221,8 @@ aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner
 
 Solo el caso 3 tiene dos saltos, y solo porque MCP por stdio significa "el cliente arranca el servidor": una
 aplicación en ejecución no puede ser ese hijo, así que el relé posee la tubería y necesita un canal de vuelta
-hacia la aplicación.
+hacia la aplicación. Lo que debe preparar el llamador en la frontera D para cada transporte está en
+[qué necesita saber y configurar un llamador](app-agent-separation.es.md#qué-necesita-saber-y-configurar-un-llamador).
 
 En cuanto a las credenciales, la regla no cambia: se mueve con los operadores (la clave del modelo queda donde
 está el modelo, el agente; los datos de los operadores donde están los operadores, la aplicación). Lo que sí
