@@ -691,3 +691,13 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | 该缺陷的修复（本轮） | 两处 pin 8.0.0 → **9.0.10**（= MCP 已经要求的版本，两个工程的注释写明原因）。验证：从**空 `src/bin`** 按 CI 顺序重建 15 项，版本序列为 `absent → absent → absent → 9.0.0.0`（`Ason.ExternalExecutor`）之后**全程保持 9.0.0.0**，console 样例不再回写 8.0.0.0；Windows `Ason.Bridge.Tests` **160/160**、`Ason.Tests` **105/105**；真机 Linux 上重建后 `Ason.Bridge.Tests` **160/160（155 通过 + 5 条 WPF 跳过）**、覆盖率门限 4/4、契约检查 `the package ships protos/ason_bridge.proto` ✓。 |
 | 顺带纠正 10.9/10.10 的"未验证"项 | console 样例 `--execution external` 的进程级 E2E 既然在 Ubuntu 全绿，说明 `ConsoleBridgeAppSample.csproj` 里那份反斜杠 `Include` 的 `CopyAsonExternalExecutorHostFiles` **在 Linux 上确实生效**（子执行器被拷到输出目录并被启动）——该项目标不再挂"未实测"。 |
 | 仍未在真机验证 | 真机与 CI runner 的差异：真机两个 root 各缺一半（`~/.dotnet` 有 10.0+6.0 但没 9.0 运行时，`/usr/share/dotnet` 有 9.0 但没 10.0 SDK）。要把整条 Linux 作业在同一 SDK 下跑完，需给 `~/.dotnet` 补 .NET 9 运行时（正在做）；这属于机器配置，**不是仓库问题**——但它暴露了一条真实的 CI 脆弱点：`LibDemo.SmokeTests` 的 `TargetFrameworks` 含 `net10.0`，所以任何**没有 .NET 10 SDK** 的环境都会在执行 `--framework net6.0` 时先因 NETSDK1045 失败（CI 的 runner 镜像自带 .NET 10 SDK 才没事）。 |
+
+### 10.12 本地复现 Linux 作业的脚本（本轮；应你要求固化进仓库）
+
+| 项 | 内容（含核实结论） |
+|---|---|
+| 新增 | `scripts/ci-linux.sh`：用**与 `ci.yml` 相同的命令、相同的顺序**跑 Linux 作业；选项 `--skip-build` / `--skip-smoke` / `--suite <smoke\|runner\|remoterunner\|library\|bridge\|coverage\|contract>` / `--filter <expr>` / `--no-annotations`。**构建**失败立即停止（后续都依赖它），其余步骤全部跑完并给出汇总表；有失败时调用 `emit-test-failures.ps1` 打印与 CI 相同的 `::error` 注解。 |
+| 同时抽出 | `scripts/check-package-contract.ps1`（原本内联在 workflow 的 `run:` 里）：pack → 列出包内条目 → 缺契约则自注解并失败。workflow 与本地脚本现在共用同一份检查，避免两边各改一遍产生漂移。 |
+| 三语文档 | `docs/contributing.*` 新增"在自有机器上复现 Linux 作业"一节：依赖安装（`dotnet-install.sh` 装 9.0/6.0/10.0 + `powershell`，`PATH` 加 `~/.dotnet`）、一条命令跑全量、三种常用变体，以及"Windows 作业无法在此复现"；`scripts` 行同步。 |
+| **实测中抓到的两个坑（都已修）** | ① `artifacts/coverage` 会**累积**历史报告：门限脚本对 **12 个包**报"达标"（真跑只有 4 个）→ 本地脚本在跑桥测试前 `rm -rf artifacts/coverage`（陈旧的成功报告会掩盖本次回归）。② `dotnet test` 在**筛选器匹配不到任何用例时退出码为 0**（仅打印"没有测试匹配…"）→ `--filter` 打错字会伪装成全绿；本地脚本统一追加 `-- RunConfiguration.TreatNoTestsAsError=true`，并给 `emit-test-failures.ps1` 补了"TRX 零结果 → `no tests ran`"注解（否则它只会说"没有失败测试"，技术上正确但毫无用处）。 |
+| 真机验证 | `./scripts/ci-linux.sh`（`~/.dotnet` 优先，SDK 6.0.428 + 10.0.111，运行时 6.0.36 / 9.0.20 / 10.0.11）：**7 步全 ok、退出码 0**；`--suite bridge` + `--suite coverage` → 门限恰好 **4 个包**；`--filter 'FullyQualifiedName~NoSuchTestName'` → 退出码 **1** 且汇总标 `FAILED`；`--suite smoke` → ok；`bash -n` 通过；三个脚本均 **0 个非 ASCII 字节**（PowerShell 脚本仍需能被 5.1 解析）。 |
