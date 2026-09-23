@@ -1,1 +1,0 @@
-﻿stage: GREEN for Ason.Bridge core; evidence: bridge tests 36/36 pass, Ason.Tests 101/101, LibDemo smoke 11/11; test-side corrections: CLR type names (Int32) and void operator called as a statement
