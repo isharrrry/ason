@@ -79,6 +79,20 @@ operator 调用始终回到 [1]：脚本调用某个 operator，该调用跨越�
 > 而不是沙箱。在 **In-process** 模式下，脚本在你自己的进程内运行，所以该过滤器是唯一的屏障 ——
 > 这也是不建议将 In-process 用于不可信输入的原因。
 
+### 应用 / Agent 分离（桥）
+
+[应用 / Agent 分离](app-agent-separation.zh-CN.md)描述了本文客户端/宿主划分之外的第二种拓扑：operator 留在应用侧，
+而模型与编排位于独立的 Agent 进程。桥（`Ason.Bridge` + 每种传输一个适配器）把 operator API 以清单形式发布出去，
+并通过 gRPC、MCP 或 HTTP/OpenAPI 转发执行，因此边界从一个变成两个：
+
+| 边界 | 协议 | 跨越什么 |
+|---|---|---|
+| Agent ↔ 应用 | gRPC、MCP 或 HTTP/OpenAPI，承载清单、`exec` 请求与函数调用 | 生成的脚本文本、结果，以及单函数调用的参数与返回值 |
+| 应用 ↔ 它自己的执行器（可选） | 当应用运行 `Ason.ExternalExecutor` 时，与边界 A 相同的 stdio 协议 | 仅脚本文本 |
+
+凭据规则并未改变，而是**随 operator 一起移动**：模型密钥留在模型所在处（Agent），operator 数据留在 operator 所在处
+（应用）。真正改变的是：执行面从此可经网络到达，因此桥端点是特权端点 —— 处理方式见该指南的安全章节。
+
 ### UI 线程关联性
 
 operator 方法始终通过构造 `AsonClient` 时所捕获的 `SynchronizationContext` 来调用。在 WPF 应用程序中，这意味着每次 operator 调用都在 UI 线程上运行 —— 无论本地还是远程都是如此 —— 因此 operator 无需额外封送即可操作与 UI 绑定的对象。要让这一点成立，请在 UI 线程上构造 `AsonClient`（示例正是这样做的）。

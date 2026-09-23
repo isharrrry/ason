@@ -66,6 +66,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `StopLocalRunnerWhenEnablingRemote` | `bool` | `true` | 远程运行器启用后停止本地运行器 |
 | `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | 在生成的 operator 快照之上额外应用的过滤器 |
 | `RunnerExecutablePath` | `string?` | `null` | `Ason.ExternalExecutor`（dll 或 exe）的显式路径 |
+| `TransportFactory` | `Func<IRunnerTransport>?` | `null` | 由宿主提供的传输，取代由执行模式与远程运行器开关构建的那一个。Agent 借此把运行器指向[桥](app-agent-separation.zh-CN.md)背后的应用，同时保留代理生成、重试与结果处理 |
 
 这三个提示词属性默认为 `null`，表示 ASON 会使用内置提示词。这些预设是**公开可读**的：`Ason.AgentPrompts` 暴露了 `ScriptAgentTemplate`、`ReceptionAgentTemplate`、`ExplainerAgentTemplate` 与 `TextToDataAgentTemplate`，而 `AgentPrompts.BuildScriptInstructions(apiSignatures)` 会把生成的 operator API 填入脚本提示词。
 

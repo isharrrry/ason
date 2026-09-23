@@ -81,6 +81,11 @@ RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
 
 在每一行中，operator 方法仍然在客户端进程中运行。当 `UseRemoteRunner = true` 时，所选模式会被发送到服务器（`StartRunner((int)mode, dockerImage)`），由服务器决定是在自己的进程内求值脚本，还是启动一个执行器。这些边界在[架构](architecture.zh-CN.md#部署拓扑)中有所描述。
 
+随着[桥](app-agent-separation.zh-CN.md)的出现，出现了第三条轴线：**由谁提供 runner 传输**。通过
+`AsonClientOptions.TransportFactory`（底层即 `RunnerClient.UseTransport`），宿主可以把自有传输交给客户端，从而让脚本由**另一个进程**求值
+——例如一个通过 gRPC、MCP 或 HTTP/OpenAPI 发布 operator 的应用 —— 而客户端保留代理生成、重试、校验与结果处理。三条轴线可自由组合：
+执行模式描述的是**求值一侧**的隔离方式，传输只说明如何到达那一侧。
+
 ## 哪种配置适合哪种应用形态
 
 | 应用形态 | 推荐 | 原因 |
@@ -92,6 +97,7 @@ RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
 | Blazor WebAssembly | 远程执行；如果 operator 接口允许，也可在浏览器中使用 `InProcess` | 浏览器无法启动进程或容器 |
 | MAUI / 移动端或其他瘦客户端 | 远程（`Ason.RemoteBridge` + `UseRemoteRunner`） | 设备无法承载执行器 —— 这正是 MAUI 模板所演示的内容 |
 | 一个服务为众多客户端运行脚本 | 专用的远程运行器主机 | 统一在一处为执行器定版本、实施策略并收集日志 |
+| 应用与独立的 Agent 进程（包括只会 MCP 的 Agent） | 用 `Ason.Bridge` 发布应用的 operator，让 Agent 通过 gRPC、MCP 或 HTTP/OpenAPI 驱动它 | operator、数据与 UI 留在应用侧，模型与编排留在 Agent 侧 —— 参见[应用 / Agent 分离](app-agent-separation.zh-CN.md) |
 
 ## 如何在两者之间选择以及每种选择的代价
 

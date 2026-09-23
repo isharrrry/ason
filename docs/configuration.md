@@ -66,6 +66,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `StopLocalRunnerWhenEnablingRemote` | `bool` | `true` | Stops the local runner once the remote one is active |
 | `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | Extra filter applied on top of the generated operator snapshot |
 | `RunnerExecutablePath` | `string?` | `null` | Explicit path to `Ason.ExternalExecutor` (dll or exe) |
+| `TransportFactory` | `Func<IRunnerTransport>?` | `null` | Transport supplied by the host, replacing the one the mode and remote-runner switches build. This is how an agent points its runner at an application behind a [bridge](app-agent-separation.md) while keeping proxy generation, retries and result handling |
 
 These three instruction properties default to `null`, which means ASON applies the built-in prompt. Those presets are publicly readable: `Ason.AgentPrompts` exposes `ScriptAgentTemplate`, `ReceptionAgentTemplate`, `ExplainerAgentTemplate` and `TextToDataAgentTemplate`, and `AgentPrompts.BuildScriptInstructions(apiSignatures)` fills the generated operator API into the script prompt.
 

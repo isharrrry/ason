@@ -110,6 +110,24 @@ Consecuencias prácticas:
 > proceso, así que ese filtro es la única barrera — por eso no se recomienda In-process para entradas no
 > confiables.
 
+### Separación aplicación / agente (el puente)
+
+[Separación aplicación / agente](app-agent-separation.es.md) describe una segunda topología que la división
+cliente/host de este documento no cubre: los operadores permanecen en una aplicación, mientras el modelo y la
+orquestación viven en un proceso de agente aparte. El puente (`Ason.Bridge` más un adaptador por transporte)
+publica la API de operadores como manifiesto y reenvía la ejecución por gRPC, MCP o HTTP/OpenAPI, de modo que
+hay dos fronteras en lugar de una:
+
+| Frontera | Protocolo | Qué la cruza |
+|---|---|---|
+| agente ↔ aplicación | gRPC, MCP o HTTP/OpenAPI, con el manifiesto, las peticiones `exec` y las llamadas a funciones | el texto del script generado, los resultados y los argumentos/resultados de las llamadas a función única |
+| aplicación ↔ su propio ejecutor (opcional) | el mismo protocolo stdio que la frontera A, cuando la aplicación ejecuta un `Ason.ExternalExecutor` | solo el texto del script |
+
+La regla de credenciales no cambia: se mueve con los operadores (la clave del modelo queda donde está el modelo,
+el agente; los datos de los operadores donde están los operadores, la aplicación). Lo que sí cambia es que la
+superficie de ejecución ahora es alcanzable por la red, así que los endpoints del puente son privilegiados — la
+sección de seguridad de esa guía explica qué hacer al respecto.
+
 ### Afinidad al hilo de la UI
 
 Los métodos de los operadores siempre se invocan a través del `SynchronizationContext` capturado cuando

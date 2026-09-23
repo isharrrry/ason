@@ -218,7 +218,7 @@ var operatorLibrary = new OperatorBuilder()
 
 ## Documentación
 
-Todas las guías (proveedores, operadores, configuración, modos de ejecución, arquitectura y contribución) están reunidas en **[docs/index.es.md](docs/index.es.md)**, cada una disponible en inglés, chino y español.
+Todas las guías (proveedores, operadores, configuración, modos de ejecución, arquitectura y contribución) están reunidas en **[docs/index.es.md](docs/index.es.md)**, cada una disponible en inglés, chino y español. El **puente** — publicar los operadores de una aplicación por gRPC, MCP o HTTP/OpenAPI para que un agente separado los conduzca — se documenta en **[separación aplicación / agente](docs/app-agent-separation.es.md)**, con un ejemplo de WPF para cada lado.
 
 ## Ventajas de ASON frente a tool calling / MCP
 

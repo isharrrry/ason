@@ -89,6 +89,24 @@ Practical consequences:
 > not a sandbox. In **In-process** mode the script runs inside your own process, so that filter is the
 > only barrier — which is why In-process is not recommended for untrusted input.
 
+### Application / agent split (the bridge)
+
+[Application / agent separation](app-agent-separation.md) describes a second topology this document's
+client/host split does not cover: the operators stay in an application, while the model and the orchestration
+live in a separate agent process. The bridge (`Ason.Bridge` plus one adapter per transport) publishes the
+operator API as a manifest and forwards execution over gRPC, MCP or HTTP/OpenAPI, so there are two boundaries
+instead of one:
+
+| Boundary | Protocol | What crosses it |
+|---|---|---|
+| agent ↔ application | gRPC, MCP or HTTP/OpenAPI, carrying the manifest, `exec` requests and function calls | the generated script text, the results, and the arguments/results of single-function calls |
+| application ↔ its own executor (optional) | the same stdio protocol as boundary A, when the application runs an `Ason.ExternalExecutor` | the script text only |
+
+The credential rule does not change, it moves with the operators: the model key stays where the model is (the
+agent) and operator data stays where the operators are (the application). What *does* change is that the
+execution surface is now reachable over the network, so bridge endpoints are privileged — that guide's
+security section covers what to do about it.
+
 ### UI thread affinity
 
 Operator methods are always invoked through the `SynchronizationContext` captured when the `AsonClient`

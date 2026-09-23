@@ -85,6 +85,13 @@ selected mode is sent to the server (`StartRunner((int)mode, dockerImage)`), whi
 evaluate the script in its own process or to spawn an executor. The boundaries are described in
 [architecture](architecture.md#deployment-topology).
 
+A third axis appeared with the [bridge](app-agent-separation.md): **who supplies the runner transport**. With
+`AsonClientOptions.TransportFactory` (or `RunnerClient.UseTransport` underneath it) a host hands the client a
+transport of its own, so the script can be evaluated by another process — an application that publishes its
+operators over gRPC, MCP or HTTP/OpenAPI — while the client keeps proxy generation, retries, validation and
+result handling. The three axes combine freely: the mode still describes the isolation **on the side that
+evaluates**, and the transport only says how to reach that side.
+
 ## Which configuration fits which application shape
 
 | Application shape | Recommended | Why |
@@ -96,6 +103,7 @@ evaluate the script in its own process or to spawn an executor. The boundaries a
 | Blazor WebAssembly | remote, or `InProcess` in the browser if the operator surface allows it | a browser cannot spawn processes or containers |
 | MAUI / mobile or other thin clients | remote (`Ason.RemoteBridge` + `UseRemoteRunner`) | the device cannot host an executor — this is what the MAUI template demonstrates |
 | One service running scripts for many clients | a dedicated remote runner host | a single place to version the executor, enforce policy and collect logs |
+| An application and a separate agent process (including an MCP-only agent) | publish the application's operators with `Ason.Bridge` and let the agent drive them over gRPC, MCP or HTTP/OpenAPI | the operators, the data and the UI stay in the application while the model and the orchestration stay in the agent — see [application / agent separation](app-agent-separation.md) |
 
 ## Choosing between them, and what each choice costs
 

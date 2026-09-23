@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -26,7 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\samples\SimpleConsoleApp\MyConsoleApp.csproj" />
     <ProjectReference Include="..\..\src\Ason.ExternalExecutor\Ason.ExternalExecutor.csproj" />
     <ProjectReference Include="..\..\src\Ason.RemoteBridge\Ason.RemoteBridge.csproj" />
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />

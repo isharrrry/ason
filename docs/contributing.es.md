@@ -56,6 +56,13 @@ Ejecución del subconjunto hermético sin Docker:
 dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
 ```
 
+La cobertura de la suite del puente se recoge con `coverlet.runsettings`, que deja fuera el código gRPC que
+genera protoc para que el porcentaje describa los adaptadores escritos a mano:
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+```
+
 Variables de entorno que modifican el comportamiento de las pruebas de interfaz:
 
 | Variable | Significado |
@@ -68,4 +75,4 @@ La configuración de un proveedor se describe en [Proveedores de IA](ai-provider
 
 ## Integración continua
 
-El archivo `.github/workflows/ci.yml` se ejecuta en cada push y en los pull requests. Compila los proyectos multiplataforma y ejecuta las suites de pruebas herméticas en Ubuntu; los casos de modo Docker y MCP se excluyen allí. El ejemplo de WPF, las pruebas de interfaz y la variante net10.0 son exclusivos de Windows y ese job aún no los cubre.
+El archivo `.github/workflows/ci.yml` se ejecuta en cada push y en los pull requests. Su job de Linux compila los proyectos multiplataforma y ejecuta las suites herméticas; los casos de modo Docker y MCP se excluyen allí, y las pruebas de extremo a extremo de los ejemplos de WPF se omiten. Un segundo job (`windows-samples`) compila los dos ejemplos de WPF y vuelve a ejecutar `tests/Ason.Bridge.Tests` en Windows, que es lo que hace que esas pruebas se ejecuten de verdad; también compila la demo de WPF original, para que un cambio en la biblioteca no pueda romper el ejemplo que debe seguir funcionando. Las pruebas de interfaz de la demo original, los casos de FlaUI y la variante net10.0 siguen sin cobertura en ningún job.

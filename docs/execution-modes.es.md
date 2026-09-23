@@ -85,6 +85,13 @@ En todas las filas los métodos de los operadores se siguen ejecutando en el pro
 que decide si evalúa el script en su propio proceso o si lanza un ejecutor. Las fronteras se describen en
 [arquitectura](architecture.es.md#topología-de-despliegue).
 
+Con el [puente](app-agent-separation.es.md) apareció un tercer eje: **quién aporta el transporte del runner**.
+Con `AsonClientOptions.TransportFactory` (por debajo, `RunnerClient.UseTransport`) el host entrega al cliente un
+transporte propio, de modo que el script puede evaluarlo **otro proceso** — una aplicación que publica sus
+operadores por gRPC, MCP o HTTP/OpenAPI — mientras el cliente conserva la generación de proxies, los reintentos,
+la validación y el manejo del resultado. Los tres ejes se combinan libremente: el modo describe el aislamiento
+**en el lado que evalúa** y el transporte solo dice cómo llegar a ese lado.
+
 ## Qué configuración encaja con cada forma de aplicación
 
 | Forma de la aplicación | Recomendado | Por qué |
@@ -96,6 +103,7 @@ que decide si evalúa el script en su propio proceso o si lanza un ejecutor. Las
 | Blazor WebAssembly | remoto, o `InProcess` en el navegador si la superficie de operadores lo permite | un navegador no puede lanzar procesos ni contenedores |
 | MAUI / clientes móviles u otros clientes ligeros | remoto (`Ason.RemoteBridge` + `UseRemoteRunner`) | el dispositivo no puede alojar un ejecutor — esto es lo que demuestra la plantilla de MAUI |
 | Un solo servicio ejecutando scripts para muchos clientes | un host de ejecución remota dedicado | un único lugar para versionar el ejecutor, aplicar políticas y recopilar logs |
+| Una aplicación y un proceso de agente separado (incluido un agente que solo habla MCP) | publicar los operadores de la aplicación con `Ason.Bridge` y dejar que el agente los conduzca por gRPC, MCP o HTTP/OpenAPI | los operadores, los datos y la UI permanecen en la aplicación mientras el modelo y la orquestación permanecen en el agente — consulta [separación aplicación / agente](app-agent-separation.es.md) |
 
 ## Cómo elegir entre ellos y cuánto cuesta cada opción
 

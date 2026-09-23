@@ -59,6 +59,13 @@ Running the hermetic subset without Docker:
 dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
 ```
 
+Coverage for the bridge suite is collected with `coverlet.runsettings`, which keeps the gRPC code protoc
+generates out of the numbers so the percentage describes the hand-written adapters:
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+```
+
 Environment variables that change what the UI tests do:
 
 | Variable | Meaning |

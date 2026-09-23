@@ -56,6 +56,12 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
 ```
 
+桥的覆盖率用 `coverlet.runsettings` 采集 —— 它把 protoc 生成的 gRPC 代码排除在外，使百分比描述的是手写适配器：
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+```
+
 会改变 UI 测试行为的环境变量：
 
 | 变量 | 含义 |
@@ -68,4 +74,4 @@ dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter 
 
 ## 持续集成
 
-`.github/workflows/ci.yml` 在每次推送和拉取请求时运行。它会在 Ubuntu 上构建跨平台项目并运行与外部环境隔离的测试套件；Docker 模式和 MCP 用例在该任务中被排除。WPF 示例、UI 测试和 net10.0 部分仅在 Windows 上运行，目前尚未被该任务覆盖。
+`.github/workflows/ci.yml` 在每次推送和拉取请求时运行。它的 Linux 任务构建跨平台项目并运行与外部环境隔离的测试套件 —— Docker 模式与 MCP 用例在该任务中被排除，WPF 示例的端到端测试会被跳过。第二个任务（`windows-samples`）构建两个 WPF 示例，并在 Windows 上重新运行 `tests/Ason.Bridge.Tests`，这才让那些端到端测试真正执行；它同时会构建原有的 WPF 演示，以防改动库把必须保留的示例编译坏。原有的 WPF 演示的 UI 测试、FlaUI 用例与 net10.0 分支仍未被任何任务覆盖。
