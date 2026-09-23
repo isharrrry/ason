@@ -66,6 +66,8 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | 在生成的 operator 快照之上额外应用的过滤器 |
 | `RunnerExecutablePath` | `string?` | `null` | `Ason.ExternalExecutor`（dll 或 exe）的显式路径 |
 
+这三个提示词属性默认为 `null`，表示 ASON 会使用内置提示词。这些预设是**公开可读**的：`Ason.AgentPrompts` 暴露了 `ScriptAgentTemplate`、`ReceptionAgentTemplate`、`ExplainerAgentTemplate` 与 `TextToDataAgentTemplate`，而 `AgentPrompts.BuildScriptInstructions(apiSignatures)` 会把生成的 operator API 填入脚本提示词。
+
 ## 服务注册（ASP.NET Core / Blazor）
 
 你可以使用 `AddAson` 将 `AsonClient` 注册为服务容器中的 scoped 依赖项：
@@ -79,7 +81,7 @@ builder.Services.AddAson(
         .AddExtractor()  
         .Build(),  
     configureOptions: opt => {  
-        opt.RunnerMode = ExecutionMode.Docker;  
+        opt.ExecutionMode = ExecutionMode.Docker;  
     }  
 );
 ```

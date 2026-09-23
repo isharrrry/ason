@@ -66,6 +66,8 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | Filtro adicional que se aplica sobre la instantánea de operators generada |
 | `RunnerExecutablePath` | `string?` | `null` | Ruta explícita a `Ason.ExternalExecutor` (dll o exe) |
 
+Estas tres propiedades tienen `null` como valor predeterminado, lo que significa que ASON aplica el prompt integrado. Esos presets son de lectura pública: `Ason.AgentPrompts` expone `ScriptAgentTemplate`, `ReceptionAgentTemplate`, `ExplainerAgentTemplate` y `TextToDataAgentTemplate`, y `AgentPrompts.BuildScriptInstructions(apiSignatures)` rellena el prompt del script con la API de operadores generada.
+
 ## Registro de servicios (ASP.NET Core / Blazor)
 
 Puede registrar `AsonClient` como una dependencia scoped en su contenedor de servicios usando `AddAson`:
@@ -79,7 +81,7 @@ builder.Services.AddAson(
         .AddExtractor()  
         .Build(),  
     configureOptions: opt => {  
-        opt.RunnerMode = ExecutionMode.Docker;  
+        opt.ExecutionMode = ExecutionMode.Docker;  
     }  
 );
 ```

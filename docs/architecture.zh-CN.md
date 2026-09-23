@@ -21,29 +21,31 @@
 
 `ExecutionMode` 与 `UseRemoteRunner` 是彼此独立的设置：前者说明生成的代码*如何*被隔离，后者说明脚本宿主*位于何处*。二者组合起来，会在三个进程边界之上形成五条真实的链路。
 
+<!-- i18n: localize-labels - 标签本地化，保留结构（编号、箭头、缩进） -->
+
 ```
-[1] Client host  (your app: AsonClient, RootOperator, operators, LLM agents, MCP clients)
+[1] 客户端宿主  （你的应用：AsonClient、RootOperator、算子、LLM agents、MCP 客户端）
       |
-      |  boundary A: stdio, one JSON line per message          (local)
-      |  boundary B: SignalR carrying the same JSON lines      (remote)
+      |  边界 A：stdio，一条消息一行 JSON                     （本地）
+      |  边界 B：SignalR，承载同样的 JSON 行                   （远程）
       |
-      +--> [2] Client-side external executor               local ExternalProcess / Docker
-      |        Ason.ExternalExecutor child process on the client machine
-      |        (Docker mode: the child is "docker run --rm -i <image>")
+      +--> [2] 客户端侧外部执行程序                    本地 ExternalProcess / Docker
+      |        客户端机器上的 Ason.ExternalExecutor 子进程
+      |        （Docker 模式：这个子进程是 "docker run --rm -i <镜像>"）
       |
-      +--> [3] Remote runner service                       remote
+      +--> [3] 远程运行器服务                          远程
                ASP.NET Core + /scriptRunnerHub  (Ason.RemoteBridge)
                   |
-                  |  boundary C: identical stdio protocol, initiated by the server
+                  |  边界 C：与边界 A 完全相同的 stdio 协议，由服务器发起
                   |
-                  +--> [4] Server-side external executor     remote ExternalProcess / Docker
-                  |        Ason.ExternalExecutor child process on the server
+                  +--> [4] 服务器侧外部执行程序          远程 ExternalProcess / Docker
+                  |        服务器上的 Ason.ExternalExecutor 子进程
                   |
-                  +--> [4'] Server in-process evaluation      remote InProcess
-                           ScriptExecutor runs inside the web server process
+                  +--> [4'] 服务器进程内求值              远程 InProcess
+                           ScriptExecutor 在 Web 服务器进程内运行
 
-Operator calls always travel back to [1]: the script calls an operator, the invocation crosses the
-boundary or boundaries back to your process, the real method runs there, and the result returns.
+operator 调用始终回到 [1]：脚本调用某个 operator，该调用跨越一条或多条边界回到你的进程，
+真实方法在那里执行，然后结果返回。
 ```
 
 | 边界 | 协议 | 方向 | 由谁掌控 |

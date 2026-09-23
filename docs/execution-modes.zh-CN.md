@@ -95,13 +95,15 @@ RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
 
 ## 如何在两者之间选择以及每种选择的代价
 
+<!-- i18n: localize-labels - 标签本地化，保留结构（箭头、缩进） -->
+
 ```
-Do you need isolation from the generated code?
-  no  -> In-process                     fastest; no extra process; the keyword filter is the only barrier
-  yes -> Can this client host a runner (a child process, plus Docker for containers)?
-           yes -> local External process / Docker    lowest latency, data never leaves the machine
-           no  -> remote, with Docker / external process / in-process on the server
-                  (mobile, browser, locked-down and thin clients)
+你需要与生成的代码隔离吗？
+  不需要 -> In-process                     最快；无需额外进程；关键字过滤是唯一屏障
+  需要   -> 这个客户端能承载运行器吗（子进程；若要容器还需要 Docker）？
+             能   -> 本地 External process / Docker    延迟最低，数据不离开本机
+             不能 -> 远程，在服务器上使用 Docker / 外部进程 / 进程内
+                     （移动端、浏览器、锁定或瘦客户端）
 ```
 
 延迟是远程执行的主要代价：每次 operator 调用都是一次网络往返（当服务器启动执行器时还要再加一次本地跳转），并且每次调用都会被封送回客户端的 UI 线程。因此，如果一个脚本对 N 个条目逐个调用 operator，其代价约为 N 次往返，而在本地求值的脚本则没有任何往返。

@@ -99,6 +99,8 @@ evaluate the script in its own process or to spawn an executor. The boundaries a
 
 ## Choosing between them, and what each choice costs
 
+<!-- i18n: localize-labels - translate the labels, keep the structure (arrows, indentation) -->
+
 ```
 Do you need isolation from the generated code?
   no  -> In-process                     fastest; no extra process; the keyword filter is the only barrier

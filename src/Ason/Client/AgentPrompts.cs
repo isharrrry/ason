@@ -1,7 +1,24 @@
-﻿namespace Ason;
+namespace Ason;
 
-internal static class AgentPrompts
+/// <summary>
+/// The built-in prompts used by the internal ASON agents. They are public so an application can read
+/// (and start from) the presets that ASON applies when the matching <see cref="AsonClientOptions"/>
+/// property is left <see langword="null"/>, for example:
+/// <code>
+/// AsonClientOptions options = new() {
+///     // keep everything from the preset, but append a house rule
+///     ReceptionInstructions = AgentPrompts.ReceptionAgentTemplate + "\nAlways answer in English.",
+///     // or replace the API block inside the script prompt
+///     ScriptInstructions = AgentPrompts.BuildScriptInstructions(myApiText),
+/// };
+/// </code>
+/// </summary>
+public static class AgentPrompts
 {
+    /// <summary>
+    /// Prompt for the Script Agent. This is a composite format string: <c>{0}</c> is replaced with the
+    /// generated operator API (see <see cref="BuildScriptInstructions"/>).
+    /// </summary>
     public const string ScriptAgentTemplate =
 """
         You are a C# Roslyn script generator.
@@ -26,6 +43,7 @@ internal static class AgentPrompts
         </api>
         """;
 
+    /// <summary>Prompt for the Reception Agent. Used when <see cref="AsonClientOptions.ReceptionInstructions"/> is null.</summary>
     public const string ReceptionAgentTemplate =
         """
         You are an AI assistant. You can see the full prior conversation. The user may refine the request over multiple messages.
@@ -51,6 +69,7 @@ internal static class AgentPrompts
         - No code, no markup besides <task> tags
         """;
 
+    /// <summary>Prompt for the Explainer Agent. Used when <see cref="AsonClientOptions.ExplainerInstructions"/> is null.</summary>
     public const string ExplainerAgentTemplate =
         """
         You explain results of executed tasks back to the user.
@@ -68,6 +87,7 @@ internal static class AgentPrompts
         """;
 
 
+    /// <summary>Prompt for the Extractor Agent, which turns unstructured text into structured JSON.</summary>
     public const string TextToDataAgentTemplate =
         """
         You convert plain text into structured JSON that strictly matches a provided JSON format.
@@ -95,6 +115,20 @@ internal static class AgentPrompts
         """;
 
 
+    /// <summary>
+    /// Builds the ready-to-use Script Agent prompt by substituting the operator API into
+    /// <see cref="ScriptAgentTemplate"/>. Use this when you want to override
+    /// <see cref="AsonClientOptions.ScriptInstructions"/> without losing the preset wording.
+    /// </summary>
+    /// <param name="apiSignatures">The generated operator API text, normally produced by <c>OperatorBuilder</c>.</param>
+    public static string BuildScriptInstructions(string? apiSignatures)
+        => string.Format(ScriptAgentTemplate, apiSignatures ?? string.Empty);
+
+    /// <summary>
+    /// Builds the user prompt used by the Extractor Agent for a single extraction request.
+    /// </summary>
+    /// <param name="jsonFormat">Either a JSON Schema or a JSON example describing the expected shape.</param>
+    /// <param name="text">The unstructured source text.</param>
     public static string BuildTextToDataUserPrompt(string jsonFormat, string text)
         => $"""
         Extract structured data from the following text.

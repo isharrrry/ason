@@ -99,13 +99,15 @@ que decide si evalúa el script en su propio proceso o si lanza un ejecutor. Las
 
 ## Cómo elegir entre ellos y cuánto cuesta cada opción
 
+<!-- i18n: localize-labels - etiquetas localizadas, estructura intacta -->
+
 ```
-Do you need isolation from the generated code?
-  no  -> In-process                     fastest; no extra process; the keyword filter is the only barrier
-  yes -> Can this client host a runner (a child process, plus Docker for containers)?
-           yes -> local External process / Docker    lowest latency, data never leaves the machine
-           no  -> remote, with Docker / external process / in-process on the server
-                  (mobile, browser, locked-down and thin clients)
+¿Necesitas aislamiento respecto del código generado?
+  no  -> In-process                     lo más rápido; ningún proceso extra; el filtro de palabras clave es la única barrera
+  sí  -> ¿Puede este host de cliente alojar un runner (un proceso hijo y, para contenedores, Docker)?
+           sí  -> External process / Docker local     latencia más baja, los datos nunca salen de la máquina
+           no  -> remoto, con Docker / proceso externo / In-process en el servidor
+                  (clientes móviles, navegadores y clientes restringidos o ligeros)
 ```
 
 El árbol de decisión anterior se lee como una serie de preguntas encadenadas. La primera pregunta es si

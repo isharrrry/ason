@@ -23,6 +23,8 @@ Below is a simplified overview of the ASON architecture.
 code is isolated, the second says *where* the script host lives. Together they produce five real link
 paths across three process boundaries.
 
+<!-- i18n: localize-labels - translate the labels, keep the structure (numbering, arrows, indentation) -->
+
 ```
 [1] Client host  (your app: AsonClient, RootOperator, operators, LLM agents, MCP clients)
       |

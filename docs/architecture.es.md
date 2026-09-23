@@ -23,29 +23,31 @@ A continuación se muestra una descripción general simplificada de la arquitect
 código generado y el segundo indica *dónde* vive el host del script. En conjunto producen cinco rutas de
 enlace reales a través de tres fronteras de proceso.
 
+<!-- i18n: localize-labels - etiquetas localizadas, estructura intacta -->
+
 ```
-[1] Client host  (your app: AsonClient, RootOperator, operators, LLM agents, MCP clients)
+[1] Host del cliente  (tu aplicación: AsonClient, RootOperator, operadores, LLM agents, clientes MCP)
       |
-      |  boundary A: stdio, one JSON line per message          (local)
-      |  boundary B: SignalR carrying the same JSON lines      (remote)
+      |  frontera A: stdio, una línea JSON por mensaje         (local)
+      |  frontera B: SignalR con las mismas líneas JSON        (remoto)
       |
-      +--> [2] Client-side external executor               local ExternalProcess / Docker
-      |        Ason.ExternalExecutor child process on the client machine
-      |        (Docker mode: the child is "docker run --rm -i <image>")
+      +--> [2] Ejecutor externo del lado del cliente       local ExternalProcess / Docker
+      |        proceso hijo de Ason.ExternalExecutor en la máquina del cliente
+      |        (modo Docker: el hijo es "docker run --rm -i <image>")
       |
-      +--> [3] Remote runner service                       remote
+      +--> [3] Servicio de ejecución remota                remoto
                ASP.NET Core + /scriptRunnerHub  (Ason.RemoteBridge)
                   |
-                  |  boundary C: identical stdio protocol, initiated by the server
+                  |  frontera C: protocolo stdio idéntico, iniciado por el servidor
                   |
-                  +--> [4] Server-side external executor     remote ExternalProcess / Docker
-                  |        Ason.ExternalExecutor child process on the server
+                  +--> [4] Ejecutor externo del lado del servidor  remoto ExternalProcess / Docker
+                  |        proceso hijo de Ason.ExternalExecutor en el servidor
                   |
-                  +--> [4'] Server in-process evaluation      remote InProcess
-                           ScriptExecutor runs inside the web server process
+                  +--> [4'] Evaluación en proceso del servidor       remoto InProcess
+                           ScriptExecutor se ejecuta dentro del proceso del servidor web
 
-Operator calls always travel back to [1]: the script calls an operator, the invocation crosses the
-boundary or boundaries back to your process, the real method runs there, and the result returns.
+Las llamadas a operadores siempre vuelven a [1]: el script llama a un operador, la invocación cruza la
+frontera o las fronteras de vuelta a tu proceso, el método real se ejecuta allí y el resultado regresa.
 ```
 
 El diagrama anterior, leído de arriba hacia abajo, muestra que el host del cliente —el nodo `[1]`, es
