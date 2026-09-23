@@ -31,6 +31,30 @@ internal sealed class StubChatCompletionService : IChatCompletionService {
 
     public IReadOnlyDictionary<string, object?> Attributes { get; } = new Dictionary<string, object?>();
 
+    /// <summary>
+    /// Every request this stub received, in order. Semantic Kernel sends an agent's Instructions as the first
+    /// system message, so this is how a test can assert what the model would really have been told
+    /// (prompt/instruction wiring), instead of only asserting that a string was built correctly.
+    /// </summary>
+    public ConcurrentQueue<IReadOnlyList<ChatMessageContent>> Received { get; } = new();
+
+    void Record(IEnumerable<ChatMessageContent>? messages) {
+        if (messages is null) return;
+        var batch = messages.ToList();
+        if (batch.Count > 0) Received.Enqueue(batch);
+    }
+
+    /// <summary>All received message content, joined, for simple <c>Contains</c> assertions.</summary>
+    public string ReceivedText {
+        get {
+            var sb = new System.Text.StringBuilder();
+            foreach (var batch in Received) {
+                foreach (var message in batch) sb.AppendLine(message.Content);
+            }
+            return sb.ToString();
+        }
+    }
+
     public void Enqueue(params string[] replies) {
         foreach (var reply in replies ?? Array.Empty<string>()) {
             if (reply is null) continue;
@@ -75,6 +99,7 @@ internal sealed class StubChatCompletionService : IChatCompletionService {
 
     public async IAsyncEnumerable<ChatMessageContent> GetChatMessageContentsAsync(IEnumerable<ChatMessageContent> messages, ChatOptions? options = null, Kernel? kernel = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
         MaybeThrow();
+        Record(messages);
         var reply = Next(messageList: messages);
         yield return new ChatMessageContent(AuthorRole.Assistant, reply);
         await Task.CompletedTask;
@@ -82,6 +107,7 @@ internal sealed class StubChatCompletionService : IChatCompletionService {
 
     public Task<IReadOnlyList<ChatMessageContent>> GetChatMessageContentsAsync(string prompt, ChatOptions? options = null, Kernel? kernel = null, CancellationToken cancellationToken = default) {
         MaybeThrow();
+        Record(new[] { new ChatMessageContent(AuthorRole.User, prompt) });
         var reply = Next();
         IReadOnlyList<ChatMessageContent> list = new List<ChatMessageContent> { new ChatMessageContent(AuthorRole.Assistant, reply) };
         return Task.FromResult(list);
@@ -89,6 +115,7 @@ internal sealed class StubChatCompletionService : IChatCompletionService {
 
     public Task<IReadOnlyList<ChatMessageContent>> GetChatMessageContentsAsync(ChatHistory chatHistory, PromptExecutionSettings? executionSettings = null, Kernel? kernel = null, CancellationToken cancellationToken = default) {
         MaybeThrow();
+        Record(chatHistory);
         var reply = Next(chatHistory: chatHistory);
         IReadOnlyList<ChatMessageContent> list = new List<ChatMessageContent> { new ChatMessageContent(AuthorRole.Assistant, reply) };
         return Task.FromResult(list);
@@ -96,6 +123,7 @@ internal sealed class StubChatCompletionService : IChatCompletionService {
 
     public async IAsyncEnumerable<StreamingChatMessageContent> GetStreamingChatMessageContentsAsync(ChatHistory chatHistory, PromptExecutionSettings? executionSettings = null, Kernel? kernel = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
         MaybeThrow();
+        Record(chatHistory);
         var reply = Next(chatHistory: chatHistory);
         foreach (var chunk in _chunker(reply)) {
             yield return new StreamingChatMessageContent(AuthorRole.Assistant, chunk);

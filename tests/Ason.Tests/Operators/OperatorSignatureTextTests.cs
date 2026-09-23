@@ -102,7 +102,7 @@ public static class SignatureShapeStatic {
 
 [AsonModel("Signature shape model")]
 public class SignatureShapeModel {
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
     public int? Optional { get; set; }
-    public List<int> Values { get; set; }
+    public List<int> Values { get; set; } = new();
 }

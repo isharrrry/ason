@@ -51,6 +51,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `ScriptInstructions` | `string?` | `null` | 覆盖 Script Agent 的提示词 |
 | `ReceptionInstructions` | `string?` | `null` | 覆盖 Reception Agent 的提示词 |
 | `ExplainerInstructions` | `string?` | `null` | 覆盖 Explainer Agent 的提示词 |
+| `AnswerLanguage` | `string?` | `null` | 指定回答所用语言（BCP-47，如 `zh-CN`）；见[让回答使用指定语言](#让回答使用指定语言) |
 | `ScriptChatCompletion` | `IChatCompletionService?` | `null` | 专用于 Script Agent 的模型 |
 | `ReceptionChatCompletion` | `IChatCompletionService?` | `null` | 专用于 Reception Agent 的模型 |
 | `ExplainerChatCompletion` | `IChatCompletionService?` | `null` | 专用于 Explainer Agent 的模型 |
@@ -97,6 +98,30 @@ AsonClientOptions options = new() {
 
 - 规则必须作用到真正输出可见文本的 agent：直接回答来自 `Reception`，结果说明来自 `Explainer`。只给 `ScriptInstructions` 加前缀不会改变回答语言，因为 Script Agent 只输出 C#（它表示无法完成时会刻意以字面单词 `Cannot` 开头，重试逻辑会对该词做字符串匹配）。
 - 对话历史会把模型拉回之前几轮的语言。请在指令里显式说明，如上面片段中的 “even when earlier answers in this conversation were written in another one”。
+
+### 让回答使用指定语言
+
+如果目标只是"用用户能读的语言回答"，宿主完全不必碰提示词：设置 `AnswerLanguage`，ASON 会替你前置规则：
+
+<!-- i18n: localize-labels - 代码完全一致，只有行内注释本地化 -->
+```csharp
+AsonClientOptions options = new() {
+    // 例如 "zh-CN"；英文系统保持 null，这样预设原样使用。
+    AnswerLanguage = CultureInfo.CurrentUICulture.Name,
+};
+```
+
+| 问题 | 行为 |
+| --- | --- |
+| 规则作用到哪些提示词？ | Reception 与 Explainer —— 只有这两个 agent 写用户看得到的文字 |
+| 为什么不作用于 Script？ | 它只输出 C#（脚本本身从不展示），而且它表示"无法完成"的句子必须以字面单词 `Cannot` 开头，重试逻辑正是靠对该前缀做字符串匹配来短路 |
+| 与自定义提示词同时设置 | 即使覆盖了 `ReceptionInstructions` / `ExplainerInstructions`，规则仍会前置：回答语言是宿主级行为，不属于某个预设 |
+| 与对话历史的关系 | 规则会明确要求模型不要沿用前几轮的语言，否则历史会把回答拉回上一种语言 |
+| 名字格式非法（`en/US`） | `AsonClient` 构造函数抛异常，启动时即可发现 |
+| 未注册的标签（`zz`） | 无法识别：运行时接受任何格式合法的 BCP-47 标签并原样传递，因此它会直接进入模型提示词 |
+| 不设置（默认） | 没有任何变化：`null` 时每个提示词完全保持原样 |
+
+`AgentPrompts.BuildLanguageDirective(language)` 负责构造这条规则，`AgentPrompts.WithAnswerLanguage(preset, language)` 可把它套用到任意提示词上，供想自己拼提示词的宿主使用（例如同时追加自己的规则）。
 
 ## 服务注册（ASP.NET Core / Blazor）
 

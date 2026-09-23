@@ -4,7 +4,8 @@ using WpfSampleApp.AI;
 namespace WpfDemoApp.UiTests;
 
 /// <summary>
-/// The language directive is pure string work, so it is verified without starting the UI or calling a model.
+/// The demo's language decision is pure string/culture work, so it is verified without starting the UI or
+/// calling a model. The directive text itself belongs to the library and is covered by Ason.Tests.
 /// </summary>
 public class PromptLanguageTests {
 
@@ -12,43 +13,31 @@ public class PromptLanguageTests {
     [InlineData("en-US")]
     [InlineData("en-GB")]
     [InlineData("en")]
-    public void English_systems_get_no_directive_because_the_presets_are_already_English(string name) {
+    public void English_systems_do_not_opt_in_because_the_presets_are_already_English(string name) {
         var culture = new CultureInfo(name);
 
         Assert.True(PromptLanguage.IsEnglish(culture));
-        Assert.Equal(string.Empty, PromptLanguage.BuildDirective(culture));
-        Assert.Equal(Ason.AgentPrompts.ExplainerAgentTemplate,
-            PromptLanguage.WithSystemLanguage(Ason.AgentPrompts.ExplainerAgentTemplate, culture));
+        Assert.Null(PromptLanguage.AnswerLanguage(culture));
+        Assert.StartsWith("Replies in English", PromptLanguage.BuildNotice(culture));
     }
 
     [Theory]
     [InlineData("zh-CN")]
     [InlineData("es-ES")]
     [InlineData("de-DE")]
-    public void Non_English_systems_get_a_directive_naming_their_language(string name) {
+    public void Non_English_systems_opt_in_with_their_culture_name(string name) {
         var culture = new CultureInfo(name);
 
         Assert.False(PromptLanguage.IsEnglish(culture));
-
-        var directive = PromptLanguage.BuildDirective(culture);
-        Assert.Contains(culture.EnglishName, directive);
-        Assert.Contains(culture.Name, directive);
-        Assert.Contains("Language rule", directive);
-    }
-
-    [Fact]
-    public void The_directive_is_prepended_to_the_preset_without_losing_it() {
-        var culture = new CultureInfo("zh-CN");
-        var composed = PromptLanguage.WithSystemLanguage(Ason.AgentPrompts.ReceptionAgentTemplate, culture);
-
-        Assert.StartsWith(PromptLanguage.BuildDirective(culture) + "You are an AI assistant.", composed);
-        Assert.EndsWith("No code, no markup besides <task> tags", composed.TrimEnd());
+        Assert.Equal(culture.Name, PromptLanguage.AnswerLanguage(culture));
     }
 
     [Fact]
     public void The_script_preset_keeps_its_format_placeholder_so_ASON_can_fill_the_api() {
-        // Documents why the sample leaves ScriptInstructions alone: the preset is a composite format
-        // string whose {0} is filled by AsonClient with the generated API plus the instance declarations.
+        // Documents why neither the demo nor the language option touches ScriptInstructions: the preset is a
+        // composite format string whose {0} is filled by AsonClient with the generated API plus the instance
+        // declarations it discovers at runtime. The script agent also emits C# only, and its impossibility
+        // sentence must keep the literal "Cannot" prefix that the retry logic string-matches.
         Assert.Contains("{0}", Ason.AgentPrompts.ScriptAgentTemplate);
         Assert.DoesNotContain("{0}", Ason.AgentPrompts.BuildScriptInstructions("void Do();"));
         Assert.Contains("void Do();", Ason.AgentPrompts.BuildScriptInstructions("void Do();"));

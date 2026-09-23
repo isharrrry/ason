@@ -43,6 +43,10 @@ public class AsonClient : IChatClient {
     readonly OperatorsLibrary _operatorsLibrary;
     readonly ILogger? _logger;
 
+    // Empty unless AsonClientOptions.AnswerLanguage is set. Built eagerly in the constructor so an unknown
+    // culture name fails at startup instead of inside the proxy-build continuation.
+    readonly string _answerLanguageDirective;
+
     readonly IScriptRepairExecutor _repairExecutor;
     readonly IScriptValidator _validator;
     readonly IResultExplainer _resultExplainer;
@@ -84,6 +88,7 @@ public class AsonClient : IChatClient {
         _operatorsLibrary = operators ?? throw new ArgumentNullException(nameof(operators));
         _logger = _options.Logger;
         MaxScriptFixAttempts = _options.MaxFixAttempts;
+        _answerLanguageDirective = AgentPrompts.BuildLanguageDirective(_options.AnswerLanguage);
 
         DefaultChatCompletion = defaultChatCompletion;
         ScriptChatCompletion = _options.ScriptChatCompletion ?? defaultChatCompletion;
@@ -263,10 +268,14 @@ public class AsonClient : IChatClient {
         return AgentPrompts.ReceptionAgentTemplate;
     }
 
+    // The language rule is a host-level behaviour, so it is prepended even when the host replaced the prompt.
+    string ApplyAnswerLanguage(string instructions) =>
+        _answerLanguageDirective.Length == 0 ? instructions : _answerLanguageDirective + instructions;
+
     void InitAgents() {
         _receptionAgent = CreateAgent(
             "Reception",
-            BuildReceptionInstructions(),
+            ApplyAnswerLanguage(BuildReceptionInstructions()),
             _receptionKernel);
         _scriptAgent = CreateAgent(
             "ScriptGenerator",
@@ -274,7 +283,7 @@ public class AsonClient : IChatClient {
             _scriptKernel);
         _explainerAgent = CreateAgent(
             "Explainer",
-            _options.ExplainerInstructions ?? AgentPrompts.ExplainerAgentTemplate,
+            ApplyAnswerLanguage(_options.ExplainerInstructions ?? AgentPrompts.ExplainerAgentTemplate),
             _explainerKernel);
     }
 

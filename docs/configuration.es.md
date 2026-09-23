@@ -51,6 +51,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `ScriptInstructions` | `string?` | `null` | Sobrescribe el prompt del script agent |
 | `ReceptionInstructions` | `string?` | `null` | Sobrescribe el prompt del reception agent |
 | `ExplainerInstructions` | `string?` | `null` | Sobrescribe el prompt del explainer agent |
+| `AnswerLanguage` | `string?` | `null` | Fija el idioma de las respuestas (BCP-47, p. ej. `zh-CN`); ver [Responder en otro idioma](#responder-en-otro-idioma) |
 | `ScriptChatCompletion` | `IChatCompletionService?` | `null` | Modelo dedicado para el script agent |
 | `ReceptionChatCompletion` | `IChatCompletionService?` | `null` | Modelo dedicado para el reception agent |
 | `ExplainerChatCompletion` | `IChatCompletionService?` | `null` | Modelo dedicado para el explainer agent |
@@ -97,6 +98,30 @@ Dos notas prácticas:
 
 - La regla debe llegar al agente que escribe el texto visible: `Reception` para respuestas directas y `Explainer` para resultados. Prefijar solo `ScriptInstructions` no cambia el idioma de la respuesta, porque el Script Agent solo emite C# (sus frases de fallo empiezan a propósito con la palabra literal `Cannot`, que la lógica de reintentos compara como cadena).
 - El historial de la conversación puede devolver al modelo al idioma de turnos anteriores. Indícalo de forma explícita, como en el fragmento anterior ("even when earlier answers in this conversation were written in another one").
+
+### Responder en otro idioma
+
+Si el único objetivo es "responder en el idioma que lee el usuario", el host no necesita tocar los prompts: basta con `AnswerLanguage` y ASON antepone la regla:
+
+<!-- i18n: localize-labels - el código es idéntico, solo se traduce el comentario -->
+```csharp
+AsonClientOptions options = new() {
+    // p. ej. "zh-CN"; en un sistema en inglés déjalo en null para usar los presets tal cual.
+    AnswerLanguage = CultureInfo.CurrentUICulture.Name,
+};
+```
+
+| Pregunta | Comportamiento |
+| --- | --- |
+| ¿A qué prompts se aplica la regla? | A las instrucciones de Reception y Explainer: son los dos agentes que escriben lo que lee el usuario |
+| ¿Por qué no al Script agent? | Solo emite C# (el script nunca se muestra) y su frase de imposibilidad debe empezar por la palabra literal `Cannot`, que la lógica de reintentos compara como cadena |
+| Combinado con un prompt propio | La regla se antepone aunque se sobrescriban `ReceptionInstructions` o `ExplainerInstructions`: el idioma de respuesta es un comportamiento del host, no parte de un preset |
+| Relación con el historial | La regla indica al modelo que no copie el idioma de turnos anteriores, porque el historial lo devuelve al idioma previo |
+| Nombre mal formado (`en/US`) | El constructor de `AsonClient` lanza una excepción, así que el error aparece al arrancar |
+| Etiqueta no registrada (`zz`) | No se puede detectar: el runtime acepta cualquier etiqueta BCP-47 bien formada y la pasa tal cual, de modo que llega al modelo sin cambios |
+| Sin configurar (por defecto) | Nada cambia: con `null` cada prompt queda exactamente igual |
+
+`AgentPrompts.BuildLanguageDirective(language)` construye esa regla y `AgentPrompts.WithAnswerLanguage(preset, language)` la aplica a cualquier prompt, para los hosts que prefieren componer los prompts ellos mismos (por ejemplo para añadir sus propias reglas a la vez).
 
 ## Registro de servicios (ASP.NET Core / Blazor)
 

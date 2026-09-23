@@ -693,3 +693,50 @@ README 现有三份（`README.md` / `README.zh-CN.md` / `README.es.md`，各 419
 可见前缀本身有效，问题只在历史漂移。directive 补上 "even when earlier answers in this conversation were written in another one" 之后，全量套件里的回答也变成中文。
 
 教训：**同一句提示词在"单轮隔离"与"多轮历史"下不是同一件事**，验证必须两种都跑；只跑全量套件会把中文回答误判为失败，只跑隔离用例又会漏掉漂移。
+
+---
+
+## 16. `AsonClientOptions.AnswerLanguage`：把语言规则提升为库能力（本轮）
+
+### 16.1 决定与形态
+
+用户选择 **方案 ②：显式 opt-in 的选项**，而不是"只公开纯文本助手"或"库自动读 `CurrentUICulture`"（后者会让库隐式读进程文化，服务端/CI 场景静默失效）。形态：
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 属性名与类型 | `AsonClientOptions.AnswerLanguage`（`string?`，BCP-47） | 与配置文件/环境变量天然契合；`null` = 零行为变化 |
+| 规则文本 | `AgentPrompts.BuildLanguageDirective(language)` | 放在既有的公共提示词面上，不新增公共类型 |
+| 作用范围 | Reception + Explainer | 只有这两个 agent 写用户可见文字；Script 只出 C#，且其 `Cannot` 前缀被重试逻辑做字符串匹配，本地化它会破坏短路 |
+| 与自定义提示词的关系 | 规则**始终前置** | 回答语言是宿主级行为，不属于某个预设；若"用户覆盖就静默失效"会变成隐形坑 |
+| 英文是否特判 | 不特判 | 设了就是"用这个语言回答"，显式设 `en-US` 也有意义；不设才是"预设原样" |
+| 校验时机 | 构造函数内急切求值 | 指令在 `BuildInitialProxyLayer` 的续体里生成，那里抛异常只会变成一条 "Proxy build failed" 日志 |
+
+### 16.2 验证
+
+| 项 | 结果 |
+|---|---|
+| 解决方案构建 | 0 错误 |
+| `Ason.Tests`（新增 15 个用例） | 88/88 |
+| 新增用例覆盖 | 空/null 不产生规则；四种语言各自命名；跨轮历史条款在位；畸形名 `en/US` 在**构造时**抛；规则与预设拼接后预设逐字不变；**stub 捕获到** Reception/Explainer 收到规则而 Script 没有；覆盖 `ReceptionInstructions` 时规则仍前置 |
+| WPF UI 套件（live） | 13 通过 / 1 跳过；两条回答均为中文（规则由**库**驱动，示例侧已删除重复实现） |
+| 其余套件 | LibDemo 11/11×3、Runner 1/1、RemoteRunner 1/1+1跳过 |
+| 文档 | `configuration.md` 三语新增选项行 + 「让回答使用指定语言」小节；坏链 0、锚点 0、i18n 16/16 |
+
+### 16.3 两个被数据纠正的假设（重要）
+
+**a) "语言标签写错会抛异常" —— 只对畸形标签成立。**
+`.NET/ICU` 接受任何**格式合法**的 BCP-47 标签：`en/US`、`!!`、`12345` 抛 `CultureNotFoundException`，而 `zz`、`not-a-language` 被静默接受。于是"快速失败"只能覆盖畸形输入，未注册标签会原样进入提示词。
+
+**b) "未注册标签会显示成 `Unknown Language (zz)`" —— 不可靠。**
+我用 PowerShell 探到的是 `Unknown Language (zz)`，于是把它写进测试与文档；测试在**测试宿主**里却失败。dump 之后才发现测试宿主给的是 `EnglishName='zz'`。两个运行时（不同 .NET/ICU/CLDR 版本）对同一未注册标签的显示名不同，因此：
+- 文档只承诺"原样传递"，不承诺任何"Unknown …"字样；
+- 测试只断言标签本身，不断言显示名。
+
+教训：**跨运行时比较字符串，先 dump 再断言**；把某个运行时的显示名写进文档，等于给下一个运行时埋雷。
+
+### 16.4 顺带修掉的两个测试基建坑
+
+| 坑 | 修复 |
+|---|---|
+| `TestHarness.CreateBasicClient` 重建 options 时**静默丢弃**未列出的字段（新增选项若不转发就"看起来没生效"） | 转发 `AnswerLanguage` 与三个 `*Instructions`，并注明"这里就是完整转发清单" |
+| 同一方法还会**忽略按 agent 指定的 chat service**，三个 agent 一律用传入的那一个 | 改为 `receptionChat ?? options.ReceptionChatCompletion ?? chat`，并新增可选参数；该方法此前只有新测试在用，零回归风险 |

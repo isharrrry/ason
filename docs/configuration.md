@@ -51,6 +51,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 | `ScriptInstructions` | `string?` | `null` | Overrides the Script Agent prompt |
 | `ReceptionInstructions` | `string?` | `null` | Overrides the Reception Agent prompt |
 | `ExplainerInstructions` | `string?` | `null` | Overrides the Explainer Agent prompt |
+| `AnswerLanguage` | `string?` | `null` | Pins the language of the answers (BCP-47, e.g. `zh-CN`); see [Answering in another language](#answering-in-another-language) |
 | `ScriptChatCompletion` | `IChatCompletionService?` | `null` | Dedicated model for the Script Agent |
 | `ReceptionChatCompletion` | `IChatCompletionService?` | `null` | Dedicated model for the Reception Agent |
 | `ExplainerChatCompletion` | `IChatCompletionService?` | `null` | Dedicated model for the Explainer Agent |
@@ -97,6 +98,30 @@ Two practical notes:
 
 - The rule has to reach the agent that writes the visible text: `Reception` for direct answers and `Explainer` for results. Prefixing `ScriptInstructions` alone does not change the language of an answer, because the Script Agent only emits C# (its failure sentences deliberately start with the literal word `Cannot`, which the retry logic string-matches).
 - The conversation history can pull a model back into the language of earlier turns. State it explicitly, as in the snippet above ("even when earlier answers in this conversation were written in another one").
+
+### Answering in another language
+
+If the goal is only "answer in the language the user reads", the host does not have to touch the prompts at all. Set `AnswerLanguage` and ASON prepends the rule for you:
+
+<!-- i18n: localize-labels - the code stays identical, only the inline comment is translated -->
+```csharp
+AsonClientOptions options = new() {
+    // e.g. "zh-CN"; keep it null on an English system so the presets are used unchanged.
+    AnswerLanguage = CultureInfo.CurrentUICulture.Name,
+};
+```
+
+| Question | Behaviour |
+| --- | --- |
+| Which prompts get the rule? | The Reception and Explainer instructions - the two agents that write what the user reads |
+| Why not the Script agent? | It only emits C# (the script itself is never shown), and its impossibility sentence must keep starting with the literal word `Cannot`, which the retry logic string-matches |
+| Combined with a custom prompt | The rule is prepended even when `ReceptionInstructions` or `ExplainerInstructions` are overridden: the answer language is a host-level behaviour, not part of a preset |
+| Precedence with history | The rule tells the model not to copy the language of earlier turns, because conversation history otherwise pulls it back to the previous language |
+| Malformed name (`en/US`) | The `AsonClient` constructor throws, so a broken value surfaces at startup |
+| Unregistered tag (`zz`) | Cannot be detected: the runtime accepts any well-formed BCP-47 tag and passes it through, so it reaches the model as-is |
+| Not set (default) | Nothing changes - `null` leaves every prompt exactly as it is |
+
+`AgentPrompts.BuildLanguageDirective(language)` builds that rule and `AgentPrompts.WithAnswerLanguage(preset, language)` applies it to any prompt, for hosts that want to compose the prompts themselves (for example to add their own rules at the same time).
 
 ## Service registration (ASP.NET Core / Blazor)
 

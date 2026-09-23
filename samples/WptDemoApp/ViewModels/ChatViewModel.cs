@@ -56,8 +56,10 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
 
     [RelayCommand]
     async Task Init() {
-        // The prompts that produce user-visible text are read from Ason.AgentPrompts and prefixed with a
-        // language rule, so a non-English Windows gets answers in its own language.
+        // The demo answers in the Windows display language: it opts into AsonClientOptions.AnswerLanguage, and
+        // the library prepends the rule to the Reception and Explainer prompts (the two that write what the
+        // user reads). Read AgentPrompts.BuildLanguageDirective for the rule itself; docs/configuration.md
+        // covers why the Script agent is left out.
         var uiCulture = PromptLanguage.SystemUiCulture;
         LanguageNotice = PromptLanguage.BuildNotice(uiCulture);
 
@@ -76,14 +78,8 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
             MaxFixAttempts = 2,
             SkipReceptionAgent = false,
             ExecutionMode = ExecutionMode.InProcess,
-            ReceptionInstructions = PromptLanguage.WithSystemLanguage(AgentPrompts.ReceptionAgentTemplate, uiCulture),
-            ExplainerInstructions = PromptLanguage.WithSystemLanguage(AgentPrompts.ExplainerAgentTemplate, uiCulture),
-            // ScriptInstructions stays at the preset on purpose. It is the only prompt whose preset is a
-            // composite format string: AsonClient fills its {0} with the generated operator API *plus* the
-            // declarations of the operator instances it discovers at runtime ({ get; init; } text is used
-            // verbatim, without formatting), so overriding it from outside this library would drop those
-            // declarations and the script agent could no longer call the demo's instance-bound operators.
-            // The script agent emits C# anyway; the sentences the user reads come from Reception/Explainer.
+            // Null on an English system, so the presets are used unchanged there.
+            AnswerLanguage = PromptLanguage.AnswerLanguage(uiCulture),
             //RunnerExecutablePath = @"..\..\..\..\..\src\bin\Debug\net9.0"
             //UseRemoteRunner = true,
             //RemoteRunnerBaseUrl = "http://localhost:5236"

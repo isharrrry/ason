@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Ason;
 
 /// <summary>
@@ -123,6 +125,60 @@ public static class AgentPrompts
     /// <param name="apiSignatures">The generated operator API text, normally produced by <c>OperatorBuilder</c>.</param>
     public static string BuildScriptInstructions(string? apiSignatures)
         => string.Format(ScriptAgentTemplate, apiSignatures ?? string.Empty);
+
+    /// <summary>
+    /// Builds the rule that pins the language of the text the user reads, for a BCP-47 culture name such as
+    /// <c>zh-CN</c>, <c>es</c> or <c>de-DE</c>. Returns an empty string when <paramref name="answerLanguage"/>
+    /// is null or blank, so leaving <see cref="AsonClientOptions.AnswerLanguage"/> unset changes nothing.
+    ///
+    /// The rule also tells the model not to copy the language of earlier turns: conversation history pulls a
+    /// model back into the previous language, which is the difference between a single isolated turn and a
+    /// real multi-turn chat.
+    /// </summary>
+    /// <param name="answerLanguage">BCP-47 culture name, or null for "no rule".</param>
+    /// <remarks>
+    /// A malformed name (one the runtime rejects, such as <c>en/US</c>) throws. A well-formed but unregistered
+    /// tag (such as <c>zz</c>) is accepted by the runtime and passed through, so the directive then names that
+    /// tag - the visible symptom of a typo. It is deliberately not second-guessed with a hand-rolled registry
+    /// check: legitimate tags such as <c>en-001</c> resolve like unregistered ones, and the display name of an
+    /// unregistered tag differs between runtimes.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The name is not a culture name the current runtime accepts.</exception>
+    public static string BuildLanguageDirective(string? answerLanguage) {
+        if (string.IsNullOrWhiteSpace(answerLanguage)) return string.Empty;
+
+        CultureInfo culture;
+        try {
+            culture = CultureInfo.GetCultureInfo(answerLanguage.Trim());
+        }
+        catch (CultureNotFoundException ex) {
+            throw new ArgumentException(
+                $"Answer language '{answerLanguage}' is not a valid culture name. Use a BCP-47 name such as 'zh-CN', 'es' or 'de-DE'.",
+                nameof(answerLanguage), ex);
+        }
+
+        // NativeName is empty (or just repeats the code) in invariant-globalization mode, where only the name survives.
+        var native = string.IsNullOrWhiteSpace(culture.NativeName) || culture.NativeName == culture.Name
+            ? string.Empty
+            : " / " + culture.NativeName;
+
+        return $"""
+            Language rule: always answer the user in {culture.EnglishName}{native} ({culture.Name}).
+            Write every user-facing sentence (summaries, explanations, questions and error notes) in that
+            language - even when the user writes in another language, and even when earlier answers in this
+            conversation were written in another language (then switch to {culture.Name} instead of copying
+            their style). Keep code, API names, identifiers, numbers and data values exactly as they are.
+
+
+            """;
+    }
+
+    /// <summary>
+    /// Prepends the rule from <see cref="BuildLanguageDirective"/> to a preset or custom prompt. Returns
+    /// <paramref name="preset"/> unchanged when no language is configured.
+    /// </summary>
+    public static string WithAnswerLanguage(string preset, string? answerLanguage)
+        => BuildLanguageDirective(answerLanguage) + preset;
 
     /// <summary>
     /// Builds the user prompt used by the Extractor Agent for a single extraction request.

@@ -32,6 +32,25 @@ public sealed class AsonClientOptions {
     /// </summary>
     public string? ExplainerInstructions { get; init; }
 
+    /// <summary>
+    /// Pins the language of the text the user reads, as a BCP-47 culture name such as <c>zh-CN</c>.
+    ///
+    /// <see langword="null"/> (the default) leaves every prompt untouched, so this is an explicit opt-in.
+    /// When set, a language rule built by <see cref="AgentPrompts.BuildLanguageDirective"/> is prepended to the
+    /// Reception and Explainer instructions - also when <see cref="ReceptionInstructions"/> or
+    /// <see cref="ExplainerInstructions"/> are overridden, because the answer language is a cross-cutting
+    /// behaviour of the host and not part of a preset.
+    ///
+    /// The Script agent is deliberately excluded: it only emits C# (the user-facing sentences come from the
+    /// other two agents) and its impossibility sentence must keep starting with the literal word "Cannot",
+    /// which the retry logic string-matches.
+    ///
+    /// A malformed name makes the <see cref="AsonClient"/> constructor throw, so a broken value surfaces at
+    /// startup. A well-formed but unregistered tag (such as <c>zz</c>) cannot be detected - the runtime accepts
+    /// it - and is passed to the model as-is; check the value if answers come back in the wrong language.
+    /// </summary>
+    public string? AnswerLanguage { get; init; }
+
     public IChatCompletionService? ScriptChatCompletion { get; init; }
     public IChatCompletionService? ReceptionChatCompletion { get; init; }
     public IChatCompletionService? ExplainerChatCompletion { get; init; }
