@@ -357,16 +357,16 @@
 - **顺序**: 与 T11 同批（都在 T9 之前），避免文档被重复编辑两次。
 
 #### Task 13（T13 / 缺口 K）—— 分离部署的执行位置收尾（样例 + 测试）· 1.0 天
-- **现状核实（避免重复劳动）**: `external` 已在 `fb00b0f` 交付 —— `samples/ConsoleGrpcBridgeHost` 支持 `--execution inprocess|external`（`ASON_BRIDGE_EXECUTION` 等价），`tests/Ason.Bridge.Tests/ConsoleSamplesEndToEndTests.cs` 已断言 `manifest.Execution == "external-process"` 且 operator 调用仍回到应用侧。**本任务只收尾三件剩下的事**。
+- **现状核实（避免重复劳动）**: `external` 已在 `fb00b0f` 交付 —— `samples/ConsoleBridgeAppSample`（原名 `ConsoleGrpcBridgeHost`，见 T11）支持 `--execution inprocess|external`（`ASON_BRIDGE_EXECUTION` 等价），`tests/Ason.Bridge.Tests/ConsoleSamplesEndToEndTests.cs` 已断言 `manifest.Execution == "external-process"` 且 operator 调用仍回到应用侧。**本任务只收尾三件剩下的事**。
 - **Action**:
   ① **WPF 应用侧补同一个开关**：`WpfAppOnlyDemo --bridge-only --execution inprocess|external`（`App.xaml.cs` 解析、`Bridge/BridgeHost.cs:49` 由写死 `InProcess` 改为读参数），端点面板/READY 行显示实际 `execution`；理由写进注释：桌面应用最需要"生成代码不在自己进程里跑"，而 operator 调用仍经捕获的 `SynchronizationContext` 回到 UI 线程。
-  ② **`remote-runner` 的分离部署 E2E**：新增 `tests/Ason.Bridge.Tests/RemoteRunnerBridgeEndToEndTests.cs` —— 用 `TestPorts` 预留端口 → 起 `samples/RemoteRunnerService/RunnerServiceSample.csproj`（`ASON_REMOTE_RUNNER_URL` 同款就绪探测）→ 起应用侧 `ConsoleGrpcBridgeHost --execution remote --remote-url <url>`（样例补该参数，`AsonBridgeOptions.RemoteRunnerBaseUrl` 已存在）→ 断言 manifest `execution=remote-runner`、脚本经 SignalR 宿主求值、**函数调用与 operator 回环仍在应用侧**。
+  ② **`remote-runner` 的分离部署 E2E**：新增 `tests/Ason.Bridge.Tests/RemoteRunnerBridgeEndToEndTests.cs` —— 用 `TestPorts` 预留端口 → 起 `samples/RemoteRunnerService/RunnerServiceSample.csproj`（`ASON_REMOTE_RUNNER_URL` 同款就绪探测）→ 起应用侧 `ConsoleBridgeAppSample --execution remote --remote-url <url>`（样例补该参数，`AsonBridgeOptions.RemoteRunnerBaseUrl` 已存在）→ 断言 manifest `execution=remote-runner`、脚本经 SignalR 宿主求值、**函数调用与 operator 回环仍在应用侧**。
      **进程策略（本轮核实后补充）**：测试必须启动**已构建产物**（`TestSupport` 里同款"定位 dll → `dotnet exec`"助手），**不要用 `dotnet run`**（会触发构建、放大时序抖动）；同时把 `samples/RemoteRunnerService/RunnerServiceSample.csproj` **加入 Linux CI 的构建清单**（现清单只含桥项目与 console 样例，缺它这条 E2E 会因找不到产物而跳过）。
   ③ **`docker` 取值**：**计划原文"不启动守护进程、只断言上报"在实现上不成立** —— `AsonBridgeRuntime.GetManifestAsync()` 会 `await Executor.StartAsync()`，而 `ScriptRunnerProcessHost.StartAsync()`（`src/Ason.Runner.Core/ScriptRunnerProcessHost.cs:31`）**当场 spawn** 子进程（Docker 模式下即 `docker run`）。因此改为两件事：
      1. **上报口径用注入执行器验证**：`AsonBridgeOptions.Executor` 已是公开扩展点，测试注入一个 `Name = "docker"` 的桩执行器，断言 manifest/适配器一致地上报 `docker` —— 验证的是"执行位置来自执行器名字"这条插头，不依赖守护进程；
      2. **真实 Docker E2E 与既有策略一致**：需要守护进程的用例沿用 `Ason.Tests` 的排除口径（`--filter "DisplayName!~Docker…"`），并在三语文档写明该取值需要 Docker。
      3. **不做**"延迟启动执行器以免 manifest 失败"的行为改动（那会改变 `external` 的既有语义，属另一件事；如确需，另开任务）。
-- **Mirror**: `ConsoleGrpcBridgeHost` 的 `--execution` 解析与 `ASON_BRIDGE_READY` 行；`ConsoleSamplesEndToEndTests` + `TestSupport/{ConsoleBridgeHost,TestPorts}`；`Ason.Tests` 的 Docker 排除口径（`--filter "DisplayName!~Docker…"`）。
+- **Mirror**: `ConsoleBridgeAppSample`（原名 `ConsoleGrpcBridgeHost`）的 `--execution` 解析与 `ASON_BRIDGE_READY` 行；`ConsoleSamplesEndToEndTests` + `TestSupport/{ConsoleBridgeHost,TestPorts}`；`Ason.Tests` 的 Docker 排除口径（`--filter "DisplayName!~Docker…"`）。
 - **Validate**: `dotnet test tests/Ason.Bridge.Tests -c Release`（新增 remote E2E 不需要桌面，Linux/Windows 均可跑）；`dotnet test tests/Ason.Tests -c Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"`；`dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj -c Release`；手工 `WpfAppOnlyDemo --bridge-only --execution external` 后 `--func EmployeesOperator.GetDiagnostics` 仍返回 `onUiThread=true`（证明执行位置不影响 operator 回环）。
 - **Risk**: 中（remote E2E 引入"两个真实进程 + 一条 SignalR 连接"；若出现端口/时序抖动，落到与 WPF E2E 相同的串行 collection 并复用 `TestPorts`）。
 - **顺序**: 与 T2/T5/T6 无依赖；**必须在 T11 之后**（T11 会重命名 console 样例，否则命令块与 CI 清单要改两遍），并在 T9 之前。
@@ -420,9 +420,9 @@ dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release \
   --collect:"XPlat Code Coverage" --settings coverlet.runsettings
 
 # 样例构建（与 Linux CI 作业同一清单）
-dotnet build samples/ConsoleGrpcBridgeHost/ConsoleGrpcBridgeHost.csproj -c Release
+dotnet build samples/ConsoleBridgeAppSample/ConsoleBridgeAppSample.csproj -c Release
 dotnet build samples/ConsoleAgentSample/ConsoleAgentSample.csproj -c Release
-dotnet build samples/ConsoleGrpcBridgeDemo/ConsoleGrpcBridgeDemo.csproj -c Release
+dotnet build samples/ConsoleBridgeCallerSample/ConsoleBridgeCallerSample.csproj -c Release
 
 # T10：契约交付（非 .NET 调用方）
 dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj -c Release -o ./artifacts/pack
@@ -433,8 +433,10 @@ dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj -c Release -o ./artifac
 #   grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
 #           -d "{\"code\":\"return 1;\"}" localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
 
-# T11：重命名后的"无残留引用"断言（历史提交与 §10 记录除外）
-git ls-files | Select-String -Pattern 'ConsoleGrpcBridgeHost|ConsoleGrpcBridgeDemo'   # 期望：无输出
+# T11：重命名后的"无残留引用"断言
+# 口径（与 T11 的豁免一致）：只扫可执行/正文范围，历史记录（本文件 §10 与 tdd 历史段落）与 git 历史不计。
+$scope = git ls-files -- samples Ason.sln .github/workflows tests docs/app-agent-separation.md docs/app-agent-separation.zh-CN.md docs/app-agent-separation.es.md docs/contributing.md docs/contributing.zh-CN.md docs/contributing.es.md
+$scope | Select-String -Pattern 'ConsoleGrpcBridgeHost|ConsoleGrpcBridgeDemo'   # 期望：无输出
 dotnet build samples/ConsoleBridgeAppSample/ConsoleBridgeAppSample.csproj -c Release
 dotnet build samples/ConsoleBridgeCallerSample/ConsoleBridgeCallerSample.csproj -c Release
 

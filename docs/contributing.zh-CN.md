@@ -32,9 +32,9 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `src/Ason.Bridge.McpHost` | 把应用的 gRPC 桥重新发布为 stdio MCP 的中继 |
 | `samples/WpfAppOnlyDemo` | WPF 应用侧：`[Ason*]` operator + gRPC / MCP / HTTP-OpenAPI 服务，无 Agent |
 | `samples/WpfAgentDemo` | WPF Agent 侧：聊天 + 端点/传输选择，一个 `[AsonOperator]` 都没有 |
-| `samples/ConsoleGrpcBridgeHost` | 分离部署的应用侧：`[Ason*]` operator + gRPC 与 MCP 服务 |
+| `samples/ConsoleBridgeAppSample` | 分离部署的应用侧：`[Ason*]` operator + gRPC 与 MCP 服务 |
 | `samples/ConsoleAgentSample` | Agent 侧的 console 形态：从应用的清单构建自己的 API，并通过 gRPC 或 MCP 驱动它（跨平台、无界面） |
-| `samples/ConsoleGrpcBridgeDemo` | 外部请求侧：清单、单函数调用、脚本、流式日志 |
+| `samples/ConsoleBridgeCallerSample` | 外部请求侧：清单、单函数调用、脚本、流式日志 |
 | `samples/WptDemoApp` | WPF 演示（`net10.0`、`net9.0`、`net6.0-windows`） |
 | `samples/LibDemo` | 仅使用标记的类库（`net6.0`、`netstandard2.0`） |
 | `samples/templates` | `dotnet new` 模板 |

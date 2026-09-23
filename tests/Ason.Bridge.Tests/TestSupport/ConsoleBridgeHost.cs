@@ -6,7 +6,7 @@ using Ason.Bridge.Grpc;
 namespace Ason.Bridge.Tests.TestSupport;
 
 /// <summary>
-/// Starts the console application-side sample (<c>samples/ConsoleGrpcBridgeHost</c>) as a process and stops it
+/// Starts the console application-side sample (<c>samples/ConsoleBridgeAppSample</c>) as a process and stops it
 /// again. Unlike the WPF sample this one is cross-platform, so these tests run everywhere - including Linux CI.
 /// </summary>
 internal sealed class ConsoleBridgeHost : IDisposable {
@@ -33,7 +33,7 @@ internal sealed class ConsoleBridgeHost : IDisposable {
         if (directory is null) return null;
 
         foreach (var configuration in new[] { "Release", "Debug" }) {
-            var candidate = Path.Combine(directory.FullName, "samples", "ConsoleGrpcBridgeHost", "bin", configuration, "net9.0", "ConsoleGrpcBridgeHost.dll");
+            var candidate = Path.Combine(directory.FullName, "samples", "ConsoleBridgeAppSample", "bin", configuration, "net9.0", "ConsoleBridgeAppSample.dll");
             if (File.Exists(candidate)) return candidate;
         }
         return null;
@@ -55,7 +55,7 @@ internal sealed class ConsoleBridgeHost : IDisposable {
     }
 
     static async Task<ConsoleBridgeHost> StartOnceAsync(int port, string execution, TimeSpan? startupTimeout) {
-        var assembly = LocateAssembly() ?? throw new InvalidOperationException("samples/ConsoleGrpcBridgeHost has not been built.");
+        var assembly = LocateAssembly() ?? throw new InvalidOperationException("samples/ConsoleBridgeAppSample has not been built.");
         var info = new ProcessStartInfo("dotnet") {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

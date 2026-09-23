@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11205.157
@@ -51,9 +51,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ason.Bridge.Mcp", "src\Ason
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ason.Bridge.McpHost", "src\Ason.Bridge.McpHost\Ason.Bridge.McpHost.csproj", "{4E7FA16E-1BDE-4E08-921B-094346336703}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleGrpcBridgeDemo", "samples\ConsoleGrpcBridgeDemo\ConsoleGrpcBridgeDemo.csproj", "{E6BD6A4A-8D25-4036-8A19-C1E66C08F170}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleBridgeCallerSample", "samples\ConsoleBridgeCallerSample\ConsoleBridgeCallerSample.csproj", "{E6BD6A4A-8D25-4036-8A19-C1E66C08F170}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleGrpcBridgeHost", "samples\ConsoleGrpcBridgeHost\ConsoleGrpcBridgeHost.csproj", "{B70B3CD7-32F4-4F40-996B-B0EAA18BEBDD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleBridgeAppSample", "samples\ConsoleBridgeAppSample\ConsoleBridgeAppSample.csproj", "{B70B3CD7-32F4-4F40-996B-B0EAA18BEBDD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WpfAppOnlyDemo", "samples\WpfAppOnlyDemo\WpfAppOnlyDemo.csproj", "{749DFEE3-67EA-4E72-80BA-D34A5D8B9853}"
 EndProject

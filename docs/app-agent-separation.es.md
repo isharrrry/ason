@@ -234,8 +234,8 @@ curl -s -X POST http://localhost:5223/ason/script \
      -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
 
 # las mismas llamadas desde un cliente .NET (el ejemplo de consola es exactamente este caso)
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
 ```
 
 Lo que obtiene ese llamador: el manifiesto (descubrimiento), la interfaz de función única, la interfaz de script
@@ -306,6 +306,11 @@ Qué ejemplo (o combinación de ejemplos) muestra cada forma — desde la dispos
 manera de separarla. Las filas con 🔑 necesitan una clave de modelo: `MY_OPEN_AI_KEY` (y opcionalmente
 `MY_OPEN_AI_BASE_URL`, `MY_OPEN_AI_MODEL`); `ConsoleMcpSample` además necesita `MY_CONTEXT7_API_KEY`.
 
+**Roles**: `…AppSample` / `…Host` / `…AppOnlyDemo` son el **lado aplicación** — poseen los operadores y publican
+los endpoints; `…CallerSample` / `…AgentSample` / `…AgentDemo` son el **lado llamador** — se conectan a esos
+endpoints y no poseen ningún operador. Un mismo programa puede estar en los dos lados a la vez: el relé stdio es
+llamador de la aplicación y, a la vez, aplicación (servidor) para el agente que lo lanzó.
+
 | Forma | Lado aplicación | Lado llamador / agente | Qué se ve |
 |---|---|---|---|
 | **Sin separar** — aplicación de escritorio con el agente dentro | `samples/WptDemoApp` | el mismo proceso | el panel de chat conduce la UI de WPF mediante operadores en proceso |
@@ -314,12 +319,13 @@ manera de separarla. Las filas con 🔑 necesitan una clave de modelo: `MY_OPEN_
 | Sin separar — consola cuya API viene de un servidor MCP | `samples/ConsoleMcpSample` | el mismo proceso | el script llama a las herramientas MCP de Context7 como si fueran operadores |
 | Sin separar — una aplicación nueva | `samples/templates` | el mismo proceso | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` generan una app de chat funcional |
 | Sin separar, pero con el **host de scripts** en remoto | `samples/WptDemoApp` + `samples/RemoteRunnerService` (http://localhost:5236) | el mismo proceso | solo se mueve la ejecución; app, agente, operadores y datos siguen juntos |
-| **Separado** — agente .NET con su propia orquestación | `samples/WpfAppOnlyDemo` o `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`, o cualquier `AsonClient` con `TransportFactory` | el agente lee la API de operadores de la aplicación y la conduce; en el lado del agente no existe ningún operador |
+| **Separado** — agente .NET con su propia orquestación | `samples/WpfAppOnlyDemo` o `samples/ConsoleBridgeAppSample` | `samples/WpfAgentDemo`, o cualquier `AsonClient` con `TransportFactory` | el agente lee la API de operadores de la aplicación y la conduce; en el lado del agente no existe ningún operador |
 | Separado — el mismo lado agente **sin interfaz** (cualquier SO) | cualquiera de los lados aplicación | `samples/ConsoleAgentSample` (`--list` no necesita clave; `--send "…"` sí) | el agente de consola imprime la API que construyó desde el manifiesto y luego conduce la aplicación |
-| Separado, con el **host de scripts como proceso hijo de la aplicación** | `samples/ConsoleGrpcBridgeHost --execution external` | cualquier llamador de arriba | el manifiesto informa `execution=external-process`; el texto del script se ejecuta en el hijo mientras las llamadas a operadores se resuelven dentro de la aplicación |
+| Separado, con el **host de scripts como proceso hijo de la aplicación** | `samples/ConsoleBridgeAppSample --execution external` | cualquier llamador de arriba | el manifiesto informa `execution=external-process`; el texto del script se ejecuta en el hijo mientras las llamadas a operadores se resuelven dentro de la aplicación |
 | Separado — agente que habla MCP por HTTP | cualquiera de los lados aplicación | cualquier cliente MCP (Claude Desktop, un IDE) apuntando a `/mcp` | la aplicación aparece como cinco herramientas MCP |
 | Separado — agente que solo puede arrancar un servidor MCP por stdio | cualquiera de los lados aplicación | `src/Ason.Bridge.McpHost` (`--transport grpc` o `--transport mcp`) | las mismas herramientas por el stdin/stdout del agente |
-| Separado — **sin agente alguno** | cualquiera de los lados aplicación | `samples/ConsoleGrpcBridgeDemo`, `curl`, Swagger UI/Postman | un programa o un shell conduce la aplicación: una llamada a función o un script |
+| Separado — **sin agente alguno** | cualquiera de los lados aplicación | `samples/ConsoleBridgeCallerSample`, `curl`, Swagger UI/Postman | un programa o un shell conduce la aplicación: una llamada a función o un script |
+| Separado — un llamador en **otro lenguaje** | cualquiera de los lados aplicación | `samples/python` (compila el `.proto` distribuido) | Python lista la API desde el manifiesto, llama a una función, ejecuta un script y lee sus logs |
 
 ```bash
 # --- sin separar: aplicación y agente en un solo proceso (🔑 requiere la clave del modelo) ---
@@ -339,7 +345,7 @@ dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
 #   gRPC   http://localhost:5222
 #   MCP    http://localhost:5223/mcp
 #   HTTP   http://localhost:5223/ason/openapi.json
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222    # los mismos endpoints, operadores de LibDemo
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222    # los mismos endpoints, operadores de LibDemo
 
 # --- separado: un lado agente ---
 dotnet run --project samples/WpfAgentDemo                            # ventana de chat; la clave solo hace falta para el chat
@@ -353,19 +359,19 @@ dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5223/m
 dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --send "add 20 and 22"   # requiere la clave
 
 # la aplicación también puede evaluar scripts en un proceso hijo, quedándose con sus operadores
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222 --execution external
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222 --execution external
 
 # --- separado: sin agente, solo un programa ---
 #   contra el host de consola de arriba (sus operadores vienen de LibDemo)
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
 curl -s http://localhost:5223/ason/openapi.json
 curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add \
      -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
 
 #   contra la aplicación WPF de arriba (sus propios operadores)
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
 curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/GetDiagnostics \
      -H "Content-Type: application/json" -d '{}'
 ```

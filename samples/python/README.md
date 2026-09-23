@@ -15,8 +15,7 @@ example the one inside the NuGet package (`$(PkgAson_Bridge_Grpc)/protos/ason_br
 
 ## Run
 
-Start an application side first — `samples/ConsoleBridgeAppSample` (formerly `ConsoleGrpcBridgeHost`) listens
-on `http://localhost:5222` — then:
+Start an application side first — `samples/ConsoleBridgeAppSample` listens on `http://localhost:5222` — then:
 
 ```bash
 # what does this application expose? (the manifest is the contract)

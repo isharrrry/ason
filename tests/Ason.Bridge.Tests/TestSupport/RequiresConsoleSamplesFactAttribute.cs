@@ -7,7 +7,7 @@ namespace Ason.Bridge.Tests.TestSupport;
 public sealed class RequiresConsoleSamplesFactAttribute : FactAttribute {
     public RequiresConsoleSamplesFactAttribute() {
         if (ConsoleBridgeHost.LocateAssembly() is null) {
-            Skip = "samples/ConsoleGrpcBridgeHost has not been built, so this end-to-end test is skipped.";
+            Skip = "samples/ConsoleBridgeAppSample has not been built, so this end-to-end test is skipped.";
             return;
         }
         if (ConsoleAgentRunner.LocateAssembly() is null) {

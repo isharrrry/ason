@@ -7,17 +7,17 @@ using Ason.Bridge.Grpc;
 // deployment, and the shortest way to see the single-function interface work without any agent in the loop.
 //
 // Usage:
-//   ConsoleGrpcBridgeDemo --url http://localhost:5222                    # manifest summary + live instances
-//   ConsoleGrpcBridgeDemo --url ... --manifest                           # full manifest JSON
-//   ConsoleGrpcBridgeDemo --url ... --instances                          # live instances only
-//   ConsoleGrpcBridgeDemo --url ... --func BridgeStaticOperator.Add --args "[2,3]"
-//   ConsoleGrpcBridgeDemo --url ... --func EmployeesViewOperator.GetEmployees
-//   ConsoleGrpcBridgeDemo --url ... --script "return BridgeStaticOperator.Add(40, 2);"
-//   ConsoleGrpcBridgeDemo --url ... --script "..." --stream              # stream the application's logs
+//   ConsoleBridgeCallerSample --url http://localhost:5222                    # manifest summary + live instances
+//   ConsoleBridgeCallerSample --url ... --manifest                           # full manifest JSON
+//   ConsoleBridgeCallerSample --url ... --instances                          # live instances only
+//   ConsoleBridgeCallerSample --url ... --func BridgeStaticOperator.Add --args "[2,3]"
+//   ConsoleBridgeCallerSample --url ... --func EmployeesViewOperator.GetEmployees
+//   ConsoleBridgeCallerSample --url ... --script "return BridgeStaticOperator.Add(40, 2);"
+//   ConsoleBridgeCallerSample --url ... --script "..." --stream              # stream the application's logs
 
 var url = Argument("--url") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_URL");
 if (string.IsNullOrWhiteSpace(url)) {
-    Console.Error.WriteLine("usage: ConsoleGrpcBridgeDemo --url <application gRPC bridge url> [--manifest|--instances|--func Operator.Method [--args \"[..]\"]|--script \"code\" [--stream]]");
+    Console.Error.WriteLine("usage: ConsoleBridgeCallerSample --url <application gRPC bridge url> [--manifest|--instances|--func Operator.Method [--args \"[..]\"]|--script \"code\" [--stream]]");
     return 2;
 }
 

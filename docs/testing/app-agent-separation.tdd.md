@@ -11,6 +11,11 @@ originally inline only; it is now written down as
 reconstructs Wave 1 — this report is that wave's evidence — and carries Wave 2 (tasks T0–T8). This report is
 therefore the plan-to-test mapping for Wave 1 and will gain a "Wave 2" section as that wave lands.
 
+**Naming note (added with T11, Wave 2)**: the two console samples were renamed so the name says which side of
+the boundary the program sits on — `samples/ConsoleGrpcBridgeHost` → `samples/ConsoleBridgeAppSample` (the
+application side) and `samples/ConsoleGrpcBridgeDemo` → `samples/ConsoleBridgeCallerSample` (the caller side).
+The entries below are historical evidence and keep the names that were in force when they were written.
+
 ## User journeys
 
 1. As an **application author**, I want to publish my `[Ason*]` operators plus an MCP/gRPC service and keep

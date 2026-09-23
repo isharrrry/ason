@@ -281,8 +281,8 @@ curl -s -X POST http://localhost:5223/ason/script \
      -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
 
 # 同样的调用用 .NET 客户端（示例 console 客户端正是这个场景）
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
 ```
 
 这类调用方能拿到：清单（用于发现）、单函数接口、需要组合多次调用时的整段脚本接口，以及 gRPC 上的流式日志。
@@ -361,6 +361,10 @@ MCP 与 HTTP 报 `401`；应用级失败仍保留各自的错误码。
 哪种情形由哪个示例（或哪几个示例组合）演示 —— 从"不分离"到各种"分离"形态。带 🔑 的行需要模型密钥：
 `MY_OPEN_AI_KEY`（可选 `MY_OPEN_AI_BASE_URL`、`MY_OPEN_AI_MODEL`）；`ConsoleMcpSample` 还需要 `MY_CONTEXT7_API_KEY`。
 
+**角色图例**：`…AppSample` / `…Host` / `…AppOnlyDemo` 属于**应用侧** —— 它们持有 operator 并发布端点；
+`…CallerSample` / `…AgentSample` / `…AgentDemo` 属于**调用方侧** —— 它们连接这些端点，自己没有任何 operator。
+同一个程序可以同时站在两侧：stdio 中继对应用来说是调用方，同时对拉起它的 Agent 来说又是服务端（应用）。
+
 | 情形 | 应用侧 | 调用方 / Agent 侧 | 能看到什么 |
 |---|---|---|---|
 | **不分离** —— 桌面应用内嵌 Agent | `samples/WptDemoApp` | 同一进程 | 聊天面板通过进程内 operator 驱动 WPF 界面 |
@@ -369,12 +373,13 @@ MCP 与 HTTP 报 `401`；应用级失败仍保留各自的错误码。
 | 不分离 —— API 来自 MCP 服务的 console | `samples/ConsoleMcpSample` | 同一进程 | 脚本像调用 operator 一样调用 Context7 的 MCP 工具 |
 | 不分离 —— 全新应用 | `samples/templates` | 同一进程 | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` 直接生成可跑的聊天应用 |
 | 不分离，但**脚本宿主**在远端 | `samples/WptDemoApp` + `samples/RemoteRunnerService`（http://localhost:5236） | 同一进程 | 只有执行被搬走；应用、Agent、operator 与数据仍在一起 |
-| **分离** —— 自带编排的 .NET Agent | `samples/WpfAppOnlyDemo` 或 `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`，或任何用 `TransportFactory` 的 `AsonClient` | Agent 拉取应用的 operator API 并驱动它；Agent 侧一个 operator 都没有 |
+| **分离** —— 自带编排的 .NET Agent | `samples/WpfAppOnlyDemo` 或 `samples/ConsoleBridgeAppSample` | `samples/WpfAgentDemo`，或任何用 `TransportFactory` 的 `AsonClient` | Agent 拉取应用的 operator API 并驱动它；Agent 侧一个 operator 都没有 |
 | 分离 —— 同样的 Agent 侧但**没有界面**（任意系统） | 任一应用侧 | `samples/ConsoleAgentSample`（`--list` 不需要密钥；`--send "…"` 需要） | console agent 打印它从清单构建出的 API，然后驱动应用 |
-| 分离，且**脚本宿主是应用自己的子进程** | `samples/ConsoleGrpcBridgeHost --execution external` | 上面任一调用方 | 清单报告 `execution=external-process`；脚本文本在子进程执行，而 operator 调用仍在应用内解析 |
+| 分离，且**脚本宿主是应用自己的子进程** | `samples/ConsoleBridgeAppSample --execution external` | 上面任一调用方 | 清单报告 `execution=external-process`；脚本文本在子进程执行，而 operator 调用仍在应用内解析 |
 | 分离 —— 用 HTTP MCP 的 Agent | 任一应用侧 | 任何 MCP 客户端（Claude Desktop、IDE）指向 `/mcp` | 应用表现为五个 MCP 工具 |
 | 分离 —— 只能启动 stdio MCP 的 Agent | 任一应用侧 | `src/Ason.Bridge.McpHost`（`--transport grpc` 或 `--transport mcp`） | 同样的工具，走 Agent 的 stdin/stdout |
-| 分离 —— **完全没有 Agent** | 任一应用侧 | `samples/ConsoleGrpcBridgeDemo`、`curl`、Swagger UI/Postman | 程序或 shell 驱动应用：一次函数调用，或一段脚本 |
+| 分离 —— **完全没有 Agent** | 任一应用侧 | `samples/ConsoleBridgeCallerSample`、`curl`、Swagger UI/Postman | 程序或 shell 驱动应用：一次函数调用，或一段脚本 |
+| 分离 —— **换一种语言**写的调用方 | 任一应用侧 | `samples/python`（编译随包发布的 `.proto`） | Python 从清单列出 API、调用函数、执行脚本并读取日志 |
 
 ```bash
 # --- 不分离：应用与 Agent 同进程（🔑 需要模型密钥） ---
@@ -394,7 +399,7 @@ dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
 #   gRPC   http://localhost:5222
 #   MCP    http://localhost:5223/mcp
 #   HTTP   http://localhost:5223/ason/openapi.json
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222    # 同样的端点，operator 来自 LibDemo
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222    # 同样的端点，operator 来自 LibDemo
 
 # --- 分离：Agent 侧 ---
 dotnet run --project samples/WpfAgentDemo                            # 聊天窗口；仅聊天需要密钥
@@ -408,19 +413,19 @@ dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5223/m
 dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --send "add 20 and 22"   # 需要密钥
 
 # 应用也可以在子进程中求值脚本，把 operator 留在自己进程里
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222 --execution external
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222 --execution external
 
 # --- 分离：不要 Agent，只要一个程序 ---
 #   对着上面的 console 宿主（它的 operator 来自 LibDemo）
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
 curl -s http://localhost:5223/ason/openapi.json
 curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add \
      -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
 
 #   对着上面的 WPF 应用（它自己的 operator）
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
+dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
 curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/GetDiagnostics \
      -H "Content-Type: application/json" -d '{}'
 ```

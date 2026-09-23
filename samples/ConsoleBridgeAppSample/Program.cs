@@ -15,10 +15,10 @@ using Microsoft.Extensions.Logging;
 // The application side of a split deployment, in its smallest useful form: no agent, no model, no chat -
 // only [Ason*] marked operators (here from the LibDemo class library) and the services an agent connects to.
 //
-//   gRPC  -> http://localhost:<port>       (ConsoleGrpcBridgeDemo, or any gRPC client)
+//   gRPC  -> http://localhost:<port>       (ConsoleBridgeCallerSample, or any gRPC client)
 //   MCP   -> http://localhost:<port+1>/mcp (an MCP-speaking agent, or the stdio relay host)
 //
-// Usage: ConsoleGrpcBridgeHost [--port 5222] [--execution inprocess|external] [--reflection]
+// Usage: ConsoleBridgeAppSample [--port 5222] [--execution inprocess|external] [--reflection]
 //
 //   inprocess (default) - scripts are evaluated in this process, so they can touch the operators directly
 //   external            - scripts are evaluated in an Ason.ExternalExecutor child process, which calls back

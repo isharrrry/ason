@@ -32,9 +32,9 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `src/Ason.Bridge.McpHost` | relay that republishes an application's gRPC bridge as stdio MCP |
 | `samples/WpfAppOnlyDemo` | WPF application side: `[Ason*]` operators plus gRPC, MCP and HTTP/OpenAPI services, no agent |
 | `samples/WpfAgentDemo` | WPF agent side: chat plus endpoint/transport selection, and not a single `[AsonOperator]` |
-| `samples/ConsoleGrpcBridgeHost` | application side of a split deployment: `[Ason*]` operators plus gRPC and MCP services |
+| `samples/ConsoleBridgeAppSample` | application side of a split deployment: `[Ason*]` operators plus gRPC and MCP services |
 | `samples/ConsoleAgentSample` | agent side as a console program: builds its API from the application's manifest and drives it over gRPC or MCP (cross-platform, no UI) |
-| `samples/ConsoleGrpcBridgeDemo` | external request side: manifest, single-function calls, scripts, streamed logs |
+| `samples/ConsoleBridgeCallerSample` | external request side: manifest, single-function calls, scripts, streamed logs |
 | `samples/WptDemoApp` | WPF demo (`net10.0`, `net9.0`, `net6.0-windows`) |
 | `samples/LibDemo` | class library that only uses the markers (`net6.0`, `netstandard2.0`) |
 | `samples/templates` | the `dotnet new` templates |
