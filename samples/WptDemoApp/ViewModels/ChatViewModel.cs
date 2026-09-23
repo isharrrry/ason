@@ -23,6 +23,10 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
     [ObservableProperty]
     string languageNotice = string.Empty;
 
+    /// <summary>Which Fluent theme this build renders with, shown in the chat panel.</summary>
+    [ObservableProperty]
+    string themeNotice = string.Empty;
+
     public ObservableCollection<string> PromptSuggestions { get; } = new() {
         "Change position of all employees hired in 2025 to X",
         "Number of employees hired in 2025",
@@ -63,6 +67,9 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
         // covers why the Script agent is left out.
         var uiCulture = PromptLanguage.SystemUiCulture;
         LanguageNotice = PromptLanguage.BuildNotice(uiCulture);
+        // The three target frameworks do not share the same Fluent theme (see App.xaml.cs), so the panel says
+        // which one is in use - handy when running the net6/net9/net10 builds side by side.
+        ThemeNotice = $"Theme: {App.ThemeLabel}";
 
         IChatCompletionService chatService;
         try {
@@ -81,6 +88,16 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
             ExecutionMode = ExecutionMode.InProcess,
             // Null on an English system, so the presets are used unchanged there.
             AnswerLanguage = PromptLanguage.AnswerLanguage(uiCulture),
+            // The API listing is a document, not a result to narrate: without this the explainer summarizes and
+            // re-groups it, and the user gets a paraphrase instead of the list they asked for. The library still
+            // prepends the answer-language rule to this text.
+            ExplainerInstructions = AgentPrompts.ExplainerAgentTemplate + """
+
+
+                Listing rule:
+                - If <result> is a Markdown document (a listing, a table or a report), return it completely and
+                  verbatim: do not summarize it, do not re-group it, do not drop rows, do not translate it.
+                """,
             //RunnerExecutablePath = @"..\..\..\..\..\src\bin\Debug\net9.0"
             //UseRemoteRunner = true,
             //RemoteRunnerBaseUrl = "http://localhost:5236"

@@ -25,6 +25,10 @@
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="ScottPlot.WPF" Version="5.0.56" />
     <PackageReference Include="ModelContextProtocol.Core" Version="0.4.0-preview.3" />
+    <!-- net9.0-windows and net10.0-windows get the platform Fluent theme through ThemeMode; net6.0-windows
+         has no ThemeMode at all (it is a .NET 9 API), so the demo brings the Fluent look with it. Both looks
+         are Fluent, and this keeps the net6 build from falling back to the classic Aero2 theme. -->
+    <PackageReference Include="WPF-UI" Version="3.1.1" Condition="'$(TargetFramework)' == 'net6.0-windows'" />
   </ItemGroup>
 
   <ItemGroup>

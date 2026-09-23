@@ -784,3 +784,54 @@ README 现有三份（`README.md` / `README.zh-CN.md` / `README.es.md`，各 419
 **b) 我的 live 断言原来跑在"流式回复的第一段"上。** `Retry.WhileEmpty` 一有内容就返回，长回答会被断言在只到开头几行时——第一版 dump 里 `## LibDemoOperator` 后面断掉，就是快照竞态而非模型截断。已改为 `WaitForStableReply`（内容 3 秒无变化才读），三个 live 用例统一使用，并顺带把该用例的断言加强为"必须列出两个程序集里的真实算子名"。
 
 教训（第三条同类）：**流式输出的断言必须等稳定，否则测的是第一条 chunk**。
+
+---
+
+## 18. net6 看起来"没有样式"：跨 TFM 主题统一（本轮）
+
+### 18.1 根因（官方文档确认，不是推测）
+
+用户报告：net9/net10 编译的 exe 观感正常，net6 的只有系统原始样式。查证结论：
+
+- .NET 9 新增 **Fluent 主题**，`Application.ThemeMode` 取 `Light/Dark/System` 时应用 Fluent，**默认值 `None` 使用 Aero2**（[What's new in WPF for .NET 9](https://learn.microsoft.com/dotnet/desktop/wpf/whats-new/net90)）。
+- 示例在 `App.xaml.cs` 里把 `ThemeMode = Light` 放在 `#if NET9_0_OR_GREATER` 中 —— 这段代码在 net6 腿**根本不编译**，于是 net6 落到 Aero2：方角按钮、灰底输入区、蓝色方块发送按钮、字体与间距都不同。
+- `App.xaml` 是空的（无任何 ResourceDictionary），模板 `Ason.Wpf.Template/App.xaml` 则把 `ThemeMode="Light"` 写在 XAML 里（模板只面向 net9，所以没有该问题）。
+
+### 18.2 方案选择与实现
+
+只有四条路（`ThemeMode` 在 net6 不存在，无法"让 net6 用平台 Fluent"）：
+
+| 方案 | 结果 |
+|---|---|
+| ① 自写轻量样式字典 | 三 TFM 一致、无依赖，但观感由我们定义 |
+| ② 主题包统一三 TFM | 一致且现代，但改动 net9/10 现有观感 |
+| **③ 只给 net6 加主题包（用户选择）** | 改动最小，net9/10 保持平台 Fluent |
+| ④ 全部退回 Aero2 | 一致但失去现代观感 |
+
+实现（③）：
+
+- `WpfSampleApp.csproj`：`<PackageReference Include="WPF-UI" Version="3.1.1" Condition="'$(TargetFramework)' == 'net6.0-windows'" />`。版本是查 nuspec 定下来的：**3.1.1 支持 `net6.0-windows7.0`，4.x 只到 net8+**。
+- `App.xaml.cs`：net6 的 `#else` 分支里合并 `Wpf.Ui.Markup.ThemesDictionary { Theme = Light }` + `ControlsDictionary()`（类型名取自包内 `Wpf.Ui.xml` 文档，未凭记忆猜）；net9/10 分支保持 `ThemeMode`。
+- `MainWindow.xaml`：显式 `Background="#F3F3F3"`，因为平台 Fluent 会给窗口底色而 net6 的兜底主题不会——不显式指定则 net6 是白底、net9 是浅灰底。
+- `App.ThemeLabel` + 聊天面板新增 `ThemeNotice`（`AutomationId=ThemeNotice`）：既是给使用者看的"当前主题"，也让 UI 测试有确定性断言点（net6 期望含 `WPF-UI`，net9/10 期望含 `platform`）。
+
+### 18.3 验证
+
+| 项 | 结果 |
+|---|---|
+| 构建 | `Ason.sln` 0 错误；net6/net9/net10 三个腿都能编译（net6 若删掉包会**编译失败**，因为 `#if` 分支引用了 `Wpf.Ui` 类型） |
+| 视觉 | 三 TFM 各出一张"置顶 + 最大化 + 屏幕抓取"截图对比：net6 与 net9/net10 已是同一观感家族（浅灰列、白底表格、圆角按钮、可见的强调色发送按钮） |
+| UI 套件 | **三个 TFM 各跑一遍全量**：15 通过 / 1 跳过（含主题与语言提示的断言、3 条 live 用例） |
+| 残留差异 | DataGrid 斑马纹/表头底色与工具栏底色仍有细微差别；用户已接受（方案 ③ 的固有代价） |
+
+### 18.4 三个教训
+
+**a) 抓图方式会误导结论。** 我先用 `PrintWindow(PW_RENDERFULLCONTENT)` 抓窗口，得到"net6 白底淡字、发送按钮消失"的结论，差点据此断言方案 ③ 不可行；换成"置顶 + 最大化 + 屏幕抓取"后发现那只是 PrintWindow 对 WPF 分层渲染的伪影，真实观感良好。
+
+**b) 抓图时要让窗口置顶。** 第一次用屏幕区域抓取时窗口被资源管理器遮住，抓到的其实是别人的窗口。
+
+**c) live 断言必须留余量。** "查询 API" 用例原来要求回复里出现三个真实算子名，全量跑第一次就因模型加了引言/重排而失败（随后两次全量均通过）。已放宽为"必须有 Markdown 表格 + 至少一个真实算子名"；清单内容正确性由库侧 13 个确定性用例与签名一致性护栏保证，live 用例只证明"这条链路通"。
+
+### 18.5 附带修正：清单要原样返回
+
+同轮发现"查询 API"的回复会被 Explainer 总结/重新分组（"共 8 个 operator…按视图分组如下"），用户拿不到清单本身。已在示例的 `ExplainerInstructions` 里追加一条：结果为 Markdown 文档时**完整原样返回**（不总结、不重排、不丢行、不翻译）；库侧仍会在这段文本前前置语言规则。加此规则后清单完整返回（含模型表）。

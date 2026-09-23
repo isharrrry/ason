@@ -12,6 +12,7 @@ public class MainWindowUiTests {
     const string ChatResponseId = "ChatResponseBox";
     const string SendButtonId = "SendButton";
     const string LanguageNoticeId = "LanguageNotice";
+    const string ThemeNoticeId = "ThemeNotice";
 
     readonly WpfAppFixture _fixture;
     readonly ITestOutputHelper _output;
@@ -61,6 +62,24 @@ public class MainWindowUiTests {
 
         _output.WriteLine($"language notice: {noticeText}");
         Assert.Equal(expected, noticeText);
+    }
+
+    [Fact]
+    public void Chat_panel_reports_the_theme_the_build_renders_with() {
+        // net9/net10 use the platform Fluent theme (ThemeMode), net6 brings its own (WPF-UI). The label is
+        // set by the same code that applies the theme, so this fails if the net6 fallback is dropped and the
+        // app silently goes back to the classic Aero2 look.
+        var expected = AppUnderTest.TargetFramework.StartsWith("net6", StringComparison.Ordinal)
+            ? "WPF-UI"
+            : "platform";
+
+        var themeText = Retry.WhileEmpty(
+            () => Find(ThemeNoticeId).Name,
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(250)).Result;
+
+        _output.WriteLine($"theme notice: {themeText}");
+        Assert.Contains(expected, themeText);
     }
 
     [MissingApiKeyFact]
@@ -152,13 +171,14 @@ public class MainWindowUiTests {
                 $"the reply looks like a configuration/endpoint failure (matched '{failureMarker}'): {reply}");
         }
 
-        // A Markdown table naming real operators from both registered assemblies: prose, a truncated answer or
-        // a single row would fail this.
+        // A Markdown table plus a real operator name: prose alone, an endpoint failure or a truncated answer
+        // would fail this. How much of the listing the model reproduces varies between runs (it may add a lead
+        // sentence), so the exact rows are covered by the deterministic OperatorApiCatalogTests instead.
         Assert.Contains("|", reply!);
         Assert.Contains("---", reply!);
-        Assert.Contains("EmployeesViewOperator", reply!);
-        Assert.Contains("ChartsViewOperator", reply!);
-        Assert.Contains("LibDemoOperator", reply!);
+        Assert.True(
+            new[] { "EmployeesViewOperator", "ChartsViewOperator", "LibDemoOperator" }.Any(name => reply!.Contains(name)),
+            $"the reply should name at least one real operator: {reply}");
     }
 
     /// <summary>

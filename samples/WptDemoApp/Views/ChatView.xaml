@@ -112,16 +112,25 @@
             <Image Source="/Images/send.png" />
         </Button>
         <!-- Always visible (not only with the suggestions panel): states which language the assistant
-             answers in, derived from the system UI language before the client is created. -->
-        <TextBlock Text="{Binding LanguageNotice}"
-                   AutomationProperties.AutomationId="LanguageNotice"
-                   AutomationProperties.Name="{Binding LanguageNotice}"
-                   Grid.Row="2"
-                   Grid.ColumnSpan="2"
-                   HorizontalAlignment="Center"
-                   TextAlignment="Center"
-                   TextWrapping="Wrap"
-                   Opacity="0.7"
-                   Margin="0,4,0,0" />
+             answers in, and which Fluent theme this build renders with. -->
+        <StackPanel Grid.Row="2"
+                    Grid.ColumnSpan="2"
+                    Margin="0,4,0,0">
+            <TextBlock Text="{Binding LanguageNotice}"
+                       AutomationProperties.AutomationId="LanguageNotice"
+                       AutomationProperties.Name="{Binding LanguageNotice}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Opacity="0.7" />
+            <TextBlock Text="{Binding ThemeNotice}"
+                       AutomationProperties.AutomationId="ThemeNotice"
+                       AutomationProperties.Name="{Binding ThemeNotice}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Opacity="0.7"
+                       Margin="0,2,0,0" />
+        </StackPanel>
     </Grid>
 </UserControl>

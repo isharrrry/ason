@@ -8,7 +8,10 @@
         xmlns:local="clr-namespace:WpfSampleApp"
         Icon="/Images/appIcon.png"
         mc:Ignorable="d"
-        Title="MainWindow" Height="900" Width="1400">
+        Title="MainWindow" Height="900" Width="1400"
+        Background="#F3F3F3">
+    <!-- The background is set explicitly so all three target frameworks agree: on net9/net10 the platform
+         Fluent theme would supply it, on net6 the fallback theme does not style the window itself. -->
     <Window.DataContext>
         <vm:MainViewModel />
     </Window.DataContext>
