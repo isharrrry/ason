@@ -64,6 +64,19 @@ genera protoc para que el porcentaje describa los adaptadores escritos a mano:
 dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
 ```
 
+Los cuatro proyectos del puente tienen un **suelo**, y el job de CI lo comprueba adaptador por adaptador
+(línea ≥ 87%, ramas ≥ 70%; a fecha de 0.9.0 están en 89–98% y 75–82%):
+
+```bash
+./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
+```
+
+Los ensamblados de los ejemplos quedan fuera de ese suelo a propósito: cada ejemplo es un proceso aparte y la
+cobertura se recoge dentro del host de pruebas, así que el ensamblado de un ejemplo no se puede medir así. Los
+ejemplos los cubren las pruebas de extremo a extremo a nivel de proceso (`ConsoleSamplesEndToEndTests`,
+`WpfApplicationEndToEndTests`, `RemoteRunnerBridgeEndToEndTests`), que primero los compilan y luego conducen los
+procesos reales.
+
 Variables de entorno que modifican el comportamiento de las pruebas de interfaz:
 
 | Variable | Significado |
@@ -71,9 +84,19 @@ Variables de entorno que modifican el comportamiento de las pruebas de interfaz:
 | `WPF_DEMO_TFM` | qué compilación de ejemplo ejecutar — `net9.0-windows` (predeterminada), `net6.0-windows` o `net10.0-windows` |
 | `WPF_DEMO_CONFIG` | `Release` (predeterminada) o `Debug` |
 | `MY_OPEN_AI_KEY`, `MY_OPEN_AI_BASE_URL`, `MY_OPEN_AI_MODEL` | habilitan la prueba integral en vivo; sin una clave, se informa como omitida |
+| `ASON_BRIDGE_KEY`, `ASON_BRIDGE_REMOTE_URL`, `ASON_BRIDGE_EXECUTION` | equivalentes de `--key`, `--remote-url` y `--execution` para el relé y el ejemplo de aplicación |
 
 La configuración de un proveedor se describe en [Proveedores de IA](ai-providers.es.md).
 
 ## Integración continua
 
-El archivo `.github/workflows/ci.yml` se ejecuta en cada push y en los pull requests. Su job de Linux compila los proyectos multiplataforma y ejecuta las suites herméticas; los casos de modo Docker y MCP se excluyen allí, y las pruebas de extremo a extremo de los ejemplos de WPF se omiten. Un segundo job (`windows-samples`) compila los dos ejemplos de WPF y vuelve a ejecutar `tests/Ason.Bridge.Tests` en Windows, que es lo que hace que esas pruebas se ejecuten de verdad; también compila la demo de WPF original, para que un cambio en la biblioteca no pueda romper el ejemplo que debe seguir funcionando. Las pruebas de interfaz de la demo original, los casos de FlaUI y la variante net10.0 siguen sin cobertura en ningún job.
+El archivo `.github/workflows/ci.yml` se ejecuta en cada push y en los pull requests. Su job de Linux compila los
+proyectos multiplataforma (incluidos los ejemplos de consola y del runner remoto) y ejecuta las suites
+herméticas; los casos de modo Docker y MCP se excluyen allí, y las pruebas de extremo a extremo de los ejemplos
+de WPF se omiten. Después recoge la cobertura, comprueba los suelos por adaptador y descomprime el paquete
+`Ason.Bridge.Grpc` para demostrar que el contrato distribuido sigue conteniendo `protos/ason_bridge.proto`. Un
+segundo job (`windows-samples`) compila los ejemplos de WPF y vuelve a ejecutar `tests/Ason.Bridge.Tests` y la
+suite de la biblioteca en Windows, que es lo que hace que esas pruebas se ejecuten de verdad; además ejecuta las
+pruebas de UI de FlaUI con `continue-on-error`, porque UI Automation necesita una sesión de escritorio
+interactiva que un runner alojado solo ofrece de forma inconsistente. La variante net10.0 queda fuera hasta que
+ese SDK sea GA.

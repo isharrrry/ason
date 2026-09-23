@@ -67,6 +67,18 @@ generates out of the numbers so the percentage describes the hand-written adapte
 dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
 ```
 
+The four bridge projects have a floor, and the CI job enforces it per adapter (line ≥ 87%, branch ≥ 70%; as of
+0.9.0 they sit at 89–98% and 75–82%):
+
+```bash
+./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
+```
+
+Sample assemblies are deliberately not part of that floor: each sample is a separate process, and coverage is
+collected inside the test host, so a sample's own assembly cannot be measured this way. The samples are covered
+by the process-level end-to-end tests instead (`ConsoleSamplesEndToEndTests`, `WpfApplicationEndToEndTests`,
+`RemoteRunnerBridgeEndToEndTests`), which build them first and then drive the real processes.
+
 Environment variables that change what the UI tests do:
 
 | Variable | Meaning |
@@ -74,13 +86,17 @@ Environment variables that change what the UI tests do:
 | `WPF_DEMO_TFM` | which sample build to drive — `net9.0-windows` (default), `net6.0-windows` or `net10.0-windows` |
 | `WPF_DEMO_CONFIG` | `Release` (default) or `Debug` |
 | `MY_OPEN_AI_KEY`, `MY_OPEN_AI_BASE_URL`, `MY_OPEN_AI_MODEL` | enable the live end-to-end test; without a key it is reported as skipped |
+| `ASON_BRIDGE_KEY`, `ASON_BRIDGE_REMOTE_URL`, `ASON_BRIDGE_EXECUTION` | the relay's and the application sample's equivalents of `--key`, `--remote-url` and `--execution` |
 
 Configuring a provider is described in [AI providers](ai-providers.md).
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and on pull requests. Its Linux job builds the cross-platform
-projects and runs the hermetic test suites; the Docker-mode and MCP cases are excluded there, and the WPF
-samples' end-to-end tests skip. A second job (`windows-samples`) builds the two WPF samples and re-runs
-`tests/Ason.Bridge.Tests` on Windows, which is what makes those end-to-end tests actually execute. The original
-WPF demo, the FlaUI UI tests and the net10.0 leg are still not covered by either job.
+projects (including the console and remote-runner samples) and runs the hermetic test suites; the Docker-mode
+and MCP cases are excluded there, and the WPF samples' end-to-end tests skip. It then collects coverage, checks
+the adapter floors, and unpacks the `Ason.Bridge.Grpc` package to prove the shipped contract still contains
+`protos/ason_bridge.proto`. A second job (`windows-samples`) builds the WPF samples and re-runs
+`tests/Ason.Bridge.Tests` plus the library suite on Windows, which is what makes those end-to-end tests actually
+execute; it also runs the FlaUI UI tests with `continue-on-error`, because UI Automation needs an interactive
+desktop session a hosted runner provides only inconsistently. The net10.0 leg stays out until that SDK is GA.

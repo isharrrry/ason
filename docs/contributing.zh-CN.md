@@ -63,6 +63,16 @@ dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter 
 dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
 ```
 
+四个桥工程都有**下限**，CI 任务会逐适配器强制检查（行 ≥ 87%、分支 ≥ 70%；`0.9.0` 时实测为 89–98% 与 75–82%）：
+
+```bash
+./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
+```
+
+样例程序集**故意不计入**该下限：每个样例都是独立进程，而覆盖率是在测试宿主内采集的，因此样例自身的程序集无法用这种方式度量。
+样例由进程级端到端测试覆盖（`ConsoleSamplesEndToEndTests`、`WpfApplicationEndToEndTests`、`RemoteRunnerBridgeEndToEndTests`）——
+它们先构建样例，再驱动真实进程。
+
 会改变 UI 测试行为的环境变量：
 
 | 变量 | 含义 |
@@ -70,9 +80,15 @@ dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Rel
 | `WPF_DEMO_TFM` | 驱动哪个示例构建 —— `net9.0-windows`（默认）、`net6.0-windows` 或 `net10.0-windows` |
 | `WPF_DEMO_CONFIG` | `Release`（默认）或 `Debug` |
 | `MY_OPEN_AI_KEY`、`MY_OPEN_AI_BASE_URL`、`MY_OPEN_AI_MODEL` | 启用实时端到端测试；没有密钥时该测试会被报告为已跳过 |
+| `ASON_BRIDGE_KEY`、`ASON_BRIDGE_REMOTE_URL`、`ASON_BRIDGE_EXECUTION` | 中继宿主与示例应用对应 `--key`、`--remote-url`、`--execution` 的环境变量写法 |
 
 配置提供方的说明见 [AI providers](ai-providers.zh-CN.md)。
 
 ## 持续集成
 
-`.github/workflows/ci.yml` 在每次推送和拉取请求时运行。它的 Linux 任务构建跨平台项目并运行与外部环境隔离的测试套件 —— Docker 模式与 MCP 用例在该任务中被排除，WPF 示例的端到端测试会被跳过。第二个任务（`windows-samples`）构建两个 WPF 示例，并在 Windows 上重新运行 `tests/Ason.Bridge.Tests`，这才让那些端到端测试真正执行；它同时会构建原有的 WPF 演示，以防改动库把必须保留的示例编译坏。原有的 WPF 演示的 UI 测试、FlaUI 用例与 net10.0 分支仍未被任何任务覆盖。
+`.github/workflows/ci.yml` 在每次推送和拉取请求时运行。它的 Linux 任务构建跨平台项目（含 console 与 remote-runner 样例）
+并运行与外部环境隔离的测试套件 —— Docker 模式与 MCP 用例在该任务中被排除，WPF 示例的端到端测试会被跳过。随后它采集覆盖率、
+检查适配器下限，并解包 `Ason.Bridge.Grpc` 包以证明随包发布的契约里仍有 `protos/ason_bridge.proto`。第二个任务
+（`windows-samples`）构建 WPF 示例，并在 Windows 上重新运行 `tests/Ason.Bridge.Tests` 与库测试套件，这才让那些端到端测试真正执行；
+它同时以 `continue-on-error` 运行 FlaUI UI 测试 —— 因为 UI Automation 需要交互式桌面会话，而托管运行器只能不稳定地提供。
+net10.0 分支在该 SDK 正式发布前不纳入。

@@ -424,6 +424,7 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `T12: what a caller has to know and configure (3 languages) + cross-links` | docs: the caller-setup matrix and its three premises |
 | `T13: WPF --execution external, remote-runner process E2E, execution reporting tests` | execution locations: WPF switch, second real process for the runner, reporting assertions |
 | `T14: MCP client configs, minimal Python MCP caller, OpenAI-driven MCP tool-calling agent` | the stdio-only client path, made copy-pasteable and testable |
+| `T6/T7/T8/T15: coverage floors and gate, CHANGELOG, CI hardening, bridge-examples.http` | measurement and release hygiene: `scripts/check-bridge-coverage.ps1`, `CHANGELOG.md`, packaged-contract assertion in CI, the four-group `.http` file |
 
 ## Wave 2 report — the 0.9.0 round (T0–T15)
 
@@ -498,6 +499,7 @@ argument errors, and missing/optional tool arguments.
 | The execution location a caller is told is the one in force | `ExecutionReportingTests`, `RemoteRunnerBridgeEndToEndTests`, `WpfApplicationEndToEndTests` |
 | An MCP client can be configured from a file that is valid and points at the relay | `McpClientConfigTests` |
 | The console/desktop samples keep working over both transports | `ConsoleSamplesEndToEndTests` (5), `WpfApplicationEndToEndTests` (3) |
+| The HTTP routes behave as `samples/bridge-examples.http` documents | executed one by one against a running application: `GET /ason/manifest`, `/instances`, `/openapi.json` → 200; `POST /ason/script` → 200 `{"success":true,"result":42}`; `POST /ason/functions/invoke` (static) → 200 `42`; unknown operator → 400 `operator-not-found`; path form → 200 `42`; body-only mode → 200 `3`; empty `code` → 400 `invalid-arguments`; `POST /ason/script/stream` → 200 with two `event: log` frames then `event: result` |
 
 ### Honest limits of this round
 
