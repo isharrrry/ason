@@ -1,0 +1,3 @@
+# The caller and the agent speak only the MCP protocol and the OpenAI API, so the standard library is enough
+# for `ason_mcp_caller`, and only the OpenAI client is needed for `ason_mcp_agent`.
+openai>=1.40

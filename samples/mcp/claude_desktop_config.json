@@ -1,0 +1,14 @@
+{
+  "_comment": "Claude Desktop (and any client that starts a stdio MCP server itself). Replace <repo> with the absolute path of this checkout; start an application side first (samples/ConsoleBridgeAppSample, or the WPF demo app). Servers that need authorization add \"--key\", \"<key>\" (or repeated \"--header\", \"Name=Value\").",
+  "mcpServers": {
+    "ason-application": {
+      "command": "dotnet",
+      "args": [
+        "exec",
+        "<repo>/src/Ason.Bridge.McpHost/bin/Release/net9.0/Ason.Bridge.McpHost.dll",
+        "--url",
+        "http://localhost:5222"
+      ]
+    }
+  }
+}

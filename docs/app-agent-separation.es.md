@@ -364,6 +364,8 @@ llamador de la aplicación y, a la vez, aplicación (servidor) para el agente qu
 | Separado — el mismo lado agente **sin interfaz** (cualquier SO) | cualquiera de los lados aplicación | `samples/ConsoleAgentSample` (`--list` no necesita clave; `--send "…"` sí) | el agente de consola imprime la API que construyó desde el manifiesto y luego conduce la aplicación |
 | Separado, con el **host de scripts como proceso hijo de la aplicación** | `samples/ConsoleBridgeAppSample --execution external` | cualquier llamador de arriba | el manifiesto informa `execution=external-process`; el texto del script se ejecuta en el hijo mientras las llamadas a operadores se resuelven dentro de la aplicación |
 | Separado — agente que habla MCP por HTTP | cualquiera de los lados aplicación | cualquier cliente MCP (Claude Desktop, un IDE) apuntando a `/mcp` | la aplicación aparece como cinco herramientas MCP |
+| Separado — un cliente configurado para **MCP por stdio** | cualquiera de los lados aplicación | `samples/mcp/claude_desktop_config.json` (relé stdio) o `http_mcp_config.json` (HTTP) | un cliente de escritorio real ve las herramientas de la aplicación; `samples/python/ason_mcp_caller` comprueba esa configuración sin él |
+| Separado — un **modelo** eligiendo herramientas MCP, como prueba | cualquiera de los lados aplicación | `samples/python/ason_mcp_agent` (🔑 `MY_OPEN_AI_KEY`) | el modelo elige la herramienta, el operador se ejecuta en la aplicación y `--expect` falla la ejecución si el resultado no aparece |
 | Separado — agente que solo puede arrancar un servidor MCP por stdio | cualquiera de los lados aplicación | `src/Ason.Bridge.McpHost` (`--transport grpc` o `--transport mcp`) | las mismas herramientas por el stdin/stdout del agente |
 | Separado — **sin agente alguno** | cualquiera de los lados aplicación | `samples/ConsoleBridgeCallerSample`, `curl`, Swagger UI/Postman | un programa o un shell conduce la aplicación: una llamada a función o un script |
 | Separado — un llamador en **otro lenguaje** | cualquiera de los lados aplicación | `samples/python` (compila el `.proto` distribuido) | Python lista la API desde el manifiesto, llama a una función, ejecuta un script y lee sus logs |
@@ -393,6 +395,10 @@ dotnet run --project samples/WpfAgentDemo                            # ventana d
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # autocomprobación gRPC, sin clave
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # autocomprobación MCP, sin clave
 Ason.Bridge.McpHost --url http://localhost:5222                      # relé MCP por stdio para Claude Desktop/Code
+
+# configuraciones de cliente MCP listas para copiar (stdio y HTTP), y un cliente mínimo para comprobarlas
+#   samples/mcp/claude_desktop_config.json · samples/mcp/http_mcp_config.json · samples/mcp/README.md
+python samples/python/ason_mcp_caller/main.py --transport http --list
 
 # el mismo lado agente como programa de consola: cualquier SO, y sin clave para inspeccionarlo
 dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list

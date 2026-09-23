@@ -42,3 +42,23 @@ that requires authorization.
   `handle-required`, …) mean the same thing here as in the .NET clients.
 * **Nothing about the application crosses the boundary.** Python sends a method name and JSON arguments; the
   operators, their data and their credentials stay in the application process.
+
+## The other two programs here
+
+| Path | What it is | Dependencies |
+|---|---|---|
+| `ason_mcp_caller/main.py` | A minimal **MCP** client: starts the stdio relay (or talks to the HTTP MCP endpoint) and offers `--list` / `--call`. Use it to check an MCP configuration before pointing a desktop client at it. | standard library only |
+| `ason_mcp_agent/main.py` | A **model driving the application over MCP**: it hands the application's MCP tools to OpenAI as functions, runs whichever tool the model picks, and feeds the result back. `--instruction "…" --expect 42` turns it into an automated tool-calling test. | `openai` (`requirements-mcp.txt`) |
+
+```bash
+python -m pip install -r samples/python/requirements-mcp.txt
+
+# see what an application publishes over MCP, without any desktop client
+python samples/python/ason_mcp_caller/main.py --transport stdio --list
+
+# let a model use it: the tool call has to really happen, or --expect fails the run
+MY_OPEN_AI_KEY=… python samples/python/ason_mcp_agent/main.py \
+  --instruction "Add 40 and 2 with the application's operator and tell me the result." --expect 42
+```
+
+The copy-pasteable client configurations these programs mirror live in [`samples/mcp`](../mcp/README.md).

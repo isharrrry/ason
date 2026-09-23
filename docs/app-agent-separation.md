@@ -165,6 +165,11 @@ Ason.Bridge.McpHost --url http://localhost:5222
 Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 ```
 
+`samples/mcp/` holds the two client configurations to copy — one for a client that starts the relay itself,
+one for a client that speaks Streamable HTTP to the application directly — plus a README that names the tools
+and the authorization flags. `samples/python/ason_mcp_caller` is a stdlib-only MCP client for checking a
+configuration without involving a desktop client.
+
 The relay exists because of what stdio MCP *is*: the contract is that the client spawns the server and talks
 over that child's stdin/stdout. A running desktop application cannot be that child, so something has to own the
 pipe - and that something needs a channel to the application, which is why two hops appear in this one
@@ -482,6 +487,8 @@ the application and, at the same time, an application (a server) to the agent th
 | Separated — the same agent side **without a UI** (any OS) | either application side | `samples/ConsoleAgentSample` (`--list` needs no key; `--send "…"` needs one) | the console agent prints the API it built from the manifest and then drives the application |
 | Separated, with the **script host as the application's child process** | `samples/ConsoleBridgeAppSample --execution external` | any caller above | the manifest reports `execution=external-process`; the script text runs in the child while operator calls still resolve inside the application |
 | Separated — an agent that speaks MCP over HTTP | either application side | any MCP client (Claude Desktop, an IDE) pointed at `/mcp` | the application appears as five MCP tools |
+| Separated — a client configured for **stdio MCP** | either application side | `samples/mcp/claude_desktop_config.json` (stdio relay) or `http_mcp_config.json` (HTTP) | a real desktop client sees the application's tools; `samples/python/ason_mcp_caller` checks such a configuration without one |
+| Separated — a **model** choosing MCP tools, as a test | either application side | `samples/python/ason_mcp_agent` (🔑 `MY_OPEN_AI_KEY`) | the model picks the tool, the operator runs in the application, and `--expect` fails the run if the result never appears |
 | Separated — an agent that can only start a stdio MCP server | either application side | `src/Ason.Bridge.McpHost` (`--transport grpc` or `--transport mcp`) | the same tools over the agent's stdin/stdout |
 | Separated — **no agent at all** | either application side | `samples/ConsoleBridgeCallerSample`, `curl`, Swagger UI/Postman | a program or a shell drives the application: one function call, or a script |
 | Separated — a caller in **another language** | either application side | `samples/python` (compiles the shipped `.proto`) | Python lists the API from the manifest, calls a function, runs a script and reads its logs |
@@ -511,6 +518,9 @@ dotnet run --project samples/WpfAgentDemo                            # chat wind
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222          # gRPC self-check, no key
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP self-check, no key
 Ason.Bridge.McpHost --url http://localhost:5222                      # stdio MCP relay for Claude Desktop/Code
+# copy-pasteable MCP client configurations (stdio and HTTP) and a minimal caller to check them:
+#   samples/mcp/claude_desktop_config.json · samples/mcp/http_mcp_config.json · samples/mcp/README.md
+python samples/python/ason_mcp_caller/main.py --transport http --list
 
 # the same agent side as a console program, on any OS and with no key needed to inspect it
 dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list

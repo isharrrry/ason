@@ -151,6 +151,10 @@ Ason.Bridge.McpHost --url http://localhost:5222
 Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 ```
 
+`samples/mcp/` 里有两份可直接复制的客户端配置 —— 一份给"自己启动中继"的客户端，一份给直接与应用说 Streamable HTTP
+的客户端 —— 外加一份列出工具名与鉴权参数的 README。`samples/python/ason_mcp_caller` 是一个只用标准库的 MCP 客户端，
+用来在不惊动桌面客户端的前提下先验一遍配置。
+
 中继的存在源于 stdio MCP 的**契约本身**：客户端负责启动服务进程，并通过该子进程的 stdin/stdout 通信。一个正在运行的
 桌面应用无法充当这个子进程，因此必须有人持有这条管道 —— 而它又需要一条通往应用的通道，这就是**只有这一种部署形态**
 会出现两跳的原因。它不是设计的前提：会说 HTTP MCP 的 Agent 直连应用；而生命周期本身就是“被 Agent 拉起”的应用，可以
@@ -410,6 +414,8 @@ MCP 与 HTTP 报 `401`；应用级失败仍保留各自的错误码。
 | 分离 —— 同样的 Agent 侧但**没有界面**（任意系统） | 任一应用侧 | `samples/ConsoleAgentSample`（`--list` 不需要密钥；`--send "…"` 需要） | console agent 打印它从清单构建出的 API，然后驱动应用 |
 | 分离，且**脚本宿主是应用自己的子进程** | `samples/ConsoleBridgeAppSample --execution external` | 上面任一调用方 | 清单报告 `execution=external-process`；脚本文本在子进程执行，而 operator 调用仍在应用内解析 |
 | 分离 —— 用 HTTP MCP 的 Agent | 任一应用侧 | 任何 MCP 客户端（Claude Desktop、IDE）指向 `/mcp` | 应用表现为五个 MCP 工具 |
+| 分离 —— 为 **stdio MCP** 配置的客户端 | 任一应用侧 | `samples/mcp/claude_desktop_config.json`（stdio 中继）或 `http_mcp_config.json`（HTTP） | 真实桌面客户端能看到应用的工具；没有客户端时可用 `samples/python/ason_mcp_caller` 先验一遍配置 |
+| 分离 —— 由**模型**自行挑选 MCP 工具（作为测试） | 任一应用侧 | `samples/python/ason_mcp_agent`（🔑 `MY_OPEN_AI_KEY`） | 模型挑工具、operator 在应用内执行；若结果没出现，`--expect` 会让这次运行失败 |
 | 分离 —— 只能启动 stdio MCP 的 Agent | 任一应用侧 | `src/Ason.Bridge.McpHost`（`--transport grpc` 或 `--transport mcp`） | 同样的工具，走 Agent 的 stdin/stdout |
 | 分离 —— **完全没有 Agent** | 任一应用侧 | `samples/ConsoleBridgeCallerSample`、`curl`、Swagger UI/Postman | 程序或 shell 驱动应用：一次函数调用，或一段脚本 |
 | 分离 —— **换一种语言**写的调用方 | 任一应用侧 | `samples/python`（编译随包发布的 `.proto`） | Python 从清单列出 API、调用函数、执行脚本并读取日志 |
@@ -439,6 +445,9 @@ dotnet run --project samples/WpfAgentDemo                            # 聊天窗
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # gRPC 自检，无需密钥
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP 自检，无需密钥
 Ason.Bridge.McpHost --url http://localhost:5222                      # 供 Claude Desktop/Code 使用的 stdio MCP 中继
+# 可直接复制的 MCP 客户端配置（stdio 与 HTTP）与用于先验的最小调用端：
+#   samples/mcp/claude_desktop_config.json · samples/mcp/http_mcp_config.json · samples/mcp/README.md
+python samples/python/ason_mcp_caller/main.py --transport http --list
 
 # 同样的 Agent 侧，改成 console 程序：任意系统可跑，且查看它不需要密钥
 dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list

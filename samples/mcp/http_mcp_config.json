@@ -1,0 +1,9 @@
+{
+  "_comment": "The same application, reached over HTTP MCP instead of stdio: no relay process, no launch command - just a URL. This is the shape for clients that speak Streamable HTTP (Claude Code, IDE plugins, your own client).",
+  "mcpServers": {
+    "ason-application": {
+      "type": "http",
+      "url": "http://localhost:5223/mcp"
+    }
+  }
+}
