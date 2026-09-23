@@ -55,7 +55,7 @@ built from — so a listing cannot drift from what scripts are actually able to 
 | `executeScript` | `ExecuteScriptAsync(script)` | The agent composes several calls, branches or loops |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | One call, precisely — no script text in the loop |
 | `invokeMcpTool` | pass-through to the application's own MCP clients: gRPC `InvokeMcpTool`, MCP tool `ason_invoke_mcp_tool` | The application is a *client* of other MCP servers |
-| `logStream` | `StreamExecutionAsync(script)` | The caller wants to watch the application work |
+| `logStream` | gRPC `StreamExecution`, MCP `ason_stream_script`, HTTP `POST /ason/script/stream` | The caller wants to watch the application work |
 
 They are independent switches, and they compose: enabling both execution interfaces changes nothing about
 either. `AsonBridgeCapabilities` decides what exists, and every adapter publishes exactly that:
@@ -196,6 +196,38 @@ ASON. A successful call is `200`; an application-level failure is `400` with the
 a capability that is switched off is not served at all (`404`); and with `ApiKey` set, every route requires
 that key in `ApiKeyHeader` (`401` otherwise) - which matters because an HTTP endpoint is reachable by anything
 on the machine, not just by ASON clients.
+
+## Watching a script run
+
+Execution logs are a capability of the runtime (`Capabilities.LogStream`), and each adapter publishes the shape
+its protocol can actually deliver - the manifest tells a client that the runtime supports logs, the adapter's
+own surface tells it how:
+
+| Adapter | Surface | What arrives |
+|---|---|---|
+| gRPC | `StreamExecution` | One `log` event per line while the script runs, then one `result`/`error` event |
+| HTTP | `POST {base}/script/stream` | The same, as server-sent events (`event: log` … `event: result`) |
+| MCP | `ason_stream_script` tool | The logs *and* the result in the single answer, because an MCP tool call cannot be pushed to |
+
+Switching `LogStream` off removes all three (the rpc answers `Unimplemented`, the route is not served, the MCP
+tool is not registered), and leaves the non-streaming interfaces alone. A transport that is relaying - the
+stdio MCP host above all - collects the application's own stream instead of subscribing to a log event it would
+never receive, so a relay's logs are the application's.
+
+```bash
+# server-sent events, straight from curl
+curl -N -X POST http://localhost:5223/ason/script/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"return LibDemoOperator.Add(40, 2);"}'
+# event: log
+# data: {"level":"Information","message":"...","source":"RunnerClient"}
+#
+# event: result
+# data: {"success":true,"result":42}
+```
+
+An `AsonBridgeRuntime` raises these events on `AsonBridgeRuntime.Log` (`IAsonBridgeEndpoint.Log` for an
+adapter), which is also how a host can mirror them into its own logging.
 
 ## Calling the bridge without .NET
 

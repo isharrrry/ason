@@ -18,6 +18,12 @@ public sealed record AsonBridgeCapabilities {
     /// <summary>Pass-through to the MCP tools the application itself consumes.</summary>
     public bool InvokeMcpTool { get; init; }
 
-    /// <summary>Stream execution logs to the caller.</summary>
+    /// <summary>
+    /// Whether the runtime relays the logs of an execution. It describes what the runtime supports end to end,
+    /// not what a particular transport chose to publish: gRPC always has the <c>StreamExecution</c> rpc, the MCP
+    /// tool surface offers <c>ason_stream_script</c>, HTTP offers <c>POST {base}/script/stream</c>, and turning
+    /// this off removes all of them. A client therefore asks the transport it is using what it can get, instead
+    /// of reading one flag and assuming every adapter behaves the same.
+    /// </summary>
     public bool LogStream { get; init; } = true;
 }

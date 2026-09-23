@@ -103,7 +103,7 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
             // An application with the capability off does not publish the tool at all, so the call fails
             // before it reaches anyone. Which of the two it was is answered by the tool list, not by the
             // message - a tool that ran and failed is a different thing entirely.
-            if (!await ExposesPassThroughAsync(cancellationToken).ConfigureAwait(false)) {
+            if (!await ExposesToolAsync(AsonBridgeMcpTools.InvokeMcpTool, cancellationToken).ConfigureAwait(false)) {
                 return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
                     "The application on the other side of this MCP bridge does not expose MCP tool pass-through (its invokeMcpTool capability is off).");
             }
@@ -111,15 +111,45 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
         }
     }
 
-    async Task<bool> ExposesPassThroughAsync(CancellationToken cancellationToken) {
+    /// <summary>
+    /// Executes a script and returns its logs with the result. MCP cannot push here, so the application's
+    /// streaming tool answers once with both; a bridge that does not publish that tool reports
+    /// <see cref="AsonBridgeErrorCodes.NotSupported"/> rather than pretending the script logged nothing.
+    /// </summary>
+    public async Task<AsonBridgeStreamedResult> StreamScriptAsync(string code, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) {
+        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) { ["code"] = code };
+        if (!includeProxyPreamble) arguments["includeProxyPreamble"] = false;
+        if (includeInstanceDeclarations) arguments["includeInstanceDeclarations"] = true;
+
+        try {
+            var payload = Deserialize<StreamedScriptPayload>(await CallAsync(AsonBridgeMcpTools.StreamScript, arguments, cancellationToken).ConfigureAwait(false));
+            return new AsonBridgeStreamedResult(
+                new AsonBridgeCallResult(payload.Success, payload.Result, payload.Error, payload.ErrorCode),
+                payload.Logs ?? new List<AsonBridgeLogEventArgs>());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) {
+            if (!await ExposesToolAsync(AsonBridgeMcpTools.StreamScript, cancellationToken).ConfigureAwait(false)) {
+                return new AsonBridgeStreamedResult(
+                    AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
+                        "The application on the other side of this MCP bridge does not expose log streaming (its logStream capability is off)."),
+                    Array.Empty<AsonBridgeLogEventArgs>());
+            }
+            throw;
+        }
+    }
+
+    async Task<bool> ExposesToolAsync(string name, CancellationToken cancellationToken) {
         try {
             var tools = await ListToolsAsync(cancellationToken).ConfigureAwait(false);
-            return tools.Any(t => string.Equals(t.Name, AsonBridgeMcpTools.InvokeMcpTool, StringComparison.Ordinal));
+            return tools.Any(t => string.Equals(t.Name, name, StringComparison.Ordinal));
         }
         catch (Exception) {
             return false;
         }
     }
+
+    /// <summary>The wire shape of the streaming tool: a call result plus the logs it produced.</summary>
+    sealed record StreamedScriptPayload(bool Success, JsonElement? Result, string? Error, string? ErrorCode, List<AsonBridgeLogEventArgs>? Logs);
 
     public ValueTask DisposeAsync() => _client.DisposeAsync();
 

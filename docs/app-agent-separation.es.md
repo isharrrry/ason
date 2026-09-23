@@ -44,7 +44,7 @@ el prompt del script: una lista no puede divergir de lo que los scripts pueden l
 | `executeScript` | `ExecuteScriptAsync(script)` | El agente compone varias llamadas, ramas o bucles |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | Una llamada precisa, sin generar texto de script |
 | `invokeMcpTool` | paso directo a los clientes MCP de la aplicación: RPC gRPC `InvokeMcpTool`, herramienta MCP `ason_invoke_mcp_tool` | La aplicación consume otros servidores MCP |
-| `logStream` | `StreamExecutionAsync(script)` | El llamador quiere seguir la ejecución |
+| `logStream` | gRPC `StreamExecution`, MCP `ason_stream_script`, HTTP `POST /ason/script/stream` | El llamador quiere seguir la ejecución |
 
 Son interruptores independientes y se combinan entre sí: gRPC responde `StatusCode.Unimplemented` a una
 capacidad deshabilitada y MCP simplemente no registra la herramienta.
@@ -120,6 +120,38 @@ argumentos de la herramienta como objeto JSON. Todo lo añadido en el protocolo 
 En todos los casos los operadores, los datos y las credenciales permanecen en la aplicación. Las llamadas se
 serializan a través del `SynchronizationContext` capturado al construir el runtime; en WPF eso es el hilo del
 dispatcher.
+
+## Ver cómo se ejecuta un script
+
+Los logs son una capacidad del *runtime* (`Capabilities.LogStream`) y cada adaptador publica la forma que su
+protocolo puede entregar de verdad: el manifiesto dice que el runtime soporta logs, la superficie de cada
+adaptador dice cómo obtenerlos.
+
+| Adaptador | Superficie | Qué llega |
+|---|---|---|
+| gRPC | `StreamExecution` | Un evento `log` por línea mientras corre el script y luego un único `result`/`error` |
+| HTTP | `POST {base}/script/stream` | Lo mismo como server-sent events (`event: log` … `event: result`) |
+| MCP | herramienta `ason_stream_script` | Los logs *y* el resultado en la única respuesta, porque una llamada MCP no puede empujar |
+
+Desactivar `LogStream` elimina las tres (la rpc responde `Unimplemented`, la ruta no se sirve, la herramienta no
+se registra) y deja intactas las interfaces no streaming. Un transporte que hace de relé -el host MCP por
+stdio sobre todo- recoge el stream de la propia aplicación en lugar de suscribirse a un evento de log que nunca
+recibiría, así que los logs de un relé son los de la aplicación.
+
+```bash
+# server-sent events, directamente con curl
+curl -N -X POST http://localhost:5223/ason/script/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"return LibDemoOperator.Add(40, 2);"}'
+# event: log
+# data: {"level":"Information","message":"...","source":"RunnerClient"}
+#
+# event: result
+# data: {"success":true,"result":42}
+```
+
+`AsonBridgeRuntime` publica esos eventos en `AsonBridgeRuntime.Log` (`IAsonBridgeEndpoint.Log` en un adaptador),
+que es también la vía por la que un host puede reflejarlos en su propio logging.
 
 ## Llamar al puente sin .NET
 

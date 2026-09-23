@@ -109,6 +109,25 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
         }
     }
 
+    /// <summary>
+    /// The streaming call folded back into one answer, for a caller that cannot consume a stream but still wants
+    /// the logs - a relay republishing the application over MCP, above all. The gRPC stream itself is used, so
+    /// the logs are the application's and not the relay's.
+    /// </summary>
+    public async Task<AsonBridgeStreamedResult> StreamScriptCollectedAsync(string code, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) {
+        var logs = new List<AsonBridgeLogEventArgs>();
+        AsonBridgeCallResult? completion = null;
+
+        await foreach (var evt in StreamExecutionAsync(code, includeProxyPreamble, includeInstanceDeclarations, cancellationToken).ConfigureAwait(false)) {
+            if (evt.Type == "log") logs.Add(new AsonBridgeLogEventArgs(evt.Level, evt.Message, "Ason.Bridge.Grpc"));
+            else if (evt.Result is not null) completion = ToDomain(evt.Result);
+        }
+
+        return new AsonBridgeStreamedResult(
+            completion ?? AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.ExecutionFailed, "The application ended the stream without a result."),
+            logs);
+    }
+
     public ValueTask DisposeAsync() {
         _ownedChannel?.Dispose();
         _ownedHttpClient?.Dispose();

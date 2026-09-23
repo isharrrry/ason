@@ -22,8 +22,10 @@ internal sealed class FakeAsonExecutor : IAsonExecutor {
     /// <summary>Every MCP tool invocation the fake received, so a test can assert the call was forwarded.</summary>
     public List<(string Server, string Tool)> InvokedMcpTools { get; } = new();
 
-    // A fake never produces logs; declared explicitly so no unused-event warning is raised.
-    public event EventHandler<AsonBridgeLogEventArgs>? Log { add { } remove { } }
+    /// <summary>Log lines the fake emits while a script runs, so a transport's streaming can be asserted.</summary>
+    public List<string> LogsToEmit { get; } = new();
+
+    public event EventHandler<AsonBridgeLogEventArgs>? Log;
 
     public Task StartAsync(CancellationToken cancellationToken = default) {
         StartCalls++;
@@ -32,6 +34,9 @@ internal sealed class FakeAsonExecutor : IAsonExecutor {
 
     public Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, CancellationToken cancellationToken = default) {
         ExecutedScripts.Add(code);
+        foreach (var message in LogsToEmit) {
+            Log?.Invoke(this, new AsonBridgeLogEventArgs("Information", message, "fake"));
+        }
         return Task.FromResult(ScriptResult);
     }
 

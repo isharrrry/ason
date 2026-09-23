@@ -199,6 +199,15 @@ Caso 6 - la misma aplicación, con el host de scripts en remoto (el manifiesto i
 Las llamadas a operadores vuelven todo el camino ([R'] -> B -> [2]), donde corre el método real. Nada más cambia:
 los mismos adaptadores, el mismo manifiesto — solo cambia el valor de `execution`.
 
+Caso 7 - cualquiera de los llamadores anteriores, mirando los logs (la capacidad `logStream`)
+
+[llamador]  -- StreamExecution (gRPC) / POST /script/stream (SSE) / ason_stream_script (MCP) -->  [2] Host de la aplicación
+                                                                                                      |
+    eventos log*, y luego exactamente un result | error  <--- los emite el ejecutor dentro de [2] -----+
+        |
+        +-- a través de un relé ([R]) el mismo stream sigue por la frontera E: un relé no tiene ejecutor,
+            así que recoge el stream de la aplicación en lugar de producir logs propios
+
 Por la frontera D, la del llamador, solo cruzan el texto del script y su resultado; las llamadas a operadores
 nunca salen de [2], donde están los métodos reales y los datos. Dónde se evalúa el script (en el proceso de la
 aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner remoto) lo decide la aplicación.

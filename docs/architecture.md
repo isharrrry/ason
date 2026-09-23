@@ -178,6 +178,15 @@ Case 6 - the same application, with a remote script host (the manifest reports r
 Operator calls travel the whole way back ([R'] -> B -> [2]), where the real method runs. Nothing else changes:
 the same adapters, the same manifest - only the value of `execution` differs.
 
+Case 7 - any caller above, watching the logs (the logStream capability)
+
+[caller]  -- StreamExecution (gRPC) / POST /script/stream (SSE) / ason_stream_script (MCP) -->  [2] Application host
+                                                                                                    |
+    log* events, then exactly one result | error  <--- the executor raises them in [2] -------------+
+        |
+        +-- through a relay ([R]) the same stream travels boundary E onward: a relay has no executor,
+            so it collects the application's stream instead of having logs of its own
+
 Only the script text and its result cross boundary D, the caller-facing one; operator calls never leave [2],
 where the real methods and the data are. Where the script itself is evaluated (in the application process, in
 its own Ason.ExternalExecutor, in a container or on a remote runner) is the application's decision.

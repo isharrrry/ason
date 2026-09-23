@@ -50,6 +50,13 @@ public sealed class GrpcAsonBridgeEndpoint : IAsonBridgeEndpoint {
     public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, System.Text.Json.JsonElement> arguments, CancellationToken cancellationToken = default) =>
         _client.InvokeMcpToolAsync(server, tool, arguments, cancellationToken);
 
+    /// <summary>
+    /// The application's own log stream, collected: a relay has no executor of its own, so subscribing to its
+    /// local <c>Log</c> event would return an empty list and look like an application that never logs.
+    /// </summary>
+    public Task<AsonBridgeStreamedResult> ExecuteScriptWithLogsAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) =>
+        _client.StreamScriptCollectedAsync(script, includeProxyPreamble, includeInstanceDeclarations, cancellationToken);
+
     static AsonBridgeExecution ParseExecution(string execution) => execution switch {
         "in-process" => AsonBridgeExecution.InProcess,
         "external-process" => AsonBridgeExecution.ExternalProcess,

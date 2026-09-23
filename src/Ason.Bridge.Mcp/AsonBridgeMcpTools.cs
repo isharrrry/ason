@@ -22,6 +22,7 @@ public static class AsonBridgeMcpTools {
     public const string ExecuteScript = "ason_execute_script";
     public const string InvokeFunction = "ason_invoke_function";
     public const string InvokeMcpTool = "ason_invoke_mcp_tool";
+    public const string StreamScript = "ason_stream_script";
 
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -69,6 +70,28 @@ public static class AsonBridgeMcpTools {
                     Name = ExecuteScript,
                     Destructive = true,
                     Description = "Runs a complete ASON script body against the application and returns its result. The proxy layer is prepended unless includeProxyPreamble is false. Set includeInstanceDeclarations to true to send nothing but the body and have the application supply its proxy layer plus declarations for the instances alive right now. Answers with { success, result, error, errorCode }."
+                }));
+        }
+
+        if (capabilities.ExecuteScript && capabilities.LogStream) {
+            tools.Add(McpServerTool.Create(
+                // MCP answers a tool call once, so this returns the logs together with the result rather than
+                // streaming them: the honest shape for a protocol that has no server-push here. Callers that can
+                // stream (gRPC, HTTP SSE) get the incremental form instead.
+                async (string code, bool? includeProxyPreamble = null, bool? includeInstanceDeclarations = null, CancellationToken cancellationToken = default) => {
+                    var streamed = await runtime.ExecuteScriptWithLogsAsync(code, includeProxyPreamble ?? true, includeInstanceDeclarations ?? false, cancellationToken).ConfigureAwait(false);
+                    return JsonSerializer.Serialize(new {
+                        streamed.Result.Success,
+                        streamed.Result.Result,
+                        streamed.Result.Error,
+                        streamed.Result.ErrorCode,
+                        Logs = streamed.Logs
+                    }, Json);
+                },
+                new McpServerToolCreateOptions {
+                    Name = StreamScript,
+                    Destructive = true,
+                    Description = "Runs a complete ASON script and returns its logs together with the result, as { success, result, error, errorCode, logs }. Uses the same options as ason_execute_script. Present only when the application enabled log streaming."
                 }));
         }
 

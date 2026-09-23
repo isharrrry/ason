@@ -54,6 +54,15 @@ public static class AsonOpenApiDocument {
             };
         }
 
+        if (manifest.Capabilities.ExecuteScript && manifest.Capabilities.LogStream) {
+            paths["/script/stream"] = new JsonObject {
+                ["post"] = Operation(
+                    "Runs a script and streams the application's logs as server-sent events: one 'log' event per line, then exactly one 'result' or 'error' event carrying the same payload as /script.",
+                    Response("An event stream (text/event-stream).", null, "text/event-stream"),
+                    RequestBody("AsonBridgeScriptRequest"))
+            };
+        }
+
         if (manifest.Capabilities.InvokeFunction) {
             paths["/functions/invoke"] = new JsonObject {
                 ["post"] = Operation(
@@ -181,11 +190,11 @@ public static class AsonOpenApiDocument {
         return operation;
     }
 
-    static JsonObject Response(string description, string? schema = null) => new() {
+    static JsonObject Response(string description, string? schema = null, string mediaType = "application/json") => new() {
         ["200"] = new JsonObject {
             ["description"] = description,
             ["content"] = new JsonObject {
-                ["application/json"] = new JsonObject {
+                [mediaType] = new JsonObject {
                     ["schema"] = schema is null ? new JsonObject() : new JsonObject { ["$ref"] = $"#/components/schemas/{schema}" }
                 }
             }

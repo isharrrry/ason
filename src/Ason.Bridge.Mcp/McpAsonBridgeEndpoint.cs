@@ -51,6 +51,19 @@ public sealed class McpAsonBridgeEndpoint : IAsonBridgeEndpoint {
     public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken = default) =>
         _client.InvokeMcpToolAsync(server, tool, arguments, cancellationToken);
 
+    /// <summary>
+    /// The application's logs, collected over MCP. A relay has no executor, so its local <c>Log</c> event never
+    /// fires; when the application does not publish the streaming tool either, the ordinary call is relayed and
+    /// the answer is honest about having no logs to add.
+    /// </summary>
+    public async Task<AsonBridgeStreamedResult> ExecuteScriptWithLogsAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) {
+        var streamed = await _client.StreamScriptAsync(script, includeProxyPreamble, includeInstanceDeclarations, cancellationToken).ConfigureAwait(false);
+        if (streamed.Result.ErrorCode != AsonBridgeErrorCodes.NotSupported) return streamed;
+
+        var result = await _client.ExecuteScriptAsync(script, includeProxyPreamble, includeInstanceDeclarations, cancellationToken).ConfigureAwait(false);
+        return new AsonBridgeStreamedResult(result, Array.Empty<AsonBridgeLogEventArgs>());
+    }
+
     static AsonBridgeExecution ParseExecution(string execution) => execution switch {
         "external-process" => AsonBridgeExecution.ExternalProcess,
         "docker" => AsonBridgeExecution.Docker,

@@ -69,6 +69,48 @@ public static class AsonBridgeOpenApiExtensions {
             return Result(result);
         });
 
+        endpoints.MapPost($"{root}/script/stream", async (HttpContext context, IAsonBridgeEndpoint endpoint) => {
+            if (!IsAuthorized(context, context.RequestServices.GetRequiredService<AsonOpenApiBridgeOptions>())) return Results.Unauthorized();
+            if (!endpoint.Options.Capabilities.ExecuteScript) return NotSupported("executeScript");
+            if (!endpoint.Options.Capabilities.LogStream) return NotSupported("logStream");
+
+            var request = await ReadAsync<AsonOpenApiScriptRequest>(context).ConfigureAwait(false);
+            if (request is null || string.IsNullOrWhiteSpace(request.Code)) {
+                return Results.BadRequest(new { success = false, errorCode = AsonBridgeErrorCodes.InvalidArguments, error = "A 'code' string is required." });
+            }
+
+            // Server-sent events: one 'log' event per line the application produces while the script runs, then
+            // exactly one 'result' or 'error'. The logs are pushed into a channel by the executor's event and
+            // drained concurrently, so a log written while the script is still running is delivered then -
+            // not batched after it finished.
+            context.Response.Headers.ContentType = "text/event-stream";
+            context.Response.Headers.CacheControl = "no-cache";
+            context.Response.Headers["X-Accel-Buffering"] = "no";
+
+            var channel = System.Threading.Channels.Channel.CreateUnbounded<AsonBridgeLogEventArgs>();
+            void OnLog(object? sender, AsonBridgeLogEventArgs entry) => channel.Writer.TryWrite(entry);
+
+            endpoint.Log += OnLog;
+            var pump = Task.Run(async () => {
+                await foreach (var entry in channel.Reader.ReadAllAsync(context.RequestAborted).ConfigureAwait(false)) {
+                    await WriteEventAsync(context, "log", new { level = entry.Level, message = entry.Message, source = entry.Source, timestampUtc = entry.TimestampUtc }).ConfigureAwait(false);
+                }
+            }, CancellationToken.None);
+
+            try {
+                var result = await endpoint.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble ?? true, request.IncludeInstanceDeclarations ?? false, context.RequestAborted).ConfigureAwait(false);
+                channel.Writer.TryComplete();
+                await pump.ConfigureAwait(false);
+                await WriteEventAsync(context, result.Success ? "result" : "error", result).ConfigureAwait(false);
+            }
+            finally {
+                endpoint.Log -= OnLog;
+                channel.Writer.TryComplete();
+            }
+
+            return Results.Empty;
+        });
+
         endpoints.MapPost($"{root}/functions/invoke", async (HttpContext context, IAsonBridgeEndpoint endpoint) => {
             if (!IsAuthorized(context, context.RequestServices.GetRequiredService<AsonOpenApiBridgeOptions>())) return Results.Unauthorized();
             if (!endpoint.Options.Capabilities.InvokeFunction) return NotSupported("invokeFunction");
@@ -100,6 +142,13 @@ public static class AsonBridgeOpenApiExtensions {
 
     static IResult Result(AsonBridgeCallResult result) =>
         Results.Json(result, statusCode: result.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
+
+    /// <summary>Writes one server-sent event, flushing so a caller sees logs as they happen.</summary>
+    static async Task WriteEventAsync(HttpContext context, string name, object payload) {
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        await context.Response.WriteAsync($"event: {name}\ndata: {json}\n\n", context.RequestAborted).ConfigureAwait(false);
+        await context.Response.Body.FlushAsync(context.RequestAborted).ConfigureAwait(false);
+    }
 
     static IResult NotSupported(string capability) =>
         Results.Json(new { success = false, errorCode = AsonBridgeErrorCodes.NotSupported, error = $"The '{capability}' capability is disabled on this bridge." },

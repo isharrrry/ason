@@ -50,7 +50,7 @@ API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反�
 | `executeScript` | `ExecuteScriptAsync(script)` | Agent 要组合多次调用、分支或循环 |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | 只调用一次、要精准 —— 不必生成脚本文本 |
 | `invokeMcpTool` | 透传到应用自身消费的 MCP 客户端：gRPC `InvokeMcpTool`、MCP 工具 `ason_invoke_mcp_tool` | 应用本身是别的 MCP 服务的客户端 |
-| `logStream` | `StreamExecutionAsync(script)` | 调用方想看着应用干活 |
+| `logStream` | gRPC `StreamExecution`、MCP `ason_stream_script`、HTTP `POST /ason/script/stream` | 调用方想看着应用干活 |
 
 它们各自独立、且可组合：同时开启两个执行接口不会互相影响。由 `AsonBridgeCapabilities` 决定“存在什么”，
 每个适配器如实发布：
@@ -155,6 +155,36 @@ Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 桌面应用无法充当这个子进程，因此必须有人持有这条管道 —— 而它又需要一条通往应用的通道，这就是**只有这一种部署形态**
 会出现两跳的原因。它不是设计的前提：会说 HTTP MCP 的 Agent 直连应用；而生命周期本身就是“被 Agent 拉起”的应用，可以
 用 `AddAsonMcpStdioBridge`（中继内部用的正是这个调用）自己提供 stdio MCP。
+
+## 看着脚本跑起来
+
+执行日志是**运行时**的能力（`Capabilities.LogStream`），而“你的传输能不能送到”由各适配器的原生表面如实体现 ——
+清单告诉客户端运行时支持日志，适配器自己的表面告诉它怎么拿到：
+
+| 适配器 | 表面 | 拿到什么 |
+|---|---|---|
+| gRPC | `StreamExecution` | 脚本运行期间逐条 `log` 事件，最后恰好一个 `result`/`error` 事件 |
+| HTTP | `POST {base}/script/stream` | 同上，以 Server-Sent Events 形式（`event: log` …… `event: result`） |
+| MCP | `ason_stream_script` 工具 | 日志**与**结果在同一次应答里 —— MCP 的工具调用无法向调用方推送 |
+
+关闭 `LogStream` 会同时移除这三者（rpc 返回 `Unimplemented`、该路由不再提供、MCP 工具不再注册），且不影响非流式接口。
+处于中继位置的传输（尤其是 stdio MCP 宿主）**转而收集应用自身的流**，而不是订阅一个它永远不会收到的事件 ——
+因此中继给出的日志就是应用的日志。
+
+```bash
+# 直接用 curl 收 Server-Sent Events
+curl -N -X POST http://localhost:5223/ason/script/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"return LibDemoOperator.Add(40, 2);"}'
+# event: log
+# data: {"level":"Information","message":"...","source":"RunnerClient"}
+#
+# event: result
+# data: {"success":true,"result":42}
+```
+
+`AsonBridgeRuntime` 通过 `AsonBridgeRuntime.Log`（适配器侧是 `IAsonBridgeEndpoint.Log`）抛出这些事件，宿主也可以借此
+镜像到自己的日志系统。
 
 ## 不用 .NET 也能调用这座桥
 
