@@ -206,6 +206,15 @@ requirement of a gRPC client executable demonstrating precise function execution
 | 25 | The WPF agent sample connects over gRPC, declares zero operators, reads the application's API and executes a function there | `WpfAgentEndToEndTests` | e2e | PASS |
 | 26 | The same agent sample works over MCP | `WpfAgentEndToEndTests` | e2e | PASS |
 | 27 | The HTTP adapter serves the manifest, instances, script bodies, both function-call shapes, structured failures, capability gating, the bridge key and a coherent OpenAPI document | `OpenApiBridgeTests` | integration | PASS |
+| 28 | The stdio relay is a real MCP server: a client launched against it discovers the tools and drives the application through them | `McpRelayHostTests` | e2e | PASS |
+| 29 | The relay reaches an application that only publishes MCP - no gRPC involved, in process and as a real process | `McpRelayHostTests` | e2e | PASS |
+| 30 | A relay that cannot reach the application exits with code 3 and explains itself on stderr | `McpRelayHostTests` | e2e | PASS |
+| 31 | A failing tool call and a malformed request are reported to the client without corrupting the protocol | `McpRelayHostTests` | e2e | PASS |
+| 32 | The MCP-backed forwarding endpoint reports capabilities/instances and relays both execution interfaces | `McpRelayEndpointTests` | integration | PASS |
+| 33 | Malformed `arguments_json` is rejected as `InvalidArgument`, and the typed client maps it to `invalid-arguments` | `GrpcErrorPathTests` | integration | PASS |
+| 34 | A cancelled stream ends promptly (as `StatusCode.Cancelled`) instead of hanging | `GrpcErrorPathTests` | integration | PASS |
+| 35 | The gRPC contract reports MCP pass-through as unsupported instead of pretending | `GrpcErrorPathTests` | integration | PASS |
+| 36 | A client disposes only the channel it created; disposing twice is harmless | `GrpcErrorPathTests` | integration | PASS |
 
 Commands used for every row above:
 
@@ -215,42 +224,71 @@ dotnet test tests/Ason.Tests/Ason.Tests.csproj -c Release --filter "DisplayName!
 dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj -c Release --framework net9.0
 ```
 
-Final counts: `Ason.Bridge.Tests` 73/73, `Ason.Tests` 105/105 (hermetic filter), `LibDemo.SmokeTests` 11/11.
-On Windows with the samples built, 4 of the 73 are end-to-end tests that start the real WPF executables; on
-Linux they report as skipped instead.
+Final counts: `Ason.Bridge.Tests` 86/86, `Ason.Tests` 105/105 (hermetic filter), `LibDemo.SmokeTests` 11/11.
+On Windows with the samples built, 6 of the 86 start real processes (the two WPF samples and the relay); the
+WPF ones report as skipped on Linux, while the relay ones run there too.
+
+### Follow-up — closing the gaps the first report listed
+
+The first version of this report listed gaps instead of hiding them; this round closed the three that carried
+real risk, each starting from a failing test:
+
+- **The stdio relay now runs for real.** `McpRelayHostTests` launches `Ason.Bridge.McpHost` as a child process
+  through the MCP SDK's own `StdioClientTransport` and drives it: tool discovery, `ason_get_manifest`,
+  `ason_invoke_function`, `ason_execute_script`, plus the failure paths (an application-level failure is passed
+  through as a result, a malformed request becomes a tool error, and the protocol survives both). A relay that
+  cannot reach the application is asserted to exit with code 3 and say why.
+- **The relay no longer needs gRPC.** `McpAsonBridgeEndpoint` (new) forwards over MCP, and the relay takes
+  `--transport grpc|mcp`. Two more tests cover it: one in-process (MCP application → endpoint → MCP client) and
+  one that starts the relay process against an MCP-only application. gRPC is therefore one option among
+  several, not a prerequisite for stdio agents - which is what the design intended and what the first report
+  could not yet claim.
+- **A real bug was found by that test, not by review.** `Microsoft.Extensions.AI` treats a tool parameter
+  without a default value as *required*, and the stdio transport normalises an explicit JSON `null` to
+  "missing" - so `ason_invoke_function` rejected every call that omitted `handle`, in the relay only. The tool
+  parameters now carry defaults (`handle = null`, `argumentsJson = null`, `includeProxyPreamble = null`), the
+  typed client omits optional values instead of sending null, and the failure is covered by a test. The relay
+  also logs to stderr now (never stdout, which carries the protocol), which is how the cause became visible
+  instead of being reduced to "An error occurred invoking ...".
+- **The gRPC error paths are covered and the coverage metric was fixed** - see the coverage section below for
+  the numbers and the reasoning.
+- **The Windows job now also builds the original WPF demo** (`-f net9.0-windows`). It is built and not run:
+  building is nearly free and catches the realistic regression (a library change breaking the sample that must
+  keep working), while its FlaUI UI tests need an interactive desktop session and would add a flaky, slow job
+  for little extra signal. One target framework only, because the project also targets `net10.0-windows` and
+  that SDK is still a preview.
 
 ## Coverage and known gaps
 
 Coverage collected with
-`dotnet test tests/Ason.Bridge.Tests --collect:"XPlat Code Coverage" --results-directory artifacts/coverage`:
+`dotnet test tests/Ason.Bridge.Tests --collect:"XPlat Code Coverage" --settings coverlet.runsettings`
+(`coverlet.runsettings` excludes the sources protoc generates from `ason_bridge.proto`; without that exclusion
+the gRPC adapter reported 53.8% lines for an adapter that is exercised end to end on every run, because
+machine-written stubs dominated the denominator):
 
 | Assembly | Line rate | Branch rate |
 |---|---|---|
 | `Ason.Bridge` | 88.9% | 79.9% |
-| `Ason.Bridge.Mcp` | 85.4% | 48.4% |
+| `Ason.Bridge.Grpc` | 93.4% | 60.5% |
+| `Ason.Bridge.Mcp` | 87.1% | 51.4% |
 | `Ason.Bridge.OpenApi` | 98.3% | 70.0% |
-| `Ason.Bridge.Grpc` | 53.8% | 43.7% |
-| `Ason.Abstractions` | 84.6% | 100% |
 
-`Ason.Bridge`, `Ason.Bridge.Mcp` and `Ason.Bridge.OpenApi` clear the 80% line bar. `Ason.Bridge.Grpc` does not,
-and the reason is worth stating precisely: the generated protobuf/gRPC stubs dominate that assembly's line
-count, and the service's less common branches (malformed `arguments_json`, cancelled streaming, error paths
-inside `StreamExecution`, `GrpcAsonBridgeEndpoint`'s `not-supported` reply) are not all exercised. Closing it
-means either excluding generated code from the metric or adding explicit error-path tests; it is not a sign of
-untested behaviour on the paths the adapters actually use, all of which the suite drives over a real channel.
+All four hand-written bridge assemblies clear the 80% line bar. Branch coverage is lower (51-80%), which is the
+honest next target: the remaining branches are mostly error paths that need one more call shape each (a
+cancelled script on the MCP side, an empty-argument invocation, a capability switched off per adapter).
 
 Known gaps, stated rather than implied:
 
-1. **The stdio relay is verified to build, and its forwarding path is covered by `RelayEndpointTests`, but no
-   test spawns an MCP client over stdio into the relay process.** The relay's own logic is thin (connect,
-   forward, republish), so this is a coverage gap rather than an untested claim, but it is a gap.
-2. **`import`-level coverage of the WPF samples is not measured**: the samples are exercised end to end
-   (processes started, calls made, results asserted) but no coverage is collected for the sample assemblies.
-3. **`invokeMcpTool` is not part of the gRPC contract** (its relay endpoint answers `not-supported`), so the
-   capability is only available on a bridge that owns the MCP clients. The MCP and HTTP adapters expose
-   everything the runtime offers; the gRPC proto does not carry this one capability.
-4. **`Ason.Bridge.Grpc` line coverage is 53.8%** for the reason given above (generated stubs and a few error
-   branches).
+1. **`import`-level coverage of the samples is not measured**: the WPF samples and the relay are exercised end
+   to end (processes started, calls made, results asserted) but no coverage is collected for their assemblies.
+2. **The original WPF demo (`samples/WptDemoApp`) is built but its FlaUI UI tests are not run** in CI: they
+   need an interactive desktop session and have a flaky reputation. Building it already catches the realistic
+   regression; wiring the UI tests in behind `continue-on-error` is the next step if that signal is wanted.
+3. **`invokeMcpTool` is not part of the gRPC contract** (its forwarding endpoint answers `not-supported`), so
+   the capability is only available on a bridge that owns the MCP clients. MCP and HTTP expose everything the
+   runtime offers; the gRPC proto does not carry this one capability.
+4. **Branch coverage is 51-80% on the adapters** while line coverage is above 88%: the uncovered branches are
+   error paths that each need one more call shape, not whole features.
 5. **The agent sample's chat requires a model key** (`MY_OPEN_AI_KEY`); without one the window still connects,
    lists the API and shows the call log, but the chat itself cannot be exercised in CI. The agent's
    *integration* with the bridge is covered by `AgentOverBridgeTests` (scripted chat service) and by
@@ -259,12 +297,13 @@ Known gaps, stated rather than implied:
    tests and are documented as such; they are not part of the library API.
 7. **One test project, not two.** The plan listed a separate `tests/Ason.Bridge.IntegrationTests`; the
    integration and end-to-end tests live in `tests/Ason.Bridge.Tests` instead, which keeps the CI wiring
-   smaller. The WPF-dependent ones skip on a machine where the samples are not built, so the suite stays green
+   smaller. The process-bound ones skip where their subjects are not built, so the suite stays green
    everywhere while still being real where it can be.
 8. **Test-side corrections are recorded, not hidden.** Phase 1: CLR type names (`Int32`) and a void operator
    called as a statement. Phase 3b: a complete script needs the instance declarations it reads from the
    manifest. Phase 4b: two assertions about what an agent returns with the explainer switched off, and a port
-   race in the WPF fixture (fixed by reserving a port pair and serialising the tests). In every case the
+   race in the WPF fixture (fixed by reserving a port pair and serialising the tests). Follow-up: the MCP
+   optional-parameter defect above was a real product bug, found by the new relay test. In the other cases the
    expectation was wrong, not the implementation.
 9. **The Phase 1 RED commit message claims "24x error CS0246"**; the exact count was not preserved (the
    output was trimmed to 8 lines). The intended RED signal — every planned type missing — is not in doubt.
@@ -284,5 +323,6 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `feat: WPF application-side demo plus end-to-end tests over gRPC and MCP, and an options-level transport seam - GREEN` | Phase 4a + the transport option |
 | `feat: WPF agent demo plus agent/application end-to-end verification over gRPC and MCP - GREEN` | Phase 4b |
 | `feat: OpenAPI adapter, Windows CI job and the completed documentation - GREEN` | Phase 5, docs, CI, this report |
+| `fix: relay over MCP, MCP optional-argument defect and gRPC error paths - GREEN` | follow-up: gaps 1-3 closed, `coverlet.runsettings` |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

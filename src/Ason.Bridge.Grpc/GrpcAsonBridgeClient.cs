@@ -81,14 +81,18 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
         return ValueTask.CompletedTask;
     }
 
-    // A capability that is switched off arrives as Unimplemented; folding it back into a result keeps every
-    // failure path of a bridge call the same shape for the caller.
+    // A capability that is switched off arrives as Unimplemented, a malformed payload as InvalidArgument;
+    // folding them back into a result keeps every failure path of a bridge call the same shape for the caller.
     static async Task<AsonBridgeCallResult> Translate(Func<AsyncUnaryCall<ExecuteResult>> call) {
         try {
             return ToDomain(await call().ConfigureAwait(false));
         }
         catch (RpcException ex) {
-            var code = ex.StatusCode == StatusCode.Unimplemented ? AsonBridgeErrorCodes.NotSupported : AsonBridgeErrorCodes.ExecutionFailed;
+            var code = ex.StatusCode switch {
+                StatusCode.Unimplemented => AsonBridgeErrorCodes.NotSupported,
+                StatusCode.InvalidArgument => AsonBridgeErrorCodes.InvalidArguments,
+                _ => AsonBridgeErrorCodes.ExecutionFailed
+            };
             return AsonBridgeCallResult.Fail(code, ex.Status.Detail);
         }
     }

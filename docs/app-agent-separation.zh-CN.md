@@ -66,7 +66,7 @@ API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反�
 | 适配器 | 包 | 内容 |
 |---|---|---|
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`、`GrpcAsonBridgeClient`、`GrpcAsonBridgeTransport`、`GrpcAsonBridgeEndpoint` |
-| MCP（Streamable HTTP） | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`、`McpAsonBridgeClient`、`McpAsonBridgeTransport` |
+| MCP（Streamable HTTP） | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`、`McpAsonBridgeClient`、`McpAsonBridgeTransport`、`McpAsonBridgeEndpoint` |
 | MCP（stdio 中继） | `Ason.Bridge.McpHost` | 把应用的 gRPC 桥重新发布为 stdio MCP 的进程 |
 | HTTP + OpenAPI（Swagger） | `Ason.Bridge.OpenApi` | HTTP 端点 + 由清单生成的文档，供通用 HTTP 客户端与 Swagger UI 使用 |
 | 其它 | 你自己的项目 | 面向 `IAsonBridgeEndpoint` 做同样的映射 |
@@ -105,12 +105,21 @@ builder.Services.AddAsonMcpBridge(runtime);   // Streamable HTTP
 app.MapAsonMcpBridge("/mcp");
 ```
 
-对于只能“启动一个进程”的 Agent（Claude Desktop、Claude Code 等），把它指向中继宿主：后者通过 gRPC 连上
-应用，再用同样的工具集通过 stdio 提供服务：
+对于只能“启动一个进程”的 Agent（Claude Desktop、Claude Code 等），把它指向中继宿主：后者连上应用，再用同样的
+工具集通过 stdio 提供服务：
 
 ```bash
+# 应用发布的是 gRPC
 Ason.Bridge.McpHost --url http://localhost:5222
+
+# ……中继也可以改用 MCP 与应用对话，此时完全不需要 gRPC
+Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 ```
+
+中继的存在源于 stdio MCP 的**契约本身**：客户端负责启动服务进程，并通过该子进程的 stdin/stdout 通信。一个正在运行的
+桌面应用无法充当这个子进程，因此必须有人持有这条管道 —— 而它又需要一条通往应用的通道，这就是**只有这一种部署形态**
+会出现两跳的原因。它不是设计的前提：会说 HTTP MCP 的 Agent 直连应用；而生命周期本身就是“被 Agent 拉起”的应用，可以
+用 `AddAsonMcpStdioBridge`（中继内部用的正是这个调用）自己提供 stdio MCP。
 
 ## 把编排交给 Agent
 

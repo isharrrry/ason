@@ -19,12 +19,12 @@ internal sealed class BridgeMcpHost : IAsyncDisposable {
     /// <summary>The MCP endpoint, including the path.</summary>
     public string Url { get; private set; } = string.Empty;
 
-    public static async Task<BridgeMcpHost> StartAsync(AsonBridgeRuntime runtime) {
+    public static async Task<BridgeMcpHost> StartAsync(IAsonBridgeEndpoint endpoint) {
         var port = FreePort();
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls($"http://localhost:{port}");
-        builder.Services.AddAsonMcpBridge(runtime);
+        builder.Services.AddAsonMcpBridge(endpoint);
 
         var app = builder.Build();
         app.MapAsonMcpBridge();

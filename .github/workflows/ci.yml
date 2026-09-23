@@ -95,6 +95,10 @@ jobs:
         run: |
           dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj --configuration Release
           dotnet build samples/WpfAgentDemo/WpfAgentDemo.csproj --configuration Release
+          # The original WPF demo is built too, so a change to the library cannot silently break the sample
+          # that must keep working. One target framework on purpose: the project also targets net10.0-windows,
+          # which would need a .NET 10 SDK that is still in preview.
+          dotnet build samples/WptDemoApp/WpfSampleApp.csproj --configuration Release --framework net9.0-windows
 
       - name: Bridge tests (includes the WPF application and agent end-to-end tests)
         run: |

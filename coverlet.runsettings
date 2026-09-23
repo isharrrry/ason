@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Coverage settings for the bridge test suite.
+
+  The gRPC adapter's assembly also contains the code protoc generates from ason_bridge.proto (message
+  serialization, marshallers, service stubs). Those lines are machine-written and dominate the assembly's line
+  count, so counting them as "our code" made the percentage meaningless: it reported 53.8% for an adapter that
+  is exercised end to end on every run. This filter measures the sources a person edits. The generated files are
+  still compiled and still exercised, they are simply not part of the denominator.
+
+  Usage: dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release
+           with the collect option "XPlat Code Coverage" and this file passed as the settings file.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!-- No Include filter: the default set is fine, and a module-bracket filter that names prefixes
+               silently drops the assemblies whose names do not start exactly with the prefix. -->
+          <ExcludeByFile>**/Protos/*.cs,**/Protos/**/*.cs</ExcludeByFile>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

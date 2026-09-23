@@ -71,7 +71,7 @@ through the live instance directory when exactly one instance of its type exists
 | Adapter | Package | Contains |
 |---|---|---|
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`, `GrpcAsonBridgeClient`, `GrpcAsonBridgeTransport`, `GrpcAsonBridgeEndpoint` |
-| MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport` |
+| MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport`, `McpAsonBridgeEndpoint` |
 | MCP (stdio relay) | `Ason.Bridge.McpHost` | A process that republishes an application's gRPC bridge as MCP over stdin/stdout |
 | HTTP + OpenAPI (Swagger) | `Ason.Bridge.OpenApi` | HTTP endpoints plus a document generated from the manifest, for generic HTTP clients and Swagger UI |
 | anything else | your own project | Implement the same mapping against `IAsonBridgeEndpoint` |
@@ -114,11 +114,22 @@ app.MapAsonMcpBridge("/mcp");
 ```
 
 For agents that can only launch a process (Claude Desktop, Claude Code, ...), point them at the relay host,
-which connects to the application over gRPC and serves the same tools over stdio:
+which connects to the application and serves the same tools over stdio:
 
 ```bash
+# the application publishes gRPC
 Ason.Bridge.McpHost --url http://localhost:5222
+
+# ...or the relay can speak MCP to the application instead, so gRPC is not involved at all
+Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 ```
+
+The relay exists because of what stdio MCP *is*: the contract is that the client spawns the server and talks
+over that child's stdin/stdout. A running desktop application cannot be that child, so something has to own the
+pipe - and that something needs a channel to the application, which is why two hops appear in this one
+deployment shape. It is not a prerequisite of the design: an agent that speaks HTTP MCP connects to the
+application directly, and an application whose lifetime *is* the agent's session can serve stdio MCP itself with
+`AddAsonMcpStdioBridge` (that is exactly the call the relay uses).
 
 ### HTTP + OpenAPI (Swagger)
 

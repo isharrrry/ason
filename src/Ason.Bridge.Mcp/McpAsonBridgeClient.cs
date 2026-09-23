@@ -53,9 +53,11 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
     /// <summary>The whole-script interface.</summary>
     public async Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) {
-            ["code"] = code,
-            ["includeProxyPreamble"] = includeProxyPreamble
+            ["code"] = code
         };
+        // Optional values are omitted rather than sent as null: that is what the tool schema advertises and
+        // what an external MCP client does.
+        if (!includeProxyPreamble) arguments["includeProxyPreamble"] = false;
         return Deserialize<AsonBridgeCallResult>(await CallAsync(AsonBridgeMcpTools.ExecuteScript, arguments, cancellationToken).ConfigureAwait(false));
     }
 
@@ -64,12 +66,12 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
         if (call is null) throw new ArgumentNullException(nameof(call));
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) {
             ["operator"] = call.Operator,
-            ["method"] = call.Method,
-            ["handle"] = call.Handle,
-            ["argumentsJson"] = call.EffectiveArguments.Count == 0
-                ? null
-                : "[" + string.Join(",", call.EffectiveArguments.Select(a => a.GetRawText())) + "]"
+            ["method"] = call.Method
         };
+        if (!string.IsNullOrEmpty(call.Handle)) arguments["handle"] = call.Handle;
+        if (call.EffectiveArguments.Count > 0) {
+            arguments["argumentsJson"] = "[" + string.Join(",", call.EffectiveArguments.Select(a => a.GetRawText())) + "]";
+        }
         return Deserialize<AsonBridgeCallResult>(await CallAsync(AsonBridgeMcpTools.InvokeFunction, arguments, cancellationToken).ConfigureAwait(false));
     }
 

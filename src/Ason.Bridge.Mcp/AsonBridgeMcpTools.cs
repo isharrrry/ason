@@ -61,7 +61,8 @@ public static class AsonBridgeMcpTools {
 
         if (capabilities.ExecuteScript) {
             tools.Add(McpServerTool.Create(
-                async (string code, bool? includeProxyPreamble, CancellationToken cancellationToken) => JsonSerializer.Serialize(
+                // See the note on ason_invoke_function: a parameter without a default value is required.
+                async (string code, bool? includeProxyPreamble = null, CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
                     await runtime.ExecuteScriptAsync(code, includeProxyPreamble ?? true, cancellationToken).ConfigureAwait(false), Json),
                 new McpServerToolCreateOptions {
                     Name = ExecuteScript,
@@ -72,7 +73,10 @@ public static class AsonBridgeMcpTools {
 
         if (capabilities.InvokeFunction) {
             tools.Add(McpServerTool.Create(
-                async (string @operator, string method, string? handle, string? argumentsJson, CancellationToken cancellationToken) => JsonSerializer.Serialize(
+                // The optional parameters carry default values on purpose: a tool parameter without one is
+                // required, and a client that omits 'handle' (or sends it as null, which some transports
+                // normalise to "absent") would then be rejected before the call reaches the application.
+                async (string @operator, string method, string? handle = null, string? argumentsJson = null, CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
                     await runtime.InvokeFunctionAsync(
                         new AsonBridgeFunctionCall(@operator, method, string.IsNullOrEmpty(handle) ? null : handle, ParseArguments(argumentsJson)),
                         cancellationToken).ConfigureAwait(false), Json),

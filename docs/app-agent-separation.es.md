@@ -54,7 +54,7 @@ contrario requiere el `handle` del manifiesto. Los fallos llegan como códigos e
 | Adaptador | Paquete | Contenido |
 |---|---|---|
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`, `GrpcAsonBridgeClient`, `GrpcAsonBridgeTransport`, `GrpcAsonBridgeEndpoint` |
-| MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport` |
+| MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport`, `McpAsonBridgeEndpoint` |
 | MCP (stdio, relé) | `Ason.Bridge.McpHost` | Proceso que republica el puente gRPC como MCP por stdin/stdout |
 | HTTP + OpenAPI (Swagger) | `Ason.Bridge.OpenApi` | Endpoints HTTP más un documento generado desde el manifiesto, para clientes HTTP genéricos y Swagger UI |
 | Otro | tu propio proyecto | La misma proyección sobre `IAsonBridgeEndpoint` |
@@ -105,6 +105,14 @@ responde con un error en lugar de dejar al llamador esperando.
 | `samples/ConsoleGrpcBridgeHost` | Lado aplicación en su forma mínima: operadores `[Ason*]` de `LibDemo`, gRPC + MCP + OpenAPI, sin agente |
 | `samples/ConsoleGrpcBridgeDemo` | Lado solicitante externo: manifiesto, instancias, llamadas a funciones, scripts, logs |
 | `src/Ason.Bridge.McpHost` | Relé stdio para agentes que solo hablan MCP |
+
+El relé existe por lo que el MCP stdio *es*: el contrato dice que el cliente arranca el servidor y habla por su
+stdin/stdout. Una aplicación de escritorio en ejecución no puede ser ese hijo, así que algo debe poseer la
+tubería - y ese algo necesita un canal hacia la aplicación, de ahí los dos saltos en esta única forma de
+despliegue. No es un requisito del diseño: un agente que habla MCP por HTTP se conecta directamente a la
+aplicación, y una aplicación cuya vida *es* la sesión del agente puede servir stdio MCP ella misma con
+`AddAsonMcpStdioBridge` (que es justo lo que usa el relé). El canal hacia la aplicación también es elegible:
+`--transport grpc` (por defecto) o `--transport mcp`.
 
 ```bash
 dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222
