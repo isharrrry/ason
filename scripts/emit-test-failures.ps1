@@ -61,11 +61,13 @@ if ($files.Count -eq 0) {
 }
 
 $failed = 0
+$total = 0
 foreach ($file in $files.Values | Sort-Object FullName) {
     $document = New-Object System.Xml.XmlDocument
     $document.Load($file.FullName)
 
     $results = @($document.GetElementsByTagName('UnitTestResult'))
+    $total += $results.Count
     $bad = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Failed' })
     Write-Host ("{0}: {1} result(s), {2} failed" -f $file.Name, $results.Count, $bad.Count)
 
@@ -94,5 +96,16 @@ foreach ($file in $files.Values | Sort-Object FullName) {
     }
 }
 
-if ($failed -eq 0) { Write-Host 'No failed tests in the TRX files.' }
+if ($failed -eq 0) {
+    if ($total -eq 0) {
+        # A step can fail without a single failing test: `dotnet test` exits non-zero when a filter matches
+        # nothing, and the TRX it still writes has no results at all. Saying "no failed tests" there would be
+        # technically true and completely useless, so the annotation says what actually happened.
+        Write-Annotation -Title 'no tests ran' -Message (
+            "Every TRX file under: {0} contains zero results, so nothing was verified. A test filter that matched nothing does this." -f ($ResultsDirectory -join ', '))
+    }
+    else {
+        Write-Host 'No failed tests in the TRX files.'
+    }
+}
 exit 0

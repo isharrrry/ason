@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | llamadores que no son .NET: cliente gRPC, cliente MCP de biblioteca estándar y una prueba de tool calling MCP dirigida por OpenAI |
 | `samples/bridge-examples.http` | todas las rutas HTTP del puente, agrupadas y listas para enviar de una en una |
 | `samples/templates` | las plantillas de `dotnet new` |
-| `scripts` | comprobaciones del repositorio que ejecuta CI (el suelo de cobertura, las anotaciones de fallo) |
+| `scripts` | comprobaciones que ejecuta CI (suelo de cobertura, contrato empaquetado, anotaciones de fallo) y el ejecutor del job de Linux |
 | `tests/*` | suites de pruebas, ver más abajo |
 | `.agents/plans` | planes de implementación, guardados en el repositorio a propósito para revisar las decisiones junto al código |
 | `CHANGELOG.md` | cambios publicados, una sección por versión |
@@ -112,3 +112,29 @@ Cada paso de pruebas escribe un archivo TRX, y un último paso (`scripts/emit-te
 fallida solo lo puede descargar quien tenga permisos de administrador, mientras que la anotación que lleva el
 nombre de la prueba y la aserción se puede leer de forma anónima, incluso por las personas y las herramientas que
 tienen que explicar el fallo.
+
+## Reproducir el job de Linux en tu propia máquina
+
+`scripts/ci-linux.sh` ejecuta ese mismo job con los mismos comandos y en el mismo orden, de modo que una pasada
+local y una de CI significan lo mismo. Solo necesita un SDK de .NET, PowerShell 7 y git: nada de Docker, ni
+Python, ni sesión de escritorio:
+
+```bash
+# .NET 9 compila y ejecuta todo; 6.0 se compila y ejecuta sus smoke tests; 10.0 hace falta porque
+# tests/LibDemo.SmokeTests apunta a net10.0 (la imagen del runner de CI lo trae, por eso CI no lo nota).
+curl -fsSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh
+bash dotnet-install.sh --channel 9.0 --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 6.0 --runtime dotnet --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 10.0 --install-dir "$HOME/.dotnet"
+sudo apt-get install -y powershell        # PowerShell 7, desde packages.microsoft.com
+export PATH="$HOME/.dotnet:$PATH"
+
+./scripts/ci-linux.sh                     # compilación, todas las suites, suelo de cobertura, contrato empaquetado
+./scripts/ci-linux.sh --skip-smoke        # cuando no hay SDK de .NET 10
+./scripts/ci-linux.sh --skip-build --suite bridge --filter "FullyQualifiedName~McpRelayHostTests"
+```
+
+Hay dos diferencias deliberadas con CI: ejecuta todos los pasos y los informa todos en lugar de detenerse en el
+primer fallo (un fallo de *compilación* sí lo detiene, porque todo lo demás necesita la compilación), y cuando algo
+falla imprime las mismas anotaciones `::error` que publica CI. El job de Windows —los ejemplos de WPF y la
+automatización de UI con FlaUI— no se puede reproducir aquí; ese necesita Windows.

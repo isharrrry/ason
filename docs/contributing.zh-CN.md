@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | 非 .NET 调用方：gRPC 客户端、纯标准库 MCP 客户端、OpenAI 驱动的 MCP 工具调用测试 |
 | `samples/bridge-examples.http` | 桥的全部 HTTP 路由，按组整理，可逐条发送 |
 | `samples/templates` | `dotnet new` 模板 |
-| `scripts` | CI 执行的仓库级检查（覆盖率下限、失败注解） |
+| `scripts` | CI 执行的仓库级检查（覆盖率下限、打包契约、失败注解）与 Linux 作业复现脚本 |
 | `tests/*` | 测试套件，见下文 |
 | `.agents/plans` | 实现计划；**故意**留在仓库里，便于把决策与代码一起评审 |
 | `CHANGELOG.md` | 已发布变更，每个版本一节 |
@@ -102,3 +102,27 @@ net10.0 分支在该 SDK 正式发布前不纳入。
 每个测试步骤都会写出 TRX 文件，最后一个步骤（`scripts/emit-test-failures.ps1`，以 `if: failure()` 守护）把它们转成
 check-run 注解。这是有意的：失败运行的作业日志只有管理员权限才能下载，而携带测试名与断言内容的注解可以匿名读取 ——
 包括需要解释这次失败的人与工具。
+
+## 在自有机器上复现 Linux 作业
+
+`scripts/ci-linux.sh` 用**与 CI 相同的命令、相同的顺序**跑那一个作业，因此本地一轮与 CI 一轮含义一致。
+它只需要 .NET SDK、PowerShell 7 与 git —— 不需要 Docker、Python，也不需要桌面会话：
+
+```bash
+# .NET 9 负责构建与运行；6.0 参与构建并跑它的冒烟测试；10.0 是必需的，因为
+# tests/LibDemo.SmokeTests 的目标框架含 net10.0（CI 的 runner 镜像自带，所以 CI 从未察觉）。
+curl -fsSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh
+bash dotnet-install.sh --channel 9.0 --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 6.0 --runtime dotnet --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 10.0 --install-dir "$HOME/.dotnet"
+sudo apt-get install -y powershell        # PowerShell 7，来自 packages.microsoft.com
+export PATH="$HOME/.dotnet:$PATH"
+
+./scripts/ci-linux.sh                     # 构建 + 全部套件 + 覆盖率下限 + 打包契约
+./scripts/ci-linux.sh --skip-smoke        # 没有 .NET 10 SDK 时
+./scripts/ci-linux.sh --skip-build --suite bridge --filter "FullyQualifiedName~McpRelayHostTests"
+```
+
+有两处是**故意**与 CI 不同：它会跑完每一步并汇总，而不是在第一个失败处停下（**构建**失败仍会立即停止，
+因为后续每一步都要用构建产物）；失败时它会打印与 CI 相同的 `::error` 注解。Windows 作业（WPF 示例与
+FlaUI UI 自动化）无法在这里复现，那一个需要 Windows。

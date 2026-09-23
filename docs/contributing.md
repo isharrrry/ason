@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | non-.NET callers: a gRPC client, a stdlib-only MCP client, and an OpenAI-driven MCP tool-calling test |
 | `samples/bridge-examples.http` | every HTTP bridge route, grouped, ready to send one at a time |
 | `samples/templates` | the `dotnet new` templates |
-| `scripts` | repository checks that CI runs (the coverage floor, the failure annotations) |
+| `scripts` | repository checks that CI runs (coverage floor, packaged contract, failure annotations) plus the Linux job runner |
 | `tests/*` | test suites, see below |
 | `.agents/plans` | implementation plans, kept in the repository on purpose so decisions can be reviewed next to the code |
 | `CHANGELOG.md` | released changes, one section per version |
@@ -111,3 +111,28 @@ Every test step writes a TRX file, and one last step (`scripts/emit-test-failure
 `if: failure()`) turns them into check-run annotations. That is deliberate: the job log of a failed run can only
 be downloaded by someone with admin rights, while the annotation carrying the test name and the assertion can be
 read anonymously — including by the contributors and tools that have to explain the failure.
+
+## Reproducing the Linux job on your own machine
+
+`scripts/ci-linux.sh` runs that same job with the same commands in the same order, so a local run and a CI run
+mean the same thing. It needs a .NET SDK, PowerShell 7 and git — no Docker, no Python, no desktop session:
+
+```bash
+# .NET 9 builds and runs everything; 6.0 is built and its smoke tests run; 10.0 is needed because
+# tests/LibDemo.SmokeTests targets net10.0 (CI's runner image ships one, which is why CI never notices).
+curl -fsSL https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh
+bash dotnet-install.sh --channel 9.0 --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 6.0 --runtime dotnet --install-dir "$HOME/.dotnet"
+bash dotnet-install.sh --channel 10.0 --install-dir "$HOME/.dotnet"
+sudo apt-get install -y powershell        # PowerShell 7, from packages.microsoft.com
+export PATH="$HOME/.dotnet:$PATH"
+
+./scripts/ci-linux.sh                     # build, every suite, coverage floor, packaged contract
+./scripts/ci-linux.sh --skip-smoke        # when no .NET 10 SDK is available
+./scripts/ci-linux.sh --skip-build --suite bridge --filter "FullyQualifiedName~McpRelayHostTests"
+```
+
+Two differences from CI are deliberate: it runs every step and reports all of them instead of stopping at the
+first failure (a *build* failure does stop it, since everything else needs the build), and when something failed
+it prints the same `::error` annotations CI publishes. The Windows job — the WPF samples and the FlaUI UI
+automation — cannot be reproduced here; that one needs Windows.

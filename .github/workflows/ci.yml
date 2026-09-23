@@ -97,40 +97,13 @@ jobs:
         shell: pwsh
         run: ./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
 
-      # A non-.NET caller needs the contract, and the contract travels inside the package. Unpacking the nupkg
-      # is the only honest way to check that: the .proto being present in the repository proves nothing.
-      #
-      # The package is read with the runtime's own zip reader instead of `unzip`: the SDK is already here, so
-      # this drops a tool dependency, and - more importantly - the check can annotate itself. The first time
-      # this step ever ran (Linux, run 9) it failed in two seconds with "exit code 1" and nothing else: whether
-      # the pack failed, the file was missing or the entry was named differently was not observable from
-      # outside. It now lists what the package does contain, in the annotation.
+      # A non-.NET caller needs the contract, and the contract travels inside the package. Unpacking the nupkg is
+      # the only honest way to check that: the .proto being present in the repository proves nothing. The script
+      # packs, lists the entries and annotates itself when the contract is absent (it is also what
+      # scripts/ci-linux.sh runs, so the local reproduction checks the same thing as CI).
       - name: The contract ships with the package
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release -o ./artifacts/pack
-          if ($LASTEXITCODE -ne 0) {
-              Write-Host "::error title=the package could not be built::dotnet pack exited with $LASTEXITCODE"
-              exit 1
-          }
-
-          $package = Get-ChildItem -Path ./artifacts/pack -Filter 'Ason.Bridge.Grpc.*.nupkg' | Select-Object -First 1
-          if ($null -eq $package) {
-              Write-Host '::error title=the package could not be built::dotnet pack produced no Ason.Bridge.Grpc.*.nupkg under ./artifacts/pack'
-              exit 1
-          }
-
-          $archive = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
-          try { $entries = @($archive.Entries | ForEach-Object { $_.FullName }) }
-          finally { $archive.Dispose() }
-          $entries | Sort-Object | ForEach-Object { Write-Host "  $_" }
-
-          if ($entries -notcontains 'protos/ason_bridge.proto') {
-              Write-Host ("::error title=the contract is missing from the package::{0} has no protos/ason_bridge.proto. It contains: {1}" -f $package.Name, ($entries -join ', '))
-              exit 1
-          }
-          Write-Host ("{0} ships protos/ason_bridge.proto" -f $package.Name)
+        run: ./scripts/check-package-contract.ps1
 
       # The step above may have stopped the job before the later ones ran, so this is last and runs on failure.
       # It never fails the job itself; it only makes the failure legible: the failing test's name and assertion
