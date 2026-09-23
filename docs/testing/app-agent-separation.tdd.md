@@ -5,8 +5,10 @@
 adapter, the MCP adapter (Streamable HTTP and the stdio relay), the external gRPC client demo, the two WPF
 demos (application side and agent side) and the HTTP/OpenAPI adapter.
 **Source plan**: the plan was produced and approved in the `/eccplan` session (Phase 0–3, with the added
-requirement of a gRPC client executable demonstrating precise function execution, and TDD throughout). No
-`*.plan.md` file was written to disk, so this report records the plan-to-test mapping directly.
+requirement of a gRPC client executable demonstrating precise function execution, and TDD throughout). It was
+originally inline only; it is now written down as [`plan.md`](../../plan.md), which reconstructs Wave 1 — this
+report is that wave's evidence — and carries Wave 2 (tasks T0–T8). This report is therefore the plan-to-test
+mapping for Wave 1 and will gain a "Wave 2" section as that wave lands.
 
 ## User journeys
 
