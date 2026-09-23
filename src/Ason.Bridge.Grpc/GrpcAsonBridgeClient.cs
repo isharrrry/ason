@@ -16,17 +16,36 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
 
     readonly AsonBridge.AsonBridgeClient _client;
     readonly GrpcChannel? _ownedChannel;
+    readonly HttpClient? _ownedHttpClient;
 
-    GrpcAsonBridgeClient(AsonBridge.AsonBridgeClient client, GrpcChannel? ownedChannel) {
+    GrpcAsonBridgeClient(AsonBridge.AsonBridgeClient client, GrpcChannel? ownedChannel, HttpClient? ownedHttpClient = null) {
         _client = client;
         _ownedChannel = ownedChannel;
+        _ownedHttpClient = ownedHttpClient;
     }
 
-    /// <summary>Connects to a bridge at <paramref name="address"/>, for example <c>http://localhost:5222</c>.</summary>
-    public static GrpcAsonBridgeClient Connect(string address) {
+    /// <summary>
+    /// Connects to a bridge at <paramref name="address"/>, for example <c>http://localhost:5222</c>.
+    ///
+    /// <paramref name="headers"/> are sent with every call, which is how a caller proves who it is when the
+    /// application requires authorization (see <c>AddAsonGrpcBridge(runtime, policy)</c>): gRPC metadata is an
+    /// HTTP/2 header, so a default request header is the whole mechanism.
+    /// </summary>
+    public static GrpcAsonBridgeClient Connect(string address, IReadOnlyDictionary<string, string>? headers = null) {
         if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("An address is required.", nameof(address));
-        var channel = GrpcChannel.ForAddress(address);
-        return new GrpcAsonBridgeClient(new AsonBridge.AsonBridgeClient(channel), channel);
+
+        HttpClient? httpClient = null;
+        if (headers is { Count: > 0 }) {
+            httpClient = new HttpClient();
+            foreach (var header in headers) {
+                httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+            }
+        }
+
+        var channel = httpClient is null
+            ? GrpcChannel.ForAddress(address)
+            : GrpcChannel.ForAddress(address, new GrpcChannelOptions { HttpClient = httpClient });
+        return new GrpcAsonBridgeClient(new AsonBridge.AsonBridgeClient(channel), channel, httpClient);
     }
 
     /// <summary>Uses a channel the caller owns (its lifetime stays with the caller).</summary>
@@ -78,6 +97,7 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
 
     public ValueTask DisposeAsync() {
         _ownedChannel?.Dispose();
+        _ownedHttpClient?.Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -88,6 +108,9 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
             return ToDomain(await call().ConfigureAwait(false));
         }
         catch (RpcException ex) {
+            // Credentials are the caller's business, not an application result: an authorization failure must
+            // surface as a status so it can be fixed, instead of being folded into a failed bridge call.
+            if (ex.StatusCode is StatusCode.Unauthenticated or StatusCode.PermissionDenied) throw;
             var code = ex.StatusCode switch {
                 StatusCode.Unimplemented => AsonBridgeErrorCodes.NotSupported,
                 StatusCode.InvalidArgument => AsonBridgeErrorCodes.InvalidArguments,

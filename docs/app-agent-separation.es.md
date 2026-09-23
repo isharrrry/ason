@@ -148,6 +148,36 @@ endpoints. Lo único que cambia es quién compone las llamadas — un modelo, o 
 - Habilitar solo las capacidades necesarias; el manifiesto dice la verdad sobre cuáles están activas.
 - `invokeMcpTool` está desactivado por defecto.
 
+### Exigir autenticación al llamador
+
+La autorización es opt-in por adaptador y está desactivada por defecto, porque el montaje de desarrollo es un
+puente en loopback sin credenciales:
+
+| Adaptador | Cómo activarla | Qué ve un llamador no autorizado |
+|---|---|---|
+| gRPC | `AddAsonGrpcBridge(runtime, "<policy>")` — la policy es una policy normal de autorización de ASP.NET Core | `StatusCode.Unauthenticated` (nunca `Unimplemented`, que en todos los adaptadores significa "capacidad desactivada") |
+| MCP (HTTP) | `AddAsonMcpBridge(endpoint, requireAuthorization: true)` | `401` |
+| HTTP / OpenAPI | `AsonOpenApiBridgeOptions.ApiKey` (y `ApiKeyHeader`) | `401` |
+
+Los clientes se identifican con cabeceras, y ese es todo el mecanismo: los metadatos de gRPC *son* una cabecera
+HTTP/2:
+
+```csharp
+await using var grpc = GrpcAsonBridgeClient.Connect("http://localhost:5222", headers);   // p. ej. Authorization: Bearer …
+await using var mcp = await McpAsonBridgeClient.ConnectAsync("http://localhost:5223/mcp", headers);
+```
+
+Un relé puede llevar las credenciales por un agente que no puede poner cabeceras por sí mismo:
+
+```bash
+Ason.Bridge.McpHost --url http://localhost:5222 --key <value>                     # X-Ason-Bridge-Key: <value>
+Ason.Bridge.McpHost --url http://localhost:5222 --header "Authorization=Bearer <token>"
+```
+
+Los fallos de autorización siguen siendo un problema de credenciales, no un resultado de la aplicación: gRPC
+expone `Unauthenticated` (el cliente tipado lo relanza en vez de convertirlo en una llamada fallida), MCP y HTTP
+exponen `401`. Los fallos de nivel de aplicación conservan sus códigos de error.
+
 ## Ejemplos y cómo ejecutarlos
 
 Qué ejemplo (o combinación de ejemplos) muestra cada forma — desde la disposición en un solo proceso hasta cada

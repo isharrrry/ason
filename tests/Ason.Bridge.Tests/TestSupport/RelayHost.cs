@@ -23,10 +23,16 @@ internal static class RelayHost {
     }
 
     /// <summary>Command and arguments that launch the relay for a gRPC or MCP application endpoint.</summary>
-    public static (string Command, List<string> Arguments) LaunchCommand(string assembly, string endpoint, bool mcp) {
+    public static (string Command, List<string> Arguments) LaunchCommand(string assembly, string endpoint, bool mcp, IReadOnlyDictionary<string, string>? headers = null) {
         var arguments = new List<string> { "exec", assembly, "--url", endpoint };
         if (mcp) arguments.Add("--transport");
         if (mcp) arguments.Add("mcp");
+        if (headers is not null) {
+            foreach (var header in headers) {
+                arguments.Add("--header");
+                arguments.Add($"{header.Key}={header.Value}");
+            }
+        }
         return ("dotnet", arguments);
     }
 
@@ -34,8 +40,8 @@ internal static class RelayHost {
     /// Starts the relay directly (not through an MCP client) and waits for it to exit, so a test can assert the
     /// fast-fail path: a relay that cannot reach the application must say so and stop.
     /// </summary>
-    public static async Task<(int ExitCode, string Output, string Error)> RunToExitAsync(string assembly, string endpoint, TimeSpan timeout) {
-        var (command, arguments) = LaunchCommand(assembly, endpoint, mcp: false);
+    public static async Task<(int ExitCode, string Output, string Error)> RunToExitAsync(string assembly, string endpoint, TimeSpan timeout, IReadOnlyDictionary<string, string>? headers = null) {
+        var (command, arguments) = LaunchCommand(assembly, endpoint, mcp: false, headers);
         var info = new ProcessStartInfo(command) {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

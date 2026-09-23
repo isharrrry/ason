@@ -17,10 +17,19 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
 
     McpAsonBridgeClient(McpClient client) => _client = client;
 
-    /// <summary>Connects to an application's MCP endpoint, for example <c>http://localhost:5222/mcp</c>.</summary>
-    public static async Task<McpAsonBridgeClient> ConnectAsync(string endpoint, CancellationToken cancellationToken = default) {
+    /// <summary>
+    /// Connects to an application's MCP endpoint, for example <c>http://localhost:5222/mcp</c>.
+    ///
+    /// <paramref name="headers"/> are sent with every request, which is how a caller proves who it is when the
+    /// application requires authorization (see <c>AddAsonMcpBridge(endpoint, requireAuthorization: true)</c>).
+    /// </summary>
+    public static async Task<McpAsonBridgeClient> ConnectAsync(string endpoint, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default) {
         if (string.IsNullOrWhiteSpace(endpoint)) throw new ArgumentException("An endpoint is required.", nameof(endpoint));
-        var transport = new HttpClientTransport(new HttpClientTransportOptions { Endpoint = new Uri(endpoint) });
+        var options = new HttpClientTransportOptions { Endpoint = new Uri(endpoint) };
+        if (headers is { Count: > 0 }) {
+            options.AdditionalHeaders = new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase);
+        }
+        var transport = new HttpClientTransport(options);
         var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
         return new McpAsonBridgeClient(client);
     }

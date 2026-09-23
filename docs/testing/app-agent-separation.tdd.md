@@ -344,6 +344,45 @@ Known gaps, stated rather than implied:
 9. **The Phase 1 RED commit message claims "24x error CS0246"**; the exact count was not preserved (the
    output was trimmed to 8 lines). The intended RED signal — every planned type missing — is not in doubt.
 
+## Wave 2 — in progress
+
+The plan for this wave is `.agents/plans/app-agent-separation.plan.md` (Tasks 1–15). Tasks are recorded here as
+they land; T8 expands this section into the full Wave-2 report.
+
+### Task 1 (T0) — flow diagrams completed
+
+- **Execution summary**: `Case 1` now draws the whole boundary A′ exchange (exec → invoke → invokeResult →
+  execResult → back over D) instead of a single arrow, the "operator calls do not cross" sentence is scoped to
+  the caller-facing boundary D, and `Case 6` was added for the remote script host
+  (`execution = remote-runner`, reusing boundaries B/C from the topology section).
+- **Validation**: three-language structural check (`Case`/`情形`/`Caso` counts = 6, same boundary letters, same
+  box numbering) + `git diff --name-only` → docs only.
+- **What is guaranteed**: the diagrams no longer contradict the runtime's actual message flow, and the
+  remote-runner variant of the split deployment is drawn rather than only tabulated.
+- Deferred on purpose: `Case 7` (log streaming) waits for T5.
+
+### Task 2 (T1) — authorization is reachable from every caller
+
+- **RED**: `dotnet build tests/Ason.Bridge.Tests` → `CS1501` for `AddAsonGrpcBridge`, `AddAsonMcpBridge` and
+  `GrpcAsonBridgeClient.Connect` (no two-argument overload) and `CS1503` for
+  `McpAsonBridgeClient.ConnectAsync(endpoint, headers)`.
+- **GREEN**: `dotnet test tests/Ason.Bridge.Tests -c Release` → **100/100** (91 before + 9 new).
+- What the new tests pin:
+
+| Guarantee | Test |
+|---|---|
+| An unauthorized gRPC caller gets `Unauthenticated`, never `Unimplemented` (which means "capability off") | `GrpcAuthTests.An_unauthorized_caller_is_rejected_as_unauthenticated_not_as_unimplemented` |
+| `GrpcAsonBridgeClient.Connect(url, headers)` sends credentials and leaves application results untouched | `GrpcAuthTests.The_typed_client_sends_the_headers_it_was_given` |
+| Authorization failures surface as a status; the typed client rethrows instead of returning a failed call | `GrpcAuthTests.Authorization_failures_propagate_as_a_status_instead_of_becoming_a_result` |
+| Without a policy the endpoint stays open (development default, no regression) | `GrpcAuthTests.Without_a_policy_the_endpoint_stays_open` |
+| An authenticated MCP caller works end to end; an anonymous one is refused at the handshake | `McpAuthTests.Mcp_serves_an_authenticated_caller_when_authorization_is_required`, `McpAuthTests.Mcp_rejects_an_anonymous_caller_when_authorization_is_required` |
+| The MCP endpoint stays open without the flag | `McpAuthTests.Mcp_stays_open_without_authorization` |
+| A relay carries `--header` credentials to a keyed application and still drives it over stdio MCP | `RelayAuthTests.The_relay_forwards_its_headers_to_a_keyed_application` |
+| A relay without the key fails fast (exit 3, reason on stderr) instead of serving unusable tools | `RelayAuthTests.The_relay_fails_fast_when_the_application_requires_a_key_it_was_not_given` |
+
+- Regression evidence: `tests/Ason.Tests` 105/105 unchanged; `samples/ConsoleGrpcBridgeHost` still builds
+  (the new parameters are optional, so no sample or existing test had to change).
+
 ## Merge evidence
 
 The work is carried by checkpoint commits on this branch (one per TDD stage, in order):
@@ -364,6 +403,14 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `docs: draw the application/agent flow diagrams for every deployment shape` | architecture: four-case ASCII flows (en/zh/es) |
 | `docs: document non-agent callers driving an application over gRPC, MCP or HTTP` | the guide's *Using the bridge without an agent* section, a fifth flow diagram, and the index/README pointers |
 | `docs: map every shape (single-process and split) to its sample and run command` | the guide's *Samples and how to run them* matrix; every command in it was executed against the built samples, including the HTTP/curl and template-install paths |
+
+**Wave 2 checkpoints (in progress)**
+
+| Commit | Stage |
+|---|---|
+| `plan: record the Wave 2 pre-start conflict audit` | plan-only: T13's docker correction, T11's blast radius and scope, T5's capability mechanism, naming consistency |
+| `docs: complete the bridge flow diagrams (T0)` | architecture `Case 1` boundary A′ + `Case 6` remote runner, three languages |
+| `feat: authorization hooks for gRPC and MCP, header-carrying clients and relay (T1) - GREEN` | tests + implementation + the three-language security section |
 | `feat: cross-platform agent sample, external script-host mode and the manifest-to-library helper - GREEN` | follow-up round 2: `samples/ConsoleAgentSample`, `--execution external`, `AsonBridgeAgent.ToOperatorsLibrary()`, 5 new process-level tests (91/91) |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

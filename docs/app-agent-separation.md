@@ -269,6 +269,35 @@ privileged:
 - Every request is validated, gated and answered with a code, but nothing here replaces network-level access
   control.
 
+### Requiring a caller to authenticate
+
+Authorization is opt-in per adapter and off by default, because the development setup is a loopback bridge with
+no credentials:
+
+| Adapter | Turn it on | An unauthorized caller sees |
+|---|---|---|
+| gRPC | `AddAsonGrpcBridge(runtime, "<policy>")` — the policy is an ordinary ASP.NET Core authorization policy | `StatusCode.Unauthenticated` (never `Unimplemented`, which means "capability disabled" on every adapter) |
+| MCP (HTTP) | `AddAsonMcpBridge(endpoint, requireAuthorization: true)` | `401` |
+| HTTP / OpenAPI | `AsonOpenApiBridgeOptions.ApiKey` (and `ApiKeyHeader`) | `401` |
+
+Clients prove who they are with headers, and that is the whole mechanism — gRPC metadata *is* an HTTP/2 header:
+
+```csharp
+await using var grpc = GrpcAsonBridgeClient.Connect("http://localhost:5222", headers);   // e.g. Authorization: Bearer …
+await using var mcp = await McpAsonBridgeClient.ConnectAsync("http://localhost:5223/mcp", headers);
+```
+
+A relay can carry the credentials for an agent that cannot set headers itself:
+
+```bash
+Ason.Bridge.McpHost --url http://localhost:5222 --key <value>                     # X-Ason-Bridge-Key: <value>
+Ason.Bridge.McpHost --url http://localhost:5222 --header "Authorization=Bearer <token>"
+```
+
+Authorization failures stay credentials problems rather than application results: gRPC surfaces
+`Unauthenticated` (the typed client rethrows it instead of folding it into a failed bridge call), MCP and HTTP
+surface `401`. Application-level failures keep their error codes.
+
 ## Samples and how to run them
 
 Which sample (or combination of samples) shows which shape — from the single-process arrangement to each way

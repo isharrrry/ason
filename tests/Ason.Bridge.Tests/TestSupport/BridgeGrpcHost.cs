@@ -19,14 +19,23 @@ internal sealed class BridgeGrpcHost : IAsyncDisposable {
 
     public string Url { get; private set; } = string.Empty;
 
-    public static async Task<BridgeGrpcHost> StartAsync(AsonBridgeRuntime runtime) {
+    /// <summary>
+    /// Starts a bridge. When <paramref name="authorizationPolicy"/> is set, the test authentication scheme is
+    /// registered and the endpoint requires that policy.
+    /// </summary>
+    public static async Task<BridgeGrpcHost> StartAsync(AsonBridgeRuntime runtime, string? authorizationPolicy = null) {
         var port = FreePort();
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenLocalhost(port, endpoint => endpoint.Protocols = HttpProtocols.Http2));
-        builder.Services.AddAsonGrpcBridge(runtime);
+        if (authorizationPolicy is not null) builder.Services.AddTestAuth();
+        builder.Services.AddAsonGrpcBridge(runtime, authorizationPolicy);
 
         var app = builder.Build();
+        if (authorizationPolicy is not null) {
+            app.UseAuthentication();
+            app.UseAuthorization();
+        }
         app.MapAsonGrpcBridge();
         await app.StartAsync();
 

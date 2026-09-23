@@ -217,6 +217,33 @@ operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 
 - `invokeMcpTool` 默认关闭：它转发到**应用**所消费的 MCP 服务。
 - 每个请求都会被校验、按能力放行并返回错误码，但这一切都**不能替代网络层访问控制**。
 
+### 要求调用方通过鉴权
+
+鉴权按适配器逐项开启、默认关闭 —— 因为开发形态就是 loopback 上的无凭据桥：
+
+| 适配器 | 如何开启 | 未授权调用方看到 |
+|---|---|---|
+| gRPC | `AddAsonGrpcBridge(runtime, "<policy>")` —— policy 就是普通的 ASP.NET Core 授权策略 | `StatusCode.Unauthenticated`（**不是** `Unimplemented` —— 后者在所有适配器上都表示"能力被关闭"） |
+| MCP（HTTP） | `AddAsonMcpBridge(endpoint, requireAuthorization: true)` | `401` |
+| HTTP / OpenAPI | `AsonOpenApiBridgeOptions.ApiKey`（配合 `ApiKeyHeader`） | `401` |
+
+调用方用请求头表明身份，机制就这一条 —— gRPC metadata *就是* HTTP/2 头：
+
+```csharp
+await using var grpc = GrpcAsonBridgeClient.Connect("http://localhost:5222", headers);   // 例如 Authorization: Bearer …
+await using var mcp = await McpAsonBridgeClient.ConnectAsync("http://localhost:5223/mcp", headers);
+```
+
+对于自己无法设置请求头的 Agent，中继可以代为携带：
+
+```bash
+Ason.Bridge.McpHost --url http://localhost:5222 --key <value>                     # X-Ason-Bridge-Key: <value>
+Ason.Bridge.McpHost --url http://localhost:5222 --header "Authorization=Bearer <token>"
+```
+
+鉴权失败始终是**凭据问题**而不是应用结果：gRPC 报 `Unauthenticated`（类型化客户端会把它原样抛出，而不是折叠成一次失败的桥调用），
+MCP 与 HTTP 报 `401`；应用级失败仍保留各自的错误码。
+
 ## 示例与运行方式
 
 哪种情形由哪个示例（或哪几个示例组合）演示 —— 从"不分离"到各种"分离"形态。带 🔑 的行需要模型密钥：

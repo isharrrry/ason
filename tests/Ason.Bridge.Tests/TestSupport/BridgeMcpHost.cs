@@ -19,14 +19,23 @@ internal sealed class BridgeMcpHost : IAsyncDisposable {
     /// <summary>The MCP endpoint, including the path.</summary>
     public string Url { get; private set; } = string.Empty;
 
-    public static async Task<BridgeMcpHost> StartAsync(IAsonBridgeEndpoint endpoint) {
+    /// <summary>
+    /// Starts a bridge. When <paramref name="requireAuthorization"/> is set, the test authentication scheme is
+    /// registered and the endpoint requires an authenticated caller.
+    /// </summary>
+    public static async Task<BridgeMcpHost> StartAsync(IAsonBridgeEndpoint endpoint, bool requireAuthorization = false) {
         var port = FreePort();
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls($"http://localhost:{port}");
-        builder.Services.AddAsonMcpBridge(endpoint);
+        if (requireAuthorization) builder.Services.AddTestAuth();
+        builder.Services.AddAsonMcpBridge(endpoint, requireAuthorization);
 
         var app = builder.Build();
+        if (requireAuthorization) {
+            app.UseAuthentication();
+            app.UseAuthorization();
+        }
         app.MapAsonMcpBridge();
         await app.StartAsync();
 
