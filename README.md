@@ -218,7 +218,7 @@ var operatorLibrary = new OperatorBuilder()
 
 ## Documentation
 
-All guides — providers, operators, configuration, execution modes, architecture and contributing — are collected in **[docs/index.md](docs/index.md)**, each available in English, Chinese and Spanish. The **bridge** — publishing an application's operators over gRPC, MCP or HTTP/OpenAPI so a separate agent, or any other program with no model involved, can drive them — is documented in **[application / agent separation](docs/app-agent-separation.md)**, with a WPF sample for each side.
+All guides — providers, operators, configuration, execution modes, architecture and contributing — are collected in **[docs/index.md](docs/index.md)**, each available in English, Chinese and Spanish. The **bridge** — publishing an application's operators over gRPC, MCP or HTTP/OpenAPI so a separate agent, or any other program with no model involved, can drive them — is documented in **[application / agent separation](docs/app-agent-separation.md)**, with a WPF sample for each side. Four packages carry it: `Ason.Bridge` (the transport-neutral core), `Ason.Bridge.Grpc`, `Ason.Bridge.Mcp` and `Ason.Bridge.OpenApi` — none of them referenced by `Ason` itself.
 
 ## Benefits of ASON over Tool Calling / MCP
 
