@@ -48,14 +48,19 @@ public class AnswerLanguageTests {
         // The runtime accepts any well-formed BCP-47 tag, so the library cannot tell "zz" from a real locale
         // (legitimate tags such as en-001 resolve the same way). What it must do is stay honest: the tag
         // reaches the prompt as-is, so the failure mode of a typo is visible in the directive instead of a
-        // silently wrong language. The display name varies by runtime ("zz" here, "Unknown Language (zz)" on
-        // others), hence the assertion on the tag only.
+        // silently wrong language.
+        //
+        // The *display name* of an unregistered tag is produced by the runtime's globalization and differs by
+        // implementation: .NET on Windows reports "zz", NLS reports "Unknown Locale (zz)" and ICU (Linux)
+        // reports "Unknown Language (zz)". Asserting on it therefore makes the suite pass or fail by platform,
+        // which is why only the tag and the rule body are asserted here - the sentence around them is not a
+        // contract the library can keep.
         var directive = AgentPrompts.BuildLanguageDirective("zz");
 
-        Assert.Contains("Language rule", directive);
-        Assert.Contains("(zz)", directive);
-        Assert.Contains("in zz", directive);
-        Assert.DoesNotContain("zz / zz", directive);   // no duplicated native name when the runtime has none
+        Assert.StartsWith("Language rule", directive);
+        Assert.Contains("(zz)", directive);                 // the tag reaches the prompt as written
+        Assert.Contains("instead of copying", directive);   // the rule body is intact, not just the first line
+        Assert.DoesNotContain("zz / zz", directive);        // no duplicated native name when the runtime has none
     }
 
     [Fact]
