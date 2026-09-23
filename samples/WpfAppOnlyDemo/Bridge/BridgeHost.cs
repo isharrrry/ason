@@ -1,6 +1,7 @@
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
 using Ason.Bridge.Mcp;
+using Ason.Bridge.OpenApi;
 using LibDemo;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -23,11 +24,12 @@ internal sealed class BridgeHost : IDisposable {
     readonly WebApplication _app;
     readonly AsonBridgeRuntime _runtime;
 
-    BridgeHost(WebApplication app, AsonBridgeRuntime runtime, string grpcUrl, string mcpUrl) {
+    BridgeHost(WebApplication app, AsonBridgeRuntime runtime, string grpcUrl, string mcpUrl, string openApiUrl) {
         _app = app;
         _runtime = runtime;
         GrpcUrl = grpcUrl;
         McpUrl = mcpUrl;
+        OpenApiUrl = openApiUrl;
     }
 
     public string GrpcUrl { get; }
@@ -66,14 +68,19 @@ internal sealed class BridgeHost : IDisposable {
         });
         builder.Services.AddAsonGrpcBridge(runtime);
         builder.Services.AddAsonMcpBridge(runtime);
+        // A third transport for generic HTTP clients and Swagger UI, mapped on the MCP listener below.
+        builder.Services.AddAsonOpenApiBridge(runtime);
 
         var app = builder.Build();
         app.MapAsonGrpcBridge();
         app.MapAsonMcpBridge();
+        app.MapAsonOpenApiBridge();
         app.Start();
 
-        return new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", $"http://localhost:{mcpPort}/mcp");
+        return new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", $"http://localhost:{mcpPort}/mcp", $"http://localhost:{mcpPort}/ason/openapi.json");
     }
+
+    public string OpenApiUrl { get; }
 
     public void Dispose() {
         try { _app.StopAsync().GetAwaiter().GetResult(); } catch { }

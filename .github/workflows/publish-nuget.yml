@@ -88,6 +88,11 @@ jobs:
           dotnet build src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release
           dotnet pack src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
 
+      - name: Build & Pack Ason.Bridge.OpenApi
+        run: |
+          dotnet build src/Ason.Bridge.OpenApi/Ason.Bridge.OpenApi.csproj --configuration Release
+          dotnet pack src/Ason.Bridge.OpenApi/Ason.Bridge.OpenApi.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
+
       - name: Build & Pack Ason.ProjectTemplates
         run: |
           dotnet restore samples/templates/Ason.ProjectTemplates.csproj

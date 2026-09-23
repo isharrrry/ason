@@ -1,9 +1,9 @@
 # TDD evidence report — application / agent separation (ASON bridge)
 
 **Branch**: `feat/agent-app-separation-bridge`
-**Scope of this round**: Phases 0–3 of the approved plan (bridge core, transport seam, gRPC adapter, MCP
-adapter, stdio relay, external gRPC client demo). Phases 4–5 (WPF app-only and agent demos, OpenAPI adapter)
-are **not** done and are listed under known gaps.
+**Scope of this round**: all five phases of the approved plan — the bridge core, the transport seam, the gRPC
+adapter, the MCP adapter (Streamable HTTP and the stdio relay), the external gRPC client demo, the two WPF
+demos (application side and agent side) and the HTTP/OpenAPI adapter.
 **Source plan**: the plan was produced and approved in the `/eccplan` session (Phase 0–3, with the added
 requirement of a gRPC client executable demonstrating precise function execution, and TDD throughout). No
 `*.plan.md` file was written to disk, so this report records the plan-to-test mapping directly.
@@ -123,6 +123,58 @@ requirement of a gRPC client executable demonstrating precise function execution
   | `--func LibDemoOperator.GetLibraryTimestamp` (no live instance) | `FAILED [handle-required] ... pass the handle of a live instance.` |
   | `--args "not json"` | `--args is not valid JSON: ...`, exit code 2 |
 
+### Phase 4a — the WPF application side
+
+- `samples/WpfAppOnlyDemo` (`net9.0-windows`): a WPF window whose operator root owns the employee collection
+  the `ListView` is bound to, plus a static module, a marker-only module and the `LibDemo` class library. It
+  hosts gRPC, MCP and HTTP/OpenAPI in the same process and contains no model client.
+- Two details were needed to make a windowless run work: the runtime is built on the dispatcher thread (so it
+  captures the `DispatcherSynchronizationContext`) and bridge-only mode sets
+  `ShutdownMode.OnExplicitShutdown`, because the default mode ends the process as soon as the dispatcher idles
+  with no window open.
+- **The deployment risk in the plan — WPF and ASP.NET Core in one `WinExe` — is retired**: the sample builds
+  and runs with `FrameworkReference Microsoft.AspNetCore.App` and `UseWPF` together.
+- Validation: build, then the manual run recorded below; later automated by the tests in Phase 4b.
+
+| Command (against `WpfAppOnlyDemo --bridge-only --port 5210`) | Result |
+|---|---|
+| `ConsoleGrpcBridgeDemo --url http://localhost:5210` | `5 operators, 12 methods, 3 live instances`, including `EmployeesOperator (initialized=True)` |
+| `--func EmployeesOperator.GetDiagnostics` | `OK {"onUiThread":true,"threadId":2,"employeeCount":3}` |
+| `--script "return employeesOperator.GetDiagnostics().OnUiThread;"` | `OK true` |
+| `--script "return employeesOperator.Rename(1, new string(new[]{'A','d','a'})).Name;"` | `OK "Ada"` |
+| `--func EmployeesOperator.GetEmployees` (after the mutation) | `name` is now `Ada` |
+| `--func ReportOperator.BuildSummary` (marker-only) | `OK "machine ... · operators are resolved inside the application process"` |
+| `--func AppInfoOperator.Add --args "[40,2]"` (static module) | `OK 42` |
+
+### Phase 4b — the WPF agent side, and the seam it needs
+
+- `AsonClientOptions.TransportFactory` was added (RED: `error CS0117: AsonClientOptions does not contain
+  TransportFactory`), applied in the `AsonClient` constructor. This is what lets an agent host configure a
+  bridge endpoint declaratively; `RunnerClient.UseTransport` remains the underlying switch.
+- `samples/WpfAgentDemo` (`net9.0-windows`): chat window, endpoint and transport selection (gRPC/MCP), the API
+  listing fetched from the application, and a call log. It declares **no** `[AsonOperator]`.
+- `--verify <endpoint> [--mcp]` gives the sample a headless self-check, which is what makes the agent half
+  testable without a model and without a desktop session.
+- Validation: `tests/Ason.Bridge.Tests` 66/66 at this point (the two new end-to-end tests below), and
+  `tests/Ason.Tests` 105/105 including the new options-level transport test.
+- One flake was found and fixed rather than retried: two WPF samples starting in parallel could claim the same
+  port pair. The fixture now reserves a consecutive pair before launching and both test classes share a
+  non-parallel xunit collection.
+
+### Phase 5 — the HTTP/OpenAPI adapter
+
+- `src/Ason.Bridge.OpenApi`: `GET /ason/manifest`, `GET /ason/instances`, `POST /ason/script`,
+  `POST /ason/functions/invoke`, `POST /ason/functions/{operator}/{method}` and `GET /ason/openapi.json` — the
+  document is generated from the manifest (routes, schemas, and the callable surface as `x-ason-operators` /
+  `x-ason-models` / `x-ason-capabilities`).
+- Capability gating is "not served at all" (404), failures are `400` with the ASON error code, and an optional
+  `ApiKey` guards every route with `401`.
+- The adapter was added without touching `Ason.Bridge`, the runtime, the application or the other adapters —
+  which is the claim the transport story makes, tested rather than asserted.
+- Validation: 7 new tests (73/73 in the suite); manual check against `ConsoleGrpcBridgeHost` returned
+  `openapi=3.0.3 title=LibDemo application operators=2`, five mapped paths, an HTTP function call (`result=42`)
+  and an HTTP script call (`result=3`).
+
 ## Test specification
 
 | # | What is guaranteed | Test file | Type | Result |
@@ -146,6 +198,14 @@ requirement of a gRPC client executable demonstrating precise function execution
 | 17 | Manifest, single-function call, script body and structured errors work over MCP; the script API tool returns the prompt layer | `McpBridgeTests` | integration | PASS |
 | 18 | The MCP transport carries exec lines to the application | `McpBridgeTests` | integration | PASS |
 | 19 | A forwarding endpoint reports the remote capabilities/instances, relays both interfaces and builds the MCP tool surface (the stdio relay's path) | `RelayEndpointTests` | integration | PASS |
+| 20 | `AsonClientOptions.TransportFactory` sends the client's script through the supplied transport | `Ason.Tests/Transport/AsonClientTransportFactoryTests` | unit | PASS |
+| 21 | An agent built from a manifest runs a script inside the application and returns its result, with the application's API in the script prompt | `AgentOverBridgeTests` | integration | PASS |
+| 22 | A failure raised by an operator inside the application comes back as a failed task with the application's error text | `AgentOverBridgeTests` | integration | PASS |
+| 23 | The real WPF application (started headless) publishes its operators, live instances and script declarations, and its operator calls run on the dispatcher thread | `WpfApplicationEndToEndTests` | e2e | PASS |
+| 24 | The same application answers over MCP with the same contract and the same function-call result | `WpfApplicationEndToEndTests` | e2e | PASS |
+| 25 | The WPF agent sample connects over gRPC, declares zero operators, reads the application's API and executes a function there | `WpfAgentEndToEndTests` | e2e | PASS |
+| 26 | The same agent sample works over MCP | `WpfAgentEndToEndTests` | e2e | PASS |
+| 27 | The HTTP adapter serves the manifest, instances, script bodies, both function-call shapes, structured failures, capability gating, the bridge key and a coherent OpenAPI document | `OpenApiBridgeTests` | integration | PASS |
 
 Commands used for every row above:
 
@@ -155,7 +215,9 @@ dotnet test tests/Ason.Tests/Ason.Tests.csproj -c Release --filter "DisplayName!
 dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj -c Release --framework net9.0
 ```
 
-Final counts: `Ason.Bridge.Tests` 60/60, `Ason.Tests` 104/104 (hermetic filter), `LibDemo.SmokeTests` 11/11.
+Final counts: `Ason.Bridge.Tests` 73/73, `Ason.Tests` 105/105 (hermetic filter), `LibDemo.SmokeTests` 11/11.
+On Windows with the samples built, 4 of the 73 are end-to-end tests that start the real WPF executables; on
+Linux they report as skipped instead.
 
 ## Coverage and known gaps
 
@@ -166,33 +228,45 @@ Coverage collected with
 |---|---|---|
 | `Ason.Bridge` | 88.9% | 79.9% |
 | `Ason.Bridge.Mcp` | 85.4% | 48.4% |
-| `Ason.Bridge.Grpc` | 53.8% | 43.6% |
+| `Ason.Bridge.OpenApi` | 98.3% | 70.0% |
+| `Ason.Bridge.Grpc` | 53.8% | 43.7% |
 | `Ason.Abstractions` | 84.6% | 100% |
 
-`Ason.Bridge` clears the 80% line bar. `Ason.Bridge.Grpc` does not, for two reasons that are worth knowing:
-the generated protobuf/gRPC stubs dominate that assembly's line count, and the service's less common branches
-(malformed `arguments_json`, cancelled streaming, error paths inside `StreamExecution`) are not all exercised.
-Closing it means either excluding generated code from the metric or adding explicit error-path tests.
+`Ason.Bridge`, `Ason.Bridge.Mcp` and `Ason.Bridge.OpenApi` clear the 80% line bar. `Ason.Bridge.Grpc` does not,
+and the reason is worth stating precisely: the generated protobuf/gRPC stubs dominate that assembly's line
+count, and the service's less common branches (malformed `arguments_json`, cancelled streaming, error paths
+inside `StreamExecution`, `GrpcAsonBridgeEndpoint`'s `not-supported` reply) are not all exercised. Closing it
+means either excluding generated code from the metric or adding explicit error-path tests; it is not a sign of
+untested behaviour on the paths the adapters actually use, all of which the suite drives over a real channel.
 
 Known gaps, stated rather than implied:
 
-1. **Phase 4 not started.** Neither WPF demo (app-only, agent) exists; the app side is demonstrated as
-   `samples/ConsoleGrpcBridgeHost` instead. UI-thread affinity is proven with a
-   `SingleThreadSynchronizationContext`, not with a real WPF dispatcher.
-2. **Phase 5 (OpenAPI adapter) not started.**
-3. **`AsonClient`-over-bridge is only covered at the transport level.** No test builds an `AsonClient` whose
-   `OperatorsLibrary` comes from a manifest and whose runner is a bridge transport; that composition needs a
-   stub chat completion service and belongs with the Phase 4 agent demo.
-4. **The stdio relay is verified to build and its forwarding endpoint is unit-tested; no test spawns an MCP
-   client over stdio** to the relay process.
-5. **`invokeMcpTool` is not part of the gRPC contract** (its relay endpoint answers `not-supported`), so the
-   capability is only available on a bridge that owns the MCP clients.
-6. **One test project, not two.** The plan listed a separate `tests/Ason.Bridge.IntegrationTests`; the
-   integration tests live in `tests/Ason.Bridge.Tests` instead, which keeps the CI wiring smaller.
-7. **Two test-side corrections in Phase 1** (CLR type names, void operator as a statement) and **one in
-   Phase 3b** (complete script needs the instance declarations) are recorded above rather than hidden: in
-   each case the expectation was wrong, not the implementation.
-8. **The Phase 1 RED commit message claims "24x error CS0246"**; the exact count was not preserved (the
+1. **The stdio relay is verified to build, and its forwarding path is covered by `RelayEndpointTests`, but no
+   test spawns an MCP client over stdio into the relay process.** The relay's own logic is thin (connect,
+   forward, republish), so this is a coverage gap rather than an untested claim, but it is a gap.
+2. **`import`-level coverage of the WPF samples is not measured**: the samples are exercised end to end
+   (processes started, calls made, results asserted) but no coverage is collected for the sample assemblies.
+3. **`invokeMcpTool` is not part of the gRPC contract** (its relay endpoint answers `not-supported`), so the
+   capability is only available on a bridge that owns the MCP clients. The MCP and HTTP adapters expose
+   everything the runtime offers; the gRPC proto does not carry this one capability.
+4. **`Ason.Bridge.Grpc` line coverage is 53.8%** for the reason given above (generated stubs and a few error
+   branches).
+5. **The agent sample's chat requires a model key** (`MY_OPEN_AI_KEY`); without one the window still connects,
+   lists the API and shows the call log, but the chat itself cannot be exercised in CI. The agent's
+   *integration* with the bridge is covered by `AgentOverBridgeTests` (scripted chat service) and by
+   `WpfAgentEndToEndTests` (`--verify`), which is why the missing key does not leave the agent path untested.
+6. **The `--verify` self-check and `--bridge-only` mode are sample-level test hooks.** They exist for the
+   tests and are documented as such; they are not part of the library API.
+7. **One test project, not two.** The plan listed a separate `tests/Ason.Bridge.IntegrationTests`; the
+   integration and end-to-end tests live in `tests/Ason.Bridge.Tests` instead, which keeps the CI wiring
+   smaller. The WPF-dependent ones skip on a machine where the samples are not built, so the suite stays green
+   everywhere while still being real where it can be.
+8. **Test-side corrections are recorded, not hidden.** Phase 1: CLR type names (`Int32`) and a void operator
+   called as a statement. Phase 3b: a complete script needs the instance declarations it reads from the
+   manifest. Phase 4b: two assertions about what an agent returns with the explainer switched off, and a port
+   race in the WPF fixture (fixed by reserving a port pair and serialising the tests). In every case the
+   expectation was wrong, not the implementation.
+9. **The Phase 1 RED commit message claims "24x error CS0246"**; the exact count was not preserved (the
    output was trimmed to 8 lines). The intended RED signal — every planned type missing — is not in doubt.
 
 ## Merge evidence
@@ -206,6 +280,9 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `feat: let a host supply the runner transport (IRunnerTransport made public) - GREEN` | Phase 2 RED+GREEN |
 | `feat: add Ason.Bridge.Grpc adapter (service, typed client, runner transport) - GREEN; evidence: 46/46 bridge tests pass` | Phase 3 gRPC RED+GREEN |
 | `feat: MCP adapter, stdio relay host and the external gRPC client - GREEN` | Phase 3b/3c |
-| `docs: document application/agent separation and wire the new projects into CI` | docs, CI, this report |
+| `docs: document application/agent separation and wire the new projects into CI` | docs, CI, first evidence report |
+| `feat: WPF application-side demo plus end-to-end tests over gRPC and MCP, and an options-level transport seam - GREEN` | Phase 4a + the transport option |
+| `feat: WPF agent demo plus agent/application end-to-end verification over gRPC and MCP - GREEN` | Phase 4b |
+| `feat: OpenAPI adapter, Windows CI job and the completed documentation - GREEN` | Phase 5, docs, CI, this report |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

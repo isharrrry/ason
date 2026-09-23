@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BaseOutputPath>..\bin</BaseOutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <Authors>Alexgoon</Authors>
+    <PackageId>Ason.Bridge.OpenApi</PackageId>
+    <Description>OpenAPI (Swagger) adapter for Ason.Bridge: HTTP endpoints plus a document generated from the manifest, so a generic HTTP client or Swagger UI can discover and drive an application's operator API.</Description>
+    <RepositoryUrl>https://github.com/Alexgoon/ason</RepositoryUrl>
+    <PackageIcon>icon.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ason.Bridge\Ason.Bridge.csproj" />
+    <None Include="icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

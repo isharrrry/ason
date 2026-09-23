@@ -30,10 +30,10 @@ public partial class MainWindow : Window {
     string _endpoints = string.Empty;
 
     /// <summary>Shows the addresses an agent should connect to.</summary>
-    public void ShowEndpoints(string grpcUrl, string mcpUrl) {
+    public void ShowEndpoints(string grpcUrl, string mcpUrl, string openApiUrl) {
         GrpcUrlText.Text = grpcUrl;
         McpUrlText.Text = mcpUrl;
-        _endpoints = $"{grpcUrl} (gRPC)  |  {mcpUrl} (MCP)";
+        _endpoints = $"{grpcUrl} (gRPC)  |  {mcpUrl} (MCP)  |  {openApiUrl} (HTTP/OpenAPI)";
         AppendActivity($"bridge started: {_endpoints}");
     }
 

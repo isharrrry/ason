@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Ason.Bridge.OpenApi\Ason.Bridge.OpenApi.csproj" />
     <ProjectReference Include="..\LibDemo\LibDemo.csproj" />
   </ItemGroup>
 

@@ -56,6 +56,7 @@ contrario requiere el `handle` del manifiesto. Los fallos llegan como códigos e
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`, `GrpcAsonBridgeClient`, `GrpcAsonBridgeTransport`, `GrpcAsonBridgeEndpoint` |
 | MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport` |
 | MCP (stdio, relé) | `Ason.Bridge.McpHost` | Proceso que republica el puente gRPC como MCP por stdin/stdout |
+| HTTP + OpenAPI (Swagger) | `Ason.Bridge.OpenApi` | Endpoints HTTP más un documento generado desde el manifiesto, para clientes HTTP genéricos y Swagger UI |
 | Otro | tu propio proyecto | La misma proyección sobre `IAsonBridgeEndpoint` |
 
 Las bibliotecas maduras quedan fuera de `Ason` a propósito: `Ason` no referencia gRPC, ni un servidor MCP, ni
@@ -82,7 +83,8 @@ dispatcher.
 
 El agente puede conservar la orquestación de ASON sin poseer operadores: construye su biblioteca de operadores
 a partir del manifiesto y apunta su runner a la aplicación con
-`RunnerClient.UseTransport(() => new GrpcAsonBridgeTransport(client))`. La aplicación resuelve las llamadas a
+`AsonClientOptions.TransportFactory` (por debajo, `RunnerClient.UseTransport`), por ejemplo
+`TransportFactory = () => new GrpcAsonBridgeTransport(client)`. La aplicación resuelve las llamadas a
 operadores en su propio proceso, de modo que el transporte nunca ve un mensaje `invoke`; si llegara uno, se
 responde con un error en lugar de dejar al llamador esperando.
 
@@ -98,7 +100,9 @@ responde con un error en lugar de dejar al llamador esperando.
 
 | Ejemplo | Rol |
 |---|---|
-| `samples/ConsoleGrpcBridgeHost` | Lado aplicación: operadores `[Ason*]` de `LibDemo`, gRPC + MCP, sin agente |
+| `samples/WpfAppOnlyDemo` | **El lado aplicación como aplicación de escritorio real**: una ventana WPF con operadores `[Ason*]` que publica gRPC, MCP y HTTP/OpenAPI. Sin modelo ni chat. `--bridge-only --port 5222` la ejecuta sin ventana |
+| `samples/WpfAgentDemo` | **El lado agente como aplicación de escritorio real**: ventana de chat, selección de endpoint y transporte (gRPC/MCP), la lista de API leída de la aplicación y un registro de llamadas. No declara ningún `[AsonOperator]`. `--verify <endpoint> [--mcp]` ejecuta una autocomprobación sin interfaz |
+| `samples/ConsoleGrpcBridgeHost` | Lado aplicación en su forma mínima: operadores `[Ason*]` de `LibDemo`, gRPC + MCP + OpenAPI, sin agente |
 | `samples/ConsoleGrpcBridgeDemo` | Lado solicitante externo: manifiesto, instancias, llamadas a funciones, scripts, logs |
 | `src/Ason.Bridge.McpHost` | Relé stdio para agentes que solo hablan MCP |
 

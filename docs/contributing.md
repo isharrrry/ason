@@ -28,7 +28,10 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `src/Ason.Bridge` | transport-neutral bridge: manifest, capabilities, executors, operator directory (`net6.0`, `net9.0`) |
 | `src/Ason.Bridge.Grpc` | gRPC adapter: service, typed client, runner transport, forwarding endpoint |
 | `src/Ason.Bridge.Mcp` | MCP adapter: tool surface, typed client, runner transport (Streamable HTTP) |
+| `src/Ason.Bridge.OpenApi` | HTTP + OpenAPI (Swagger) adapter: endpoints and a document generated from the manifest |
 | `src/Ason.Bridge.McpHost` | relay that republishes an application's gRPC bridge as stdio MCP |
+| `samples/WpfAppOnlyDemo` | WPF application side: `[Ason*]` operators plus gRPC, MCP and HTTP/OpenAPI services, no agent |
+| `samples/WpfAgentDemo` | WPF agent side: chat plus endpoint/transport selection, and not a single `[AsonOperator]` |
 | `samples/ConsoleGrpcBridgeHost` | application side of a split deployment: `[Ason*]` operators plus gRPC and MCP services |
 | `samples/ConsoleGrpcBridgeDemo` | external request side: manifest, single-function calls, scripts, streamed logs |
 | `samples/WptDemoApp` | WPF demo (`net10.0`, `net9.0`, `net6.0-windows`) |
@@ -44,7 +47,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `tests/Ason.Tests` | net9.0 | the `E2E_AllExecutionModes(executionMode: Docker, …)` cases need a Docker daemon; `McpClientTests` needs live MCP servers |
 | `tests/Ason.Runner.Tests` | net9.0 | script runner |
 | `tests/Ason.RemoteRunner.Tests` | net9.0 | the integration test is skipped unless `ASON_REMOTE_RUNNER_URL` points at a running remote runner |
-| `tests/Ason.Bridge.Tests` | net9.0 | the bridge core, the gRPC and MCP adapters (each host is started in-process and driven over the wire), the runner transport seam and the relay endpoint |
+| `tests/Ason.Bridge.Tests` | net9.0 | the bridge core, the gRPC/MCP/OpenAPI adapters (each host is started in-process and driven over the wire), the runner transport seam, the relay endpoint, and the WPF samples' end-to-end tests — which skip on Linux and on a machine where the Windows-only samples have not been built |
 | `tests/WpfDemoApp.UiTests` | net9.0-windows | FlaUI UI automation — needs an interactive Windows desktop session |
 
 The bridge packages (`Ason.Bridge`, `Ason.Bridge.Grpc`, `Ason.Bridge.Mcp`, `Ason.Bridge.McpHost`) and their
@@ -68,4 +71,8 @@ Configuring a provider is described in [AI providers](ai-providers.md).
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and on pull requests. It builds the cross-platform projects and runs the hermetic test suites on Ubuntu; the Docker-mode and MCP cases are excluded there. The WPF sample, the UI tests and the net10.0 leg are Windows-only and are not covered by that job yet.
+`.github/workflows/ci.yml` runs on every push and on pull requests. Its Linux job builds the cross-platform
+projects and runs the hermetic test suites; the Docker-mode and MCP cases are excluded there, and the WPF
+samples' end-to-end tests skip. A second job (`windows-samples`) builds the two WPF samples and re-runs
+`tests/Ason.Bridge.Tests` on Windows, which is what makes those end-to-end tests actually execute. The original
+WPF demo, the FlaUI UI tests and the net10.0 leg are still not covered by either job.

@@ -45,6 +45,7 @@ jobs:
           dotnet build src/Ason.Bridge/Ason.Bridge.csproj --configuration Release
           dotnet build src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release
           dotnet build src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release
+          dotnet build src/Ason.Bridge.OpenApi/Ason.Bridge.OpenApi.csproj --configuration Release
           dotnet build src/Ason.Bridge.McpHost/Ason.Bridge.McpHost.csproj --configuration Release
           dotnet build samples/LibDemo/LibDemo.csproj --configuration Release
           # The bridge samples are console applications, so unlike the WPF sample they also run here.
@@ -71,5 +72,30 @@ jobs:
       # The bridge suite hosts gRPC and MCP in process and drives them over the wire; no Docker, desktop
       # session or network access is needed.
       - name: Bridge tests
+        run: |
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+
+  # The WPF samples are Windows-only, so their end-to-end tests (which start the real application and drive it
+  # over gRPC and MCP) run here. Building the samples first is what makes those tests execute instead of skip.
+  windows-samples:
+    name: Build & test Windows samples
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+
+      - name: Build the WPF samples
+        run: |
+          dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj --configuration Release
+          dotnet build samples/WpfAgentDemo/WpfAgentDemo.csproj --configuration Release
+
+      - name: Bridge tests (includes the WPF application and agent end-to-end tests)
         run: |
           dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release

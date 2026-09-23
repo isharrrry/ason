@@ -31,7 +31,7 @@ public partial class App : Application {
         // that is the state the bridge exposes.
         var window = new MainWindow();
         _bridge = BridgeHost.Start(window, grpcPort, grpcPort + 1);
-        window.ShowEndpoints(_bridge.GrpcUrl, _bridge.McpUrl);
+        window.ShowEndpoints(_bridge.GrpcUrl, _bridge.McpUrl, _bridge.OpenApiUrl);
 
         if (!bridgeOnly) {
             window.Show();

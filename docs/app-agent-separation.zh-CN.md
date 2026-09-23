@@ -68,6 +68,7 @@ API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反�
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`、`GrpcAsonBridgeClient`、`GrpcAsonBridgeTransport`、`GrpcAsonBridgeEndpoint` |
 | MCP（Streamable HTTP） | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`、`McpAsonBridgeClient`、`McpAsonBridgeTransport` |
 | MCP（stdio 中继） | `Ason.Bridge.McpHost` | 把应用的 gRPC 桥重新发布为 stdio MCP 的进程 |
+| HTTP + OpenAPI（Swagger） | `Ason.Bridge.OpenApi` | HTTP 端点 + 由清单生成的文档，供通用 HTTP 客户端与 Swagger UI 使用 |
 | 其它 | 你自己的项目 | 面向 `IAsonBridgeEndpoint` 做同样的映射 |
 
 成熟传输库被刻意挡在 `Ason` 之外：`Ason` 不引用 gRPC、不含 MCP 服务端、也不引用 ASP.NET。
@@ -125,12 +126,16 @@ var library = new OperatorsLibrary(
     Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NoOperatorCache())),
     false, Array.Empty<IMcpClient>(), Array.Empty<Assembly>());
 
-var agent = new AsonClient(chatService, new RootOperator(new object()), library);
-agent.Runner.UseTransport(() => new GrpcAsonBridgeTransport(client));
+var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
+    // 隔离由应用侧决定；这一侧只负责怎么连上它
+    ExecutionMode = ExecutionMode.ExternalProcess,
+    TransportFactory = () => new GrpcAsonBridgeTransport(client)
+});
 ```
 
-`RunnerClient.UseTransport` 正是让这件事成立的接缝：传输把 runner 协议（`exec` 下行、结果上行）送到应用，
-而代理生成、重试、校验与结果处理**原地不动**。`McpAsonBridgeTransport` 用 MCP 做同样的事。
+`AsonClientOptions.TransportFactory`（底层就是 `RunnerClient.UseTransport`）正是让这件事成立的接缝：传输把
+runner 协议（`exec` 下行、结果上行）送到应用，而代理生成、重试、校验与结果处理**原地不动**。
+`McpAsonBridgeTransport` 用 MCP 做同样的事。
 
 应用在自己的进程内解析 operator 调用，因此传输**永远不会**看到 `invoke` 消息。若它还是出现了（意味着部署被指向了
 并非应用本身的执行器），会以错误应答，而不是让调用方永久等待。
@@ -167,7 +172,9 @@ operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 
 
 | 示例 | 角色 |
 |---|---|
-| `samples/ConsoleGrpcBridgeHost` | 应用侧：来自 `LibDemo` 的 `[Ason*]` operator，托管 gRPC + MCP，无 Agent |
+| `samples/WpfAppOnlyDemo` | **应用侧的真实桌面应用**：WPF 窗口 + `[Ason*]` operator（绑定窗口的视图 operator、静态模块、仅标记模块、`LibDemo` 类库），托管 gRPC / MCP / HTTP-OpenAPI，无模型无聊天。`--bridge-only --port 5222` 可无窗口运行 |
+| `samples/WpfAgentDemo` | **Agent 侧的真实桌面应用**：聊天窗口、端点与传输（gRPC/MCP）选择、从应用拉取的 API 列表、调用日志；**一个 `[AsonOperator]` 都没有**。`--verify <endpoint> [--mcp]` 提供无界面自检 |
+| `samples/ConsoleGrpcBridgeHost` | 应用侧的最小形态：来自 `LibDemo` 的 `[Ason*]` operator，托管 gRPC + MCP + OpenAPI，无 Agent |
 | `samples/ConsoleGrpcBridgeDemo` | 外部请求侧：清单、存活实例、单函数调用、脚本、流式日志 |
 | `src/Ason.Bridge.McpHost` | 面向只会 MCP 的 Agent 的 stdio 中继 |
 

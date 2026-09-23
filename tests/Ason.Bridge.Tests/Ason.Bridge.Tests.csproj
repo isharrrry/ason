@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\Ason.Bridge\Ason.Bridge.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
+    <ProjectReference Include="..\..\src\Ason.Bridge.OpenApi\Ason.Bridge.OpenApi.csproj" />
     <ProjectReference Include="..\..\src\Ason.Runner.Core\Ason.Runner.Core.csproj" />
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
   </ItemGroup>

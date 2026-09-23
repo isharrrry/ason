@@ -28,7 +28,10 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `src/Ason.Bridge` | puente neutral respecto al transporte: manifiesto, capacidades, ejecutores, directorio de operadores (`net6.0`, `net9.0`) |
 | `src/Ason.Bridge.Grpc` | adaptador gRPC: servicio, cliente tipado, transporte del runner, endpoint de reenvío |
 | `src/Ason.Bridge.Mcp` | adaptador MCP: superficie de herramientas, cliente tipado, transporte del runner (Streamable HTTP) |
+| `src/Ason.Bridge.OpenApi` | adaptador HTTP + OpenAPI (Swagger): endpoints y un documento generado desde el manifiesto |
 | `src/Ason.Bridge.McpHost` | relé que republica el puente gRPC de una aplicación como MCP por stdio |
+| `samples/WpfAppOnlyDemo` | lado aplicación en WPF: operadores `[Ason*]` más servicios gRPC, MCP y HTTP/OpenAPI, sin agente |
+| `samples/WpfAgentDemo` | lado agente en WPF: chat y selección de endpoint/transporte, sin un solo `[AsonOperator]` |
 | `samples/ConsoleGrpcBridgeHost` | lado aplicación de un despliegue dividido: operadores `[Ason*]` más servicios gRPC y MCP |
 | `samples/ConsoleGrpcBridgeDemo` | lado solicitante externo: manifiesto, llamadas a funciones, scripts, logs |
 | `samples/WptDemoApp` | demo de WPF (`net10.0`, `net9.0`, `net6.0-windows`) |
@@ -44,7 +47,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `tests/Ason.Tests` | net9.0 | los casos de `E2E_AllExecutionModes(executionMode: Docker, …)` necesitan un demonio de Docker; `McpClientTests` necesita servidores MCP activos |
 | `tests/Ason.Runner.Tests` | net9.0 | runner de scripts |
 | `tests/Ason.RemoteRunner.Tests` | net9.0 | la prueba de integración se omite a menos que `ASON_REMOTE_RUNNER_URL` apunte a un runner remoto en ejecución |
-| `tests/Ason.Bridge.Tests` | net9.0 | el núcleo del puente, los adaptadores gRPC y MCP (cada host se levanta en proceso y se conduce por el cable), la costura del transporte y el endpoint de reenvío |
+| `tests/Ason.Bridge.Tests` | net9.0 | el núcleo del puente, los adaptadores gRPC/MCP/OpenAPI (cada host se levanta en proceso y se conduce por el cable), la costura del transporte, el endpoint de reenvío y las pruebas de extremo a extremo de los ejemplos de WPF (se omiten en Linux o si los ejemplos de Windows no están compilados) |
 | `tests/WpfDemoApp.UiTests` | net9.0-windows | automatización de interfaz de FlaUI — necesita una sesión interactiva de escritorio de Windows |
 
 Ejecución del subconjunto hermético sin Docker:

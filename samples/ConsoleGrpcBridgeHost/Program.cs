@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
 using Ason.Bridge.Mcp;
+using Ason.Bridge.OpenApi;
 using LibDemo;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -45,10 +46,13 @@ builder.WebHost.ConfigureKestrel(kestrel => {
 });
 builder.Services.AddAsonGrpcBridge(runtime);
 builder.Services.AddAsonMcpBridge(runtime);
+// The same contract, for generic HTTP clients and Swagger UI. Adding a transport is one line per side.
+builder.Services.AddAsonOpenApiBridge(runtime);
 
 var app = builder.Build();
 app.MapAsonGrpcBridge();
 app.MapAsonMcpBridge();
+app.MapAsonOpenApiBridge();
 
 await app.StartAsync();
 
@@ -56,6 +60,7 @@ var manifest = await runtime.GetManifestAsync();
 Console.WriteLine($"ASON application bridge listening.");
 Console.WriteLine($"  gRPC : http://localhost:{port}");
 Console.WriteLine($"  MCP  : http://localhost:{mcpPort}/mcp");
+Console.WriteLine($"  HTTP : http://localhost:{mcpPort}/ason/openapi.json");
 Console.WriteLine($"  {manifest.Api.Operators.Count} operators, {manifest.Api.MethodCount} methods, execution {manifest.Execution}");
 Console.WriteLine("Press Ctrl+C to stop.");
 

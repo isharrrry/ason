@@ -73,15 +73,17 @@ through the live instance directory when exactly one instance of its type exists
 | gRPC | `Ason.Bridge.Grpc` | `GrpcAsonBridgeService`, `GrpcAsonBridgeClient`, `GrpcAsonBridgeTransport`, `GrpcAsonBridgeEndpoint` |
 | MCP (Streamable HTTP) | `Ason.Bridge.Mcp` | `AsonBridgeMcpTools`, `McpAsonBridgeClient`, `McpAsonBridgeTransport` |
 | MCP (stdio relay) | `Ason.Bridge.McpHost` | A process that republishes an application's gRPC bridge as MCP over stdin/stdout |
+| HTTP + OpenAPI (Swagger) | `Ason.Bridge.OpenApi` | HTTP endpoints plus a document generated from the manifest, for generic HTTP clients and Swagger UI |
 | anything else | your own project | Implement the same mapping against `IAsonBridgeEndpoint` |
 
 The mature transports stay out of `Ason` on purpose: `Ason` has no gRPC, no MCP server and no ASP.NET
 reference. Adding a transport means adding a project that references `Ason.Bridge` and maps
-`IAsonBridgeEndpoint` onto it — one gRPC service, one MCP tool set, or an OpenAPI document generated from the
-manifest. Nothing in the application has to change.
+`IAsonBridgeEndpoint` onto it - one gRPC service, one MCP tool set, or the HTTP/OpenAPI adapter.
+`Ason.Bridge.OpenApi` is that exercise carried out: it was added without touching the runtime, the application
+or the other adapters. Nothing in the application has to change.
 
-`Ason.Bridge`, `Ason.Bridge.Grpc` and `Ason.Bridge.Mcp` all target `net9.0` (the core also targets `net6.0`,
-matching `Ason`).
+`Ason.Bridge`, `Ason.Bridge.Grpc`, `Ason.Bridge.Mcp` and `Ason.Bridge.OpenApi` all target `net9.0` (the core
+also targets `net6.0`, matching `Ason`). The two WPF samples target `net9.0-windows`.
 
 ### gRPC
 
@@ -118,6 +120,31 @@ which connects to the application over gRPC and serves the same tools over stdio
 Ason.Bridge.McpHost --url http://localhost:5222
 ```
 
+### HTTP + OpenAPI (Swagger)
+
+```csharp
+builder.Services.AddAsonOpenApiBridge(runtime, options => options.ApiKey = Environment.GetEnvironmentVariable("ASON_BRIDGE_KEY"));
+...
+app.MapAsonOpenApiBridge("/ason");
+```
+
+| Route | Purpose |
+|---|---|
+| `GET /ason/manifest` | The full manifest |
+| `GET /ason/instances` | Live instances and their handles |
+| `POST /ason/script` | Whole-script interface (`{ "code": "..." }`) |
+| `POST /ason/functions/invoke` | Single-function interface (`{ "operator", "method", "handle?", "arguments": [] }`) |
+| `POST /ason/functions/{operator}/{method}` | The same call as a path, so it appears in Swagger UI |
+| `GET /ason/openapi.json` | The document, generated from the manifest |
+
+The document is produced from the manifest, so it cannot drift: it lists the mapped routes, the request and
+result schemas, and the callable surface as `x-ason-operators` / `x-ason-models` extensions. A generic HTTP
+client, Swagger UI or Postman therefore sees the application's operator API without knowing anything about
+ASON. A successful call is `200`; an application-level failure is `400` with the ASON error code in the body;
+a capability that is switched off is not served at all (`404`); and with `ApiKey` set, every route requires
+that key in `ApiKeyHeader` (`401` otherwise) - which matters because an HTTP endpoint is reachable by anything
+on the machine, not just by ASON clients.
+
 ## Delegating orchestration to the agent
 
 An agent that keeps ASON's own orchestration can use the application's operators without owning any. The
@@ -132,13 +159,17 @@ var library = new OperatorsLibrary(
     Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NoOperatorCache())),
     false, Array.Empty<IMcpClient>(), Array.Empty<Assembly>());
 
-var agent = new AsonClient(chatService, new RootOperator(new object()), library);
-agent.Runner.UseTransport(() => new GrpcAsonBridgeTransport(client));
+var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
+    // The application decides where the script is isolated; this side only says how to reach it.
+    ExecutionMode = ExecutionMode.ExternalProcess,
+    TransportFactory = () => new GrpcAsonBridgeTransport(client)
+});
 ```
 
-`RunnerClient.UseTransport` is the seam that makes this possible: the transport carries the runner protocol
-(`exec` down, results up) to the application, while proxy generation, retries, validation and result handling
-stay exactly where they were. `McpAsonBridgeTransport` does the same over MCP.
+`AsonClientOptions.TransportFactory` (and `RunnerClient.UseTransport` underneath it) is the seam that makes
+this possible: the transport carries the runner protocol (`exec` down, results up) to the application, while
+proxy generation, retries, validation and result handling stay exactly where they were.
+`McpAsonBridgeTransport` does the same over MCP.
 
 The application resolves operator calls in its own process, so the transport never sees an `invoke` message.
 If one arrives anyway — a deployment pointed at an executor that is not the application — it is answered with
@@ -182,18 +213,36 @@ privileged:
 
 | Sample | Role |
 |---|---|
-| `samples/ConsoleGrpcBridgeHost` | The application side: `[Ason*]` operators from `LibDemo`, gRPC + MCP hosted, no agent |
+| `samples/WpfAppOnlyDemo` | **The application side as a real desktop app**: WPF window with `[Ason*]` operators (a view operator bound to the window, a static module, a marker-only module and the LibDemo class library) that hosts gRPC, MCP and HTTP/OpenAPI. No model, no chat. `--bridge-only --port 5222` runs it headless. |
+| `samples/WpfAgentDemo` | **The agent side as a real desktop app**: chat window, endpoint and transport selection (gRPC/MCP), the API listing fetched from the application, and a call log. It declares no `[AsonOperator]` at all. `--verify <endpoint> [--mcp]` runs a headless self-check. |
+| `samples/ConsoleGrpcBridgeHost` | The application side in its smallest form: `[Ason*]` operators from `LibDemo`, gRPC + MCP + OpenAPI, no agent |
 | `samples/ConsoleGrpcBridgeDemo` | The external request side: manifest, live instances, single-function calls, scripts, streamed logs |
 | `src/Ason.Bridge.McpHost` | The stdio relay for MCP-only agents |
 
 ```bash
+# application side (desktop, or headless for scripting)
+dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
 dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222
 
+# agent side
+dotnet run --project samples/WpfAgentDemo
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222          # gRPC self-check
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP self-check
+
+# external request side, no agent involved
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoStaticOperator.Add --args "[2,3]"
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);"
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "..." --stream
+
+# the same application over HTTP/OpenAPI
+curl -s http://localhost:5223/ason/openapi.json
+curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
 ```
+
+The WPF pair is also covered by end-to-end tests: the application sample is started headless and driven over
+gRPC and MCP (including an assertion that operator calls land on the dispatcher thread), and the agent sample
+is started in `--verify` mode to prove it owns zero operators while still calling one in the application.
 
 ## Known limits
 
