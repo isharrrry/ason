@@ -219,23 +219,76 @@ operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 
 - `invokeMcpTool` 默认关闭：它转发到**应用**所消费的 MCP 服务。
 - 每个请求都会被校验、按能力放行并返回错误码，但这一切都**不能替代网络层访问控制**。
 
-## 示例
+## 示例与运行方式
 
-| 示例 | 角色 |
-|---|---|
-| `samples/WpfAppOnlyDemo` | **应用侧的真实桌面应用**：WPF 窗口 + `[Ason*]` operator（绑定窗口的视图 operator、静态模块、仅标记模块、`LibDemo` 类库），托管 gRPC / MCP / HTTP-OpenAPI，无模型无聊天。`--bridge-only --port 5222` 可无窗口运行 |
-| `samples/WpfAgentDemo` | **Agent 侧的真实桌面应用**：聊天窗口、端点与传输（gRPC/MCP）选择、从应用拉取的 API 列表、调用日志；**一个 `[AsonOperator]` 都没有**。`--verify <endpoint> [--mcp]` 提供无界面自检 |
-| `samples/ConsoleGrpcBridgeHost` | 应用侧的最小形态：来自 `LibDemo` 的 `[Ason*]` operator，托管 gRPC + MCP + OpenAPI，无 Agent |
-| `samples/ConsoleGrpcBridgeDemo` | 外部请求侧：清单、存活实例、单函数调用、脚本、流式日志 |
-| `src/Ason.Bridge.McpHost` | 面向只会 MCP 的 Agent 的 stdio 中继 |
+哪种情形由哪个示例（或哪几个示例组合）演示 —— 从"不分离"到各种"分离"形态。带 🔑 的行需要模型密钥：
+`MY_OPEN_AI_KEY`（可选 `MY_OPEN_AI_BASE_URL`、`MY_OPEN_AI_MODEL`）；`ConsoleMcpSample` 还需要 `MY_CONTEXT7_API_KEY`。
+
+| 情形 | 应用侧 | 调用方 / Agent 侧 | 能看到什么 |
+|---|---|---|---|
+| **不分离** —— 桌面应用内嵌 Agent | `samples/WptDemoApp` | 同一进程 | 聊天面板通过进程内 operator 驱动 WPF 界面 |
+| 不分离 —— Blazor Server | `samples/BlazorAdvancedApp`（http://localhost:5240） | 同一进程 | 聊天面板驱动服务端组件 |
+| 不分离 —— 带 extractor 的 console | `samples/ConsoleExtractorSample` | 同一进程 | 文本抽取 + operator 调用都在一个 console 里 |
+| 不分离 —— API 来自 MCP 服务的 console | `samples/ConsoleMcpSample` | 同一进程 | 脚本像调用 operator 一样调用 Context7 的 MCP 工具 |
+| 不分离 —— 全新应用 | `samples/templates` | 同一进程 | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` 直接生成可跑的聊天应用 |
+| 不分离，但**脚本宿主**在远端 | `samples/WptDemoApp` + `samples/RemoteRunnerService`（http://localhost:5236） | 同一进程 | 只有执行被搬走；应用、Agent、operator 与数据仍在一起 |
+| **分离** —— 自带编排的 .NET Agent | `samples/WpfAppOnlyDemo` 或 `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`，或任何用 `TransportFactory` 的 `AsonClient` | Agent 拉取应用的 operator API 并驱动它；Agent 侧一个 operator 都没有 |
+| 分离 —— 用 HTTP MCP 的 Agent | 任一应用侧 | 任何 MCP 客户端（Claude Desktop、IDE）指向 `/mcp` | 应用表现为五个 MCP 工具 |
+| 分离 —— 只能启动 stdio MCP 的 Agent | 任一应用侧 | `src/Ason.Bridge.McpHost`（`--transport grpc` 或 `--transport mcp`） | 同样的工具，走 Agent 的 stdin/stdout |
+| 分离 —— **完全没有 Agent** | 任一应用侧 | `samples/ConsoleGrpcBridgeDemo`、`curl`、Swagger UI/Postman | 程序或 shell 驱动应用：一次函数调用，或一段脚本 |
 
 ```bash
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222
+# --- 不分离：应用与 Agent 同进程（🔑 需要模型密钥） ---
+dotnet run --project samples/WptDemoApp/WpfSampleApp.csproj -f net9.0-windows
+dotnet run --project samples/BlazorAdvancedApp                       # http://localhost:5240
+dotnet run --project samples/ConsoleExtractorSample
+dotnet run --project samples/ConsoleMcpSample                        # 另需 MY_CONTEXT7_API_KEY
+dotnet new install samples/templates && dotnet new ason.console   # 已安装过旧版本时加 --force 刷新
 
+# 不分离但脚本宿主在远端：先起运行器，再让应用使用它
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+#   在 samples/WptDemoApp/ViewModels/ChatViewModel.cs 取消注释：
+#     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- 分离：应用侧（无模型、无需密钥） ---
+dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
+#   gRPC   http://localhost:5222
+#   MCP    http://localhost:5223/mcp
+#   HTTP   http://localhost:5223/ason/openapi.json
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222    # 同样的端点，operator 来自 LibDemo
+
+# --- 分离：Agent 侧 ---
+dotnet run --project samples/WpfAgentDemo                            # 聊天窗口；仅聊天需要密钥
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # gRPC 自检，无需密钥
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP 自检，无需密钥
+Ason.Bridge.McpHost --url http://localhost:5222                      # 供 Claude Desktop/Code 使用的 stdio MCP 中继
+
+# --- 分离：不要 Agent，只要一个程序 ---
+#   对着上面的 console 宿主（它的 operator 来自 LibDemo）
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoStaticOperator.Add --args "[2,3]"
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);"
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "..." --stream
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
+curl -s http://localhost:5223/ason/openapi.json
+curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add \
+     -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
+
+#   对着上面的 WPF 应用（它自己的 operator）
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/GetDiagnostics \
+     -H "Content-Type: application/json" -d '{}'
+```
+
+分离形态的自动化证明就是桥测试套件：它无窗口启动真实的 WPF 应用、用 gRPC **和** MCP 各驱动一遍、以 `--verify` 启动真实
+的 Agent 示例、把中继作为真实 stdio MCP 服务启动，并断言返回值 —— **全程不需要任何模型密钥**：
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+```
+
+不分离的演示保留它自己的 UI 级证明，需要交互式 Windows 桌面：
+
+```bash
+dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release   # 需要时可设 WPF_DEMO_TFM
 ```
 
 ## 已知限制

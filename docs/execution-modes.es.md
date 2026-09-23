@@ -108,6 +108,10 @@ usarla sin preocuparse por dónde se ejecutarían los scripts.
 | Un solo servicio ejecutando scripts para muchos clientes | un host de ejecución remota dedicado | un único lugar para versionar el ejecutor, aplicar políticas y recopilar logs |
 | Una aplicación y un proceso de agente separado (incluido un agente que solo habla MCP) | publicar los operadores de la aplicación con `Ason.Bridge` y dejar que el agente los conduzca por gRPC, MCP o HTTP/OpenAPI | los operadores, los datos y la UI permanecen en la aplicación mientras el modelo y la orquestación permanecen en el agente — consulta [separación aplicación / agente](app-agent-separation.es.md) |
 
+Cada fila de la tabla anterior —tanto las formas en un solo proceso como el despliegue separado— tiene un
+ejemplo ejecutable con su comando exacto en
+[ejemplos y cómo ejecutarlos](app-agent-separation.es.md#ejemplos-y-cómo-ejecutarlos).
+
 ## Cómo elegir entre ellos y cuánto cuesta cada opción
 
 <!-- i18n: localize-labels - etiquetas localizadas, estructura intacta -->

@@ -148,15 +148,82 @@ endpoints. Lo único que cambia es quién compone las llamadas — un modelo, o 
 - Habilitar solo las capacidades necesarias; el manifiesto dice la verdad sobre cuáles están activas.
 - `invokeMcpTool` está desactivado por defecto.
 
-## Ejemplos
+## Ejemplos y cómo ejecutarlos
 
-| Ejemplo | Rol |
-|---|---|
-| `samples/WpfAppOnlyDemo` | **El lado aplicación como aplicación de escritorio real**: una ventana WPF con operadores `[Ason*]` que publica gRPC, MCP y HTTP/OpenAPI. Sin modelo ni chat. `--bridge-only --port 5222` la ejecuta sin ventana |
-| `samples/WpfAgentDemo` | **El lado agente como aplicación de escritorio real**: ventana de chat, selección de endpoint y transporte (gRPC/MCP), la lista de API leída de la aplicación y un registro de llamadas. No declara ningún `[AsonOperator]`. `--verify <endpoint> [--mcp]` ejecuta una autocomprobación sin interfaz |
-| `samples/ConsoleGrpcBridgeHost` | Lado aplicación en su forma mínima: operadores `[Ason*]` de `LibDemo`, gRPC + MCP + OpenAPI, sin agente |
-| `samples/ConsoleGrpcBridgeDemo` | Lado solicitante externo: manifiesto, instancias, llamadas a funciones, scripts, logs |
-| `src/Ason.Bridge.McpHost` | Relé stdio para agentes que solo hablan MCP |
+Qué ejemplo (o combinación de ejemplos) muestra cada forma — desde la disposición en un solo proceso hasta cada
+manera de separarla. Las filas con 🔑 necesitan una clave de modelo: `MY_OPEN_AI_KEY` (y opcionalmente
+`MY_OPEN_AI_BASE_URL`, `MY_OPEN_AI_MODEL`); `ConsoleMcpSample` además necesita `MY_CONTEXT7_API_KEY`.
+
+| Forma | Lado aplicación | Lado llamador / agente | Qué se ve |
+|---|---|---|---|
+| **Sin separar** — aplicación de escritorio con el agente dentro | `samples/WptDemoApp` | el mismo proceso | el panel de chat conduce la UI de WPF mediante operadores en proceso |
+| Sin separar — Blazor Server | `samples/BlazorAdvancedApp` (http://localhost:5240) | el mismo proceso | el panel de chat conduce componentes del servidor |
+| Sin separar — consola con el agente extractor | `samples/ConsoleExtractorSample` | el mismo proceso | extracción de texto y llamadas a operadores en una consola |
+| Sin separar — consola cuya API viene de un servidor MCP | `samples/ConsoleMcpSample` | el mismo proceso | el script llama a las herramientas MCP de Context7 como si fueran operadores |
+| Sin separar — una aplicación nueva | `samples/templates` | el mismo proceso | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` generan una app de chat funcional |
+| Sin separar, pero con el **host de scripts** en remoto | `samples/WptDemoApp` + `samples/RemoteRunnerService` (http://localhost:5236) | el mismo proceso | solo se mueve la ejecución; app, agente, operadores y datos siguen juntos |
+| **Separado** — agente .NET con su propia orquestación | `samples/WpfAppOnlyDemo` o `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`, o cualquier `AsonClient` con `TransportFactory` | el agente lee la API de operadores de la aplicación y la conduce; en el lado del agente no existe ningún operador |
+| Separado — agente que habla MCP por HTTP | cualquiera de los lados aplicación | cualquier cliente MCP (Claude Desktop, un IDE) apuntando a `/mcp` | la aplicación aparece como cinco herramientas MCP |
+| Separado — agente que solo puede arrancar un servidor MCP por stdio | cualquiera de los lados aplicación | `src/Ason.Bridge.McpHost` (`--transport grpc` o `--transport mcp`) | las mismas herramientas por el stdin/stdout del agente |
+| Separado — **sin agente alguno** | cualquiera de los lados aplicación | `samples/ConsoleGrpcBridgeDemo`, `curl`, Swagger UI/Postman | un programa o un shell conduce la aplicación: una llamada a función o un script |
+
+```bash
+# --- sin separar: aplicación y agente en un solo proceso (🔑 requiere la clave del modelo) ---
+dotnet run --project samples/WptDemoApp/WpfSampleApp.csproj -f net9.0-windows
+dotnet run --project samples/BlazorAdvancedApp                       # http://localhost:5240
+dotnet run --project samples/ConsoleExtractorSample
+dotnet run --project samples/ConsoleMcpSample                        # también requiere MY_CONTEXT7_API_KEY
+dotnet new install samples/templates && dotnet new ason.console   # añade --force para refrescar una instalación previa
+
+# sin separar pero con el host de scripts remoto: arranca el runner y deja que la app lo use
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+#   en samples/WptDemoApp/ViewModels/ChatViewModel.cs descomenta:
+#     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- separado: el lado aplicación (sin modelo, sin clave) ---
+dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
+#   gRPC   http://localhost:5222
+#   MCP    http://localhost:5223/mcp
+#   HTTP   http://localhost:5223/ason/openapi.json
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222    # los mismos endpoints, operadores de LibDemo
+
+# --- separado: un lado agente ---
+dotnet run --project samples/WpfAgentDemo                            # ventana de chat; la clave solo hace falta para el chat
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # autocomprobación gRPC, sin clave
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # autocomprobación MCP, sin clave
+Ason.Bridge.McpHost --url http://localhost:5222                      # relé MCP por stdio para Claude Desktop/Code
+
+# --- separado: sin agente, solo un programa ---
+#   contra el host de consola de arriba (sus operadores vienen de LibDemo)
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
+curl -s http://localhost:5223/ason/openapi.json
+curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add \
+     -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
+
+#   contra la aplicación WPF de arriba (sus propios operadores)
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/GetDiagnostics \
+     -H "Content-Type: application/json" -d '{}'
+```
+
+La prueba automatizada de las filas separadas es la suite del puente: arranca la aplicación WPF real sin ventana,
+la conduce por gRPC **y** MCP, arranca el ejemplo de agente real en modo `--verify`, arranca el relé como servidor
+MCP stdio real y verifica los valores devueltos — sin ninguna clave de modelo:
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+```
+
+La demo de un solo proceso conserva su propia prueba a nivel de interfaz, que necesita un escritorio Windows
+interactivo:
+
+```bash
+dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release   # ajusta WPF_DEMO_TFM si hace falta
+```
+
+### Por qué existe el relé
 
 El relé existe por lo que el MCP stdio *es*: el contrato dice que el cliente arranca el servidor y habla por su
 stdin/stdout. Una aplicación de escritorio en ejecución no puede ser ese hijo, así que algo debe poseer la
@@ -165,11 +232,6 @@ despliegue. No es un requisito del diseño: un agente que habla MCP por HTTP se 
 aplicación, y una aplicación cuya vida *es* la sesión del agente puede servir stdio MCP ella misma con
 `AddAsonMcpStdioBridge` (que es justo lo que usa el relé). El canal hacia la aplicación también es elegible:
 `--transport grpc` (por defecto) o `--transport mcp`.
-
-```bash
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoStaticOperator.Add --args "[2,3]"
-```
 
 ## Límites conocidos
 

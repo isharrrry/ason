@@ -270,40 +270,79 @@ privileged:
 - Every request is validated, gated and answered with a code, but nothing here replaces network-level access
   control.
 
-## Samples
+## Samples and how to run them
 
-| Sample | Role |
-|---|---|
-| `samples/WpfAppOnlyDemo` | **The application side as a real desktop app**: WPF window with `[Ason*]` operators (a view operator bound to the window, a static module, a marker-only module and the LibDemo class library) that hosts gRPC, MCP and HTTP/OpenAPI. No model, no chat. `--bridge-only --port 5222` runs it headless. |
-| `samples/WpfAgentDemo` | **The agent side as a real desktop app**: chat window, endpoint and transport selection (gRPC/MCP), the API listing fetched from the application, and a call log. It declares no `[AsonOperator]` at all. `--verify <endpoint> [--mcp]` runs a headless self-check. |
-| `samples/ConsoleGrpcBridgeHost` | The application side in its smallest form: `[Ason*]` operators from `LibDemo`, gRPC + MCP + OpenAPI, no agent |
-| `samples/ConsoleGrpcBridgeDemo` | The external request side: manifest, live instances, single-function calls, scripts, streamed logs |
-| `src/Ason.Bridge.McpHost` | The stdio relay for MCP-only agents |
+Which sample (or combination of samples) shows which shape — from the single-process arrangement to each way
+of splitting it. Rows marked 🔑 need a model key: `MY_OPEN_AI_KEY` (plus optionally `MY_OPEN_AI_BASE_URL`,
+`MY_OPEN_AI_MODEL`); `ConsoleMcpSample` also needs `MY_CONTEXT7_API_KEY`.
+
+| Shape | Application side | Caller / agent side | What you see |
+|---|---|---|---|
+| **Not separated** — desktop app with the agent inside | `samples/WptDemoApp` | the same process | the chat panel drives the WPF UI through in-process operators |
+| Not separated — Blazor Server | `samples/BlazorAdvancedApp` (http://localhost:5240) | the same process | the chat panel drives server-side components |
+| Not separated — console with the extractor agent | `samples/ConsoleExtractorSample` | the same process | text extraction plus operator calls in one console app |
+| Not separated — console whose API comes from an MCP server | `samples/ConsoleMcpSample` | the same process | the script calls Context7 MCP tools as if they were operators |
+| Not separated — a brand-new app | `samples/templates` | the same process | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` scaffold a working chat app |
+| Not separated, but the **script host** is remote | `samples/WptDemoApp` + `samples/RemoteRunnerService` (http://localhost:5236) | the same process | only execution moves; app, agent, operators and data stay together |
+| **Separated** — .NET agent with its own orchestration | `samples/WpfAppOnlyDemo` or `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`, or any `AsonClient` using `TransportFactory` | the agent lists the application's operator API and calls it; no operator exists on the agent side |
+| Separated — an agent that speaks MCP over HTTP | either application side | any MCP client (Claude Desktop, an IDE) pointed at `/mcp` | the application appears as five MCP tools |
+| Separated — an agent that can only start a stdio MCP server | either application side | `src/Ason.Bridge.McpHost` (`--transport grpc` or `--transport mcp`) | the same tools over the agent's stdin/stdout |
+| Separated — **no agent at all** | either application side | `samples/ConsoleGrpcBridgeDemo`, `curl`, Swagger UI/Postman | a program or a shell drives the application: one function call, or a script |
 
 ```bash
-# application side (desktop, or headless for scripting)
+# --- not separated: application and agent in one process (🔑 requires the model key) ---
+dotnet run --project samples/WptDemoApp/WpfSampleApp.csproj -f net9.0-windows
+dotnet run --project samples/BlazorAdvancedApp                       # http://localhost:5240
+dotnet run --project samples/ConsoleExtractorSample
+dotnet run --project samples/ConsoleMcpSample                        # also needs MY_CONTEXT7_API_KEY
+dotnet new install samples/templates && dotnet new ason.console   # add --force to refresh an older install
+
+# not separated, script host remote: start the runner, then let the app use it
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+#   in samples/WptDemoApp/ViewModels/ChatViewModel.cs uncomment:
+#     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- separated: the application side (no model, no key) ---
 dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222
-dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222
+#   gRPC   http://localhost:5222
+#   MCP    http://localhost:5223/mcp
+#   HTTP   http://localhost:5223/ason/openapi.json
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222    # same endpoints, LibDemo operators
 
-# agent side
-dotnet run --project samples/WpfAgentDemo
-dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222          # gRPC self-check
-dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP self-check
+# --- separated: an agent side ---
+dotnet run --project samples/WpfAgentDemo                            # chat window; needs the key only for chat
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222          # gRPC self-check, no key
+dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP self-check, no key
+Ason.Bridge.McpHost --url http://localhost:5222                      # stdio MCP relay for Claude Desktop/Code
 
-# external request side, no agent involved
+# --- separated: no agent, just a program ---
+#   against the console host above (its operators come from LibDemo)
 dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoStaticOperator.Add --args "[2,3]"
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);"
-dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "..." --stream
-
-# the same application over HTTP/OpenAPI
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func LibDemoOperator.GetProducts
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return LibDemoStaticOperator.Add(40, 2);" --stream
 curl -s http://localhost:5223/ason/openapi.json
-curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
+curl -s -X POST http://localhost:5223/ason/functions/LibDemoStaticOperator/Add \
+     -H "Content-Type: application/json" -d '{"arguments":[40,2]}'
+
+#   against the WPF application above (its own operators)
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/GetDiagnostics \
+     -H "Content-Type: application/json" -d '{}'
 ```
 
-The WPF pair is also covered by end-to-end tests: the application sample is started headless and driven over
-gRPC and MCP (including an assertion that operator calls land on the dispatcher thread), and the agent sample
-is started in `--verify` mode to prove it owns zero operators while still calling one in the application.
+The automated proof of the separated rows is the bridge suite: it starts the real WPF application headless, drives
+it over gRPC **and** MCP, starts the real agent sample in `--verify` mode, starts the relay as a real stdio MCP
+server, and asserts the returned values — no model key involved anywhere:
+
+```bash
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+```
+
+The single-process demo keeps its own UI-level proof, which needs an interactive Windows desktop:
+
+```bash
+dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release   # set WPF_DEMO_TFM if needed
+```
 
 ## Known limits
 

@@ -27,3 +27,4 @@
 | 构建并测试本仓库 | [贡献指南](contributing.zh-CN.md) |
 | 为我的应用选择执行模式与部署方式 | [执行模式](execution-modes.zh-CN.md) |
 | 让测试、CI 任务或另一个程序驱动正在运行的应用（全程不含模型） | [应用 / Agent 分离](app-agent-separation.zh-CN.md#不用-agent外部程序直接驱动应用) |
+| 把每一种形态（不分离或分离）都跑起来看效果 | [示例与运行方式](app-agent-separation.zh-CN.md#示例与运行方式) |

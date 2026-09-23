@@ -327,5 +327,6 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `docs: document the transport option, the bridge topology and the coverage command across all three languages` | docs audit: configuration, architecture, execution modes, contributing, README |
 | `docs: draw the application/agent flow diagrams for every deployment shape` | architecture: four-case ASCII flows (en/zh/es) |
 | `docs: document non-agent callers driving an application over gRPC, MCP or HTTP` | the guide's *Using the bridge without an agent* section, a fifth flow diagram, and the index/README pointers |
+| `docs: map every shape (single-process and split) to its sample and run command` | the guide's *Samples and how to run them* matrix; every command in it was executed against the built samples, including the HTTP/curl and template-install paths |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

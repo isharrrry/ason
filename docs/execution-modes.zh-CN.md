@@ -100,6 +100,8 @@ RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
 | 一个服务为众多客户端运行脚本 | 专用的远程运行器主机 | 统一在一处为执行器定版本、实施策略并收集日志 |
 | 应用与独立的 Agent 进程（包括只会 MCP 的 Agent） | 用 `Ason.Bridge` 发布应用的 operator，让 Agent 通过 gRPC、MCP 或 HTTP/OpenAPI 驱动它 | operator、数据与 UI 留在应用侧，模型与编排留在 Agent 侧 —— 参见[应用 / Agent 分离](app-agent-separation.zh-CN.md) |
 
+上表每一行的可运行示例（不分离的各种形态与分离部署）都附有确切命令，见[示例与运行方式](app-agent-separation.zh-CN.md#示例与运行方式)。
+
 ## 如何在两者之间选择以及每种选择的代价
 
 <!-- i18n: localize-labels - 标签本地化，保留结构（箭头、缩进） -->

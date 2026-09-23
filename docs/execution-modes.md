@@ -108,6 +108,9 @@ where scripts would run.
 | One service running scripts for many clients | a dedicated remote runner host | a single place to version the executor, enforce policy and collect logs |
 | An application and a separate agent process (including an MCP-only agent) | publish the application's operators with `Ason.Bridge` and let the agent drive them over gRPC, MCP or HTTP/OpenAPI | the operators, the data and the UI stay in the application while the model and the orchestration stay in the agent — see [application / agent separation](app-agent-separation.md) |
 
+A runnable example of every row above — the single-process shapes and the split deployment alike — is listed
+with its exact command in [samples and how to run them](app-agent-separation.md#samples-and-how-to-run-them).
+
 ## Choosing between them, and what each choice costs
 
 <!-- i18n: localize-labels - translate the labels, keep the structure (arrows, indentation) -->
