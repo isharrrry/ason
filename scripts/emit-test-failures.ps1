@@ -56,7 +56,7 @@ foreach ($root in $ResultsDirectory) {
 
 if ($files.Count -eq 0) {
     Write-Annotation -Title 'test results missing' -Message (
-        "No TRX file under: {0}. A build failure produces no test results, so read the step log for the compiler error." -f ($ResultsDirectory -join ', '))
+        "No TRX file under: {0} - the step that failed produced no test results, so no test ever ran (a build error, or a command the step's shell rejected). The failing step's log has the reason." -f ($ResultsDirectory -join ', '))
     exit 0
 }
 

@@ -138,17 +138,16 @@ jobs:
           # which would need a .NET 10 SDK that is still in preview.
           dotnet build samples/WptDemoApp/WpfSampleApp.csproj --configuration Release --framework net9.0-windows
 
+      # One command per line, no backslash continuation: the default shell of this job is pwsh, where a
+      # trailing backslash is a literal argument rather than a line continuation. The Linux job runs bash,
+      # where it is one - but a workflow that only holds together under one shell is a trap for the next edit.
       - name: Bridge tests (includes the WPF application and agent end-to-end tests)
-        run: |
-          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release \
-            --logger "trx;LogFileName=ason-bridge-tests-windows.trx" --results-directory TestResults
+        run: dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --logger "trx;LogFileName=ason-bridge-tests-windows.trx" --results-directory TestResults
 
       # The library's own hermetic suite also runs here, so a Windows-only failure (file paths, the external
       # executor's process handling, a culture-dependent format) is caught on the platform most users are on.
       - name: Library unit tests (Windows)
-        run: |
-          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" \
-            --logger "trx;LogFileName=ason-tests-windows.trx" --results-directory TestResults
+        run: dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" --logger "trx;LogFileName=ason-tests-windows.trx" --results-directory TestResults
 
       # The net10.0 leg of the smoke tests stays out until that SDK is GA: the project targets it, but a
       # preview SDK on CI would make unrelated pull requests red for reasons that are not this repository's.
