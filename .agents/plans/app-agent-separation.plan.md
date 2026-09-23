@@ -657,3 +657,13 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | 可匿名读取的失败（`708712b`） | 新增 `scripts/emit-test-failures.ps1`：TRX → `::error title=<测试名>::<断言 + 行号>`，`%` 与换行按 GitHub 注解规则转义，永不使作业失败，纯 ASCII（PS 5.1 亦可解析）；两个作业的每个 `dotnet test` 均写 TRX，末尾各加一个 `if: failure()` + `shell: pwsh` 的注解步骤。三语 `docs/contributing.*` 记录了该机制与用途。 |
 | 本机验证 | 红样本 TRX → 输出 `::error title=Ason.Tests.Client.AnswerLanguageTests.A_well_formed_but_unregistered_language_is_passed_through::Assert.Contains() Failure: Sub-string not found ... Not found: "in zz" ... line 57`（退码 0）；绿样本 TRX → `No failed tests in the TRX files.`（退码 0）；`ci.yml` 经 PyYAML 解析通过，两个作业的注解步骤都是最后一步且带 `if: failure()`。 |
 | 下一步（待观察） | 推送后 Ubuntu 作业将**首次**执行桥测试：WPF 端到端按 `OperatingSystem.IsWindows()` 跳过，console 与 remote-runner 端到端用"定位已构建产物 → `dotnet exec`"启动（理论跨平台，**尚无 Linux 实测**）；若红，注解会直接给出测试名与断言。 |
+
+### 10.9 第二轮（run 7，`a58a28a`）：注解机制生效，两个作业各暴露一个问题
+
+| 项 | 内容（含核实结论） |
+|---|---|
+| 机制验证（这是本轮的主要收获） | 两个作业的注解步骤都 `success`：Ubuntu 侧匿名读到了失败测试名 + 断言 + 行号（`AnswerLanguageTests.cs:line 90`）；Windows 侧在"没有 TRX"时给出 `test results missing` 注解。**"失败可匿名读取"已名副其实**，且注解步骤不会因为自己失败而改变作业结论。 |
+| ① Ubuntu：`Unit tests` 仍红，但换成了**另一个**平台相关断言 | `A_malformed_language_fails_at_client_construction_not_later`：`AnswerLanguage = "12345"` 在 Linux/ICU 下**不抛异常**（NLS 拒绝数字型语言子标签，ICU 收下并把标签本身当文化名）→ `Assert.Throws<ArgumentException>` 失败。**同时这也证明上一处修复生效**：`A_well_formed_but_unregistered_language_is_passed_through` 未出现在失败列表里，即 `zz` 在 Linux 上照常透传。 |
+| ① 修复（按你选的最小方案 B） | 输入改为两个运行时都拒的 `en/US`（含不可能出现在语言标签里的字符；同文件上一条用例已证明它在 Linux 上也抛）。库侧 `AgentPrompts.BuildLanguageDirective` 的 `<remarks>` 如实记录该平台差异（**纯注释、零行为改动**）。验证：默认 **105/105**、强制 NLS **105/105**、`AnswerLanguageTests` **15/15**。 |
+| ② Windows：`Bridge tests` 步骤 **0 秒**失败 = 上一轮我自己引入的回归 | `windows-samples` 作业默认 shell 是 **pwsh**，行尾反斜杠**不是续行**：`dotnet test … \` + 次行 `--logger …` → 解析期 `Missing expression after unary operator '--'`、退码 1（run 3 同命令单行时 35 秒通过；本机用同样两行复现）。已把两个 Windows 测试步骤改为一命令一行，并把"没有 TRX"的注解文案从"构建失败"改为"没有任何测试跑过"（更如实）。提交 `ca6c128`。 |
+| ③ 仍未验证 | Ubuntu 上桥测试**依然一次都没跑过**（两轮都停在 `Unit tests`）。若这轮后 `Unit tests` 转绿，桥测试将首次执行；已知的下一步风险点是 console 样例 `--execution external` 的进程级 E2E（`ConsoleBridgeAppSample.csproj` 的 `CopyAsonExternalExecutorHostFiles` 用反斜杠 `Include`，Linux 上是否真拷到子执行器**未实测**）与 remote-runner E2E —— 若红，注解会直接点名。 |
