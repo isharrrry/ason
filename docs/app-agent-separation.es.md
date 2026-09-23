@@ -13,7 +13,9 @@ en ambos lados.
 - El **agente** contiene el modelo y la orquestación. No posee operadores: pregunta a la aplicación qué puede
   llamar y le pide que ejecute cosas.
 - El **puente** es la costura entre ambos: describe la API de operadores, reenvía la ejecución y es el único
-  componente que conoce un transporte (gRPC, MCP, ...).
+  componente que conoce un transporte (gRPC, MCP, ...). Las cuatro formas de despliegue — un agente .NET, MCP por
+  HTTP, el relé por stdio y un cliente HTTP genérico — están dibujadas como diagramas de flujo en
+  [arquitectura](architecture.es.md), en la sección *Separación aplicación / agente (el puente)*.
 
 ## El manifiesto es el contrato
 

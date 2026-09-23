@@ -83,12 +83,65 @@ operator 调用始终回到 [1]：脚本调用某个 operator，该调用跨越�
 
 [应用 / Agent 分离](app-agent-separation.zh-CN.md)描述了本文客户端/宿主划分之外的第二种拓扑：operator 留在应用侧，
 而模型与编排位于独立的 Agent 进程。桥（`Ason.Bridge` + 每种传输一个适配器）把 operator API 以清单形式发布出去，
-并通过 gRPC、MCP 或 HTTP/OpenAPI 转发执行，因此边界从一个变成两个：
+并通过 gRPC、MCP 或 HTTP/OpenAPI 转发执行。
 
-| 边界 | 协议 | 跨越什么 |
-|---|---|---|
-| Agent ↔ 应用 | gRPC、MCP 或 HTTP/OpenAPI，承载清单、`exec` 请求与函数调用 | 生成的脚本文本、结果，以及单函数调用的参数与返回值 |
-| 应用 ↔ 它自己的执行器（可选） | 当应用运行 `Ason.ExternalExecutor` 时，与边界 A 相同的 stdio 协议 | 仅脚本文本 |
+<!-- i18n: localize-labels - 标签本地化，保留结构（箭头、缩进） -->
+
+```
+情形 1 —— 保留 ASON 自身编排的 .NET Agent
+
+[1] Agent 主机     模型、提示词、编排；AsonClient，一个 operator 都没有
+      |
+      |  边界 D：gRPC / MCP / HTTP-OpenAPI，承载清单、"exec" 与函数调用
+      |
+      +--> [2] 应用主机   operator、数据、UI；Ason.Bridge 运行时 + 每种传输一个适配器
+                |
+                |  边界 A'：与边界 A 完全相同的 stdio 协议，由应用发起
+                |
+                +--> [3] 应用侧执行器       ExternalProcess / Docker
+                         应用的 Ason.ExternalExecutor 子进程
+
+情形 2 —— 直接用 HTTP MCP 的 Agent（无中继、无串联）
+
+[1] MCP Agent      Claude Desktop、IDE、任意 HTTP MCP 客户端
+      |
+      |  Streamable HTTP：ason_get_manifest、ason_execute_script、ason_invoke_function ……
+      v
+[2] 应用主机   Ason.Bridge.Mcp
+
+情形 3 —— 只能启动 stdio MCP 服务的 Agent
+
+[1] 只会 stdio 的 MCP Agent      它把中继作为自己的 MCP 服务启动
+      |
+      |  stdio，MCP 协议
+      v
+[3] 中继进程   Ason.Bridge.McpHost —— 自身不含任何 operator
+      |
+      |  边界 E：gRPC（--transport grpc）或 MCP（--transport mcp）
+      v
+[2] 应用主机
+
+情形 4 —— 通用 HTTP 客户端
+
+[1] HTTP 客户端      curl、Postman、Swagger UI
+      |
+      |  GET /ason/manifest、GET /ason/openapi.json、
+      |  POST /ason/script、POST /ason/functions/{operator}/{method}
+      v
+[2] 应用主机   Ason.Bridge.OpenApi      可选：共享密钥头
+
+无论哪种情形，**跨越边界的都只有生成的脚本文本**，operator 调用不外传：它们在 [2] 内部解析，真实方法与数据都在那里。
+而脚本本身在哪里求值（应用进程内、应用自带的 Ason.ExternalExecutor、容器，或远程运行器）由应用决定。
+```
+
+| 边界 | 协议 | 方向 | 由谁掌控 |
+|---|---|---|---|
+| D：Agent ↔ 应用 | gRPC、MCP 或 HTTP/OpenAPI，承载清单、`exec` 请求与函数调用 | 双向（脚本与参数下行、结果上行） | 应用（它托管这些端点）；Agent 只是客户端 |
+| E：中继 ↔ 应用 | D 的传输之一，由 `--transport` 选择 | 双向 | 应用，与 D 相同；中继借用它 |
+| A'：应用 ↔ 它自己的执行器（可选） | 与上文边界 A 完全相同的 stdio 协议 | 双向 | 应用（`ScriptRunnerProcessHost`） |
+
+只有在情形 3 才会出现两跳，且原因在于 stdio MCP 的定义是"客户端启动服务进程"：正在运行的应用无法充当这个子进程，
+因此由中继持有管道，并需要一条通往应用的通道。
 
 凭据规则并未改变，而是**随 operator 一起移动**：模型密钥留在模型所在处（Agent），operator 数据留在 operator 所在处
 （应用）。真正改变的是：执行面从此可经网络到达，因此桥端点是特权端点 —— 处理方式见该指南的安全章节。

@@ -12,7 +12,9 @@ script orchestration. The **bridge** splits that in two while keeping the runtim
 - The **agent** holds the model and the orchestration. It owns no operators: it asks the application what it
   can call and asks it to run things.
 - The **bridge** is the seam between them. It describes the application's operator API, forwards execution,
-  and is the only component that knows a transport (gRPC, MCP, ...) exists.
+  and is the only component that knows a transport (gRPC, MCP, ...) exists. The four deployment shapes — a .NET
+  agent, MCP over HTTP, the stdio relay and a generic HTTP client — are drawn as flow diagrams in
+  [architecture](architecture.md), under *Application / agent split*.
 
 ```
         ┌──────────────────────── application process ────────────────────────┐

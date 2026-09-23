@@ -94,16 +94,69 @@ Practical consequences:
 [Application / agent separation](app-agent-separation.md) describes a second topology this document's
 client/host split does not cover: the operators stay in an application, while the model and the orchestration
 live in a separate agent process. The bridge (`Ason.Bridge` plus one adapter per transport) publishes the
-operator API as a manifest and forwards execution over gRPC, MCP or HTTP/OpenAPI, so there are two boundaries
-instead of one:
+operator API as a manifest and forwards execution over gRPC, MCP or HTTP/OpenAPI.
 
-| Boundary | Protocol | What crosses it |
-|---|---|---|
-| agent ↔ application | gRPC, MCP or HTTP/OpenAPI, carrying the manifest, `exec` requests and function calls | the generated script text, the results, and the arguments/results of single-function calls |
-| application ↔ its own executor (optional) | the same stdio protocol as boundary A, when the application runs an `Ason.ExternalExecutor` | the script text only |
+<!-- i18n: localize-labels - translate the labels, keep the structure (numbering, arrows, indentation) -->
 
-The credential rule does not change, it moves with the operators: the model key stays where the model is (the
-agent) and operator data stays where the operators are (the application). What *does* change is that the
+```
+Case 1 - a .NET agent that keeps ASON's own orchestration
+
+[1] Agent host      model, prompts, orchestration; AsonClient, no operators at all
+      |
+      |  boundary D: gRPC / MCP / HTTP-OpenAPI carrying the manifest, "exec" and function calls
+      |
+      +--> [2] Application host   operators, data, UI; Ason.Bridge runtime + one adapter per transport
+                |
+                |  boundary A': the identical stdio protocol, initiated by the application
+                |
+                +--> [3] Application-side executor       ExternalProcess / Docker
+                         Ason.ExternalExecutor child process of the application
+
+Case 2 - an agent that speaks MCP over HTTP (no relay, no chaining)
+
+[1] MCP agent      Claude Desktop, an IDE, any HTTP MCP client
+      |
+      |  Streamable HTTP: ason_get_manifest, ason_execute_script, ason_invoke_function, ...
+      v
+[2] Application host   Ason.Bridge.Mcp
+
+Case 3 - an agent that can only start a stdio MCP server
+
+[1] stdio-only MCP agent      it started the relay as its MCP server
+      |
+      |  stdio, MCP protocol
+      v
+[3] Relay process   Ason.Bridge.McpHost - owns no operators of its own
+      |
+      |  boundary E: gRPC (--transport grpc) or MCP (--transport mcp)
+      v
+[2] Application host
+
+Case 4 - a generic HTTP client
+
+[1] HTTP client      curl, Postman, Swagger UI
+      |
+      |  GET /ason/manifest, GET /ason/openapi.json,
+      |  POST /ason/script, POST /ason/functions/{operator}/{method}
+      v
+[2] Application host   Ason.Bridge.OpenApi      optional: shared key header
+
+In every case the generated script text crosses the boundary, and operator calls do not: they are resolved
+inside [2], where the real methods and the data are. Where the script itself is evaluated (in the application
+process, in its own Ason.ExternalExecutor, in a container or on a remote runner) is the application's decision.
+```
+
+| Boundary | Protocol | Direction | Owned by |
+|---|---|---|---|
+| D: agent ↔ application | gRPC, MCP or HTTP/OpenAPI, carrying the manifest, `exec` requests and function calls | both ways (script and arguments down, results up) | the application, which hosts the endpoints; the agent is only a client |
+| E: relay ↔ application | one of D's transports, selected with `--transport` | both ways | the application, exactly as for D; the relay borrows it |
+| A': application ↔ its own executor (optional) | the identical stdio protocol of boundary A above | both ways | the application (`ScriptRunnerProcessHost`) |
+
+Two hops appear in case 3 only, and only because stdio MCP means "the client spawns the server": a running
+application cannot be that child, so the relay owns the pipe and needs one channel back to the application.
+
+For credentials the rule does not change, it moves with the operators: the model key stays where the model is
+(the agent) and operator data stays where the operators are (the application). What *does* change is that the
 execution surface is now reachable over the network, so bridge endpoints are privileged — that guide's
 security section covers what to do about it.
 

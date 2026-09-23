@@ -115,18 +115,73 @@ Consecuencias prácticas:
 [Separación aplicación / agente](app-agent-separation.es.md) describe una segunda topología que la división
 cliente/host de este documento no cubre: los operadores permanecen en una aplicación, mientras el modelo y la
 orquestación viven en un proceso de agente aparte. El puente (`Ason.Bridge` más un adaptador por transporte)
-publica la API de operadores como manifiesto y reenvía la ejecución por gRPC, MCP o HTTP/OpenAPI, de modo que
-hay dos fronteras en lugar de una:
+publica la API de operadores como manifiesto y reenvía la ejecución por gRPC, MCP o HTTP/OpenAPI.
 
-| Frontera | Protocolo | Qué la cruza |
-|---|---|---|
-| agente ↔ aplicación | gRPC, MCP o HTTP/OpenAPI, con el manifiesto, las peticiones `exec` y las llamadas a funciones | el texto del script generado, los resultados y los argumentos/resultados de las llamadas a función única |
-| aplicación ↔ su propio ejecutor (opcional) | el mismo protocolo stdio que la frontera A, cuando la aplicación ejecuta un `Ason.ExternalExecutor` | solo el texto del script |
+<!-- i18n: localize-labels - traducir las etiquetas, mantener la estructura (flechas, indentación) -->
 
-La regla de credenciales no cambia: se mueve con los operadores (la clave del modelo queda donde está el modelo,
-el agente; los datos de los operadores donde están los operadores, la aplicación). Lo que sí cambia es que la
-superficie de ejecución ahora es alcanzable por la red, así que los endpoints del puente son privilegiados — la
-sección de seguridad de esa guía explica qué hacer al respecto.
+```
+Caso 1 - un agente .NET que conserva la orquestación de ASON
+
+[1] Host del agente   modelo, prompts, orquestación; AsonClient, sin ningún operador
+      |
+      |  frontera D: gRPC / MCP / HTTP-OpenAPI con el manifiesto, "exec" y llamadas a funciones
+      |
+      +--> [2] Host de la aplicación   operadores, datos, UI; runtime de Ason.Bridge + un adaptador por transporte
+                |
+                |  frontera A': el mismo protocolo stdio que la frontera A, iniciado por la aplicación
+                |
+                +--> [3] Ejecutor del lado de la aplicación   ExternalProcess / Docker
+                         proceso hijo Ason.ExternalExecutor de la aplicación
+
+Caso 2 - un agente que habla MCP por HTTP (sin relé, sin encadenar)
+
+[1] Agente MCP      Claude Desktop, un IDE, cualquier cliente MCP por HTTP
+      |
+      |  Streamable HTTP: ason_get_manifest, ason_execute_script, ason_invoke_function, ...
+      v
+[2] Host de la aplicación   Ason.Bridge.Mcp
+
+Caso 3 - un agente que solo puede arrancar un servidor MCP por stdio
+
+[1] Agente MCP solo stdio      arrancó el relé como su servidor MCP
+      |
+      |  stdio, protocolo MCP
+      v
+[3] Proceso relé   Ason.Bridge.McpHost - no posee ningún operador
+      |
+      |  frontera E: gRPC (--transport grpc) o MCP (--transport mcp)
+      v
+[2] Host de la aplicación
+
+Caso 4 - un cliente HTTP genérico
+
+[1] Cliente HTTP      curl, Postman, Swagger UI
+      |
+      |  GET /ason/manifest, GET /ason/openapi.json,
+      |  POST /ason/script, POST /ason/functions/{operator}/{method}
+      v
+[2] Host de la aplicación   Ason.Bridge.OpenApi      opcional: cabecera con clave compartida
+
+En todos los casos lo único que cruza la frontera es el texto del script generado, y las llamadas a operadores
+no: se resuelven dentro de [2], donde están los métodos reales y los datos. Dónde se evalúa el script (en el
+proceso de la aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner remoto) lo decide
+la aplicación.
+```
+
+| Frontera | Protocolo | Dirección | Quién la posee |
+|---|---|---|---|
+| D: agente ↔ aplicación | gRPC, MCP o HTTP/OpenAPI, con el manifiesto, las peticiones `exec` y las llamadas a funciones | en ambos sentidos (el script y los argumentos bajan, los resultados suben) | la aplicación, que aloja los endpoints; el agente es solo un cliente |
+| E: relé ↔ aplicación | uno de los transportes de D, elegido con `--transport` | en ambos sentidos | la aplicación, igual que en D; el relé lo toma prestado |
+| A': aplicación ↔ su propio ejecutor (opcional) | el mismo protocolo stdio que la frontera A anterior | en ambos sentidos | la aplicación (`ScriptRunnerProcessHost`) |
+
+Solo el caso 3 tiene dos saltos, y solo porque MCP por stdio significa "el cliente arranca el servidor": una
+aplicación en ejecución no puede ser ese hijo, así que el relé posee la tubería y necesita un canal de vuelta
+hacia la aplicación.
+
+En cuanto a las credenciales, la regla no cambia: se mueve con los operadores (la clave del modelo queda donde
+está el modelo, el agente; los datos de los operadores donde están los operadores, la aplicación). Lo que sí
+cambia es que la superficie de ejecución ahora es alcanzable por la red, así que los endpoints del puente son
+privilegiados — la sección de seguridad de esa guía explica qué hacer al respecto.
 
 ### Afinidad al hilo de la UI
 

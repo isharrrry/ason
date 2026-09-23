@@ -324,5 +324,7 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `feat: WPF agent demo plus agent/application end-to-end verification over gRPC and MCP - GREEN` | Phase 4b |
 | `feat: OpenAPI adapter, Windows CI job and the completed documentation - GREEN` | Phase 5, docs, CI, this report |
 | `fix: relay over MCP, MCP optional-argument defect and gRPC error paths - GREEN` | follow-up: gaps 1-3 closed, `coverlet.runsettings` |
+| `docs: document the transport option, the bridge topology and the coverage command across all three languages` | docs audit: configuration, architecture, execution modes, contributing, README |
+| `docs: draw the application/agent flow diagrams for every deployment shape` | architecture: four-case ASCII flows (en/zh/es) |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.
