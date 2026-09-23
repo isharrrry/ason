@@ -19,6 +19,10 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
     [ObservableProperty]
     string? chatResponse;
 
+    /// <summary>Which language the assistant will answer in, shown in the chat panel.</summary>
+    [ObservableProperty]
+    string languageNotice = string.Empty;
+
     public ObservableCollection<string> PromptSuggestions { get; } = new() {
         "Change position of all employees hired in 2025 to X",
         "Number of employees hired in 2025",
@@ -52,6 +56,11 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
 
     [RelayCommand]
     async Task Init() {
+        // The prompts that produce user-visible text are read from Ason.AgentPrompts and prefixed with a
+        // language rule, so a non-English Windows gets answers in its own language.
+        var uiCulture = PromptLanguage.SystemUiCulture;
+        LanguageNotice = PromptLanguage.BuildNotice(uiCulture);
+
         IChatCompletionService chatService;
         try {
             chatService = OpenAiCompatibleChatServiceFactory.FromEnvironment();
@@ -67,6 +76,14 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
             MaxFixAttempts = 2,
             SkipReceptionAgent = false,
             ExecutionMode = ExecutionMode.InProcess,
+            ReceptionInstructions = PromptLanguage.WithSystemLanguage(AgentPrompts.ReceptionAgentTemplate, uiCulture),
+            ExplainerInstructions = PromptLanguage.WithSystemLanguage(AgentPrompts.ExplainerAgentTemplate, uiCulture),
+            // ScriptInstructions stays at the preset on purpose. It is the only prompt whose preset is a
+            // composite format string: AsonClient fills its {0} with the generated operator API *plus* the
+            // declarations of the operator instances it discovers at runtime ({ get; init; } text is used
+            // verbatim, without formatting), so overriding it from outside this library would drop those
+            // declarations and the script agent could no longer call the demo's instance-bound operators.
+            // The script agent emits C# anyway; the sentences the user reads come from Reception/Explainer.
             //RunnerExecutablePath = @"..\..\..\..\..\src\bin\Debug\net9.0"
             //UseRemoteRunner = true,
             //RemoteRunnerBaseUrl = "http://localhost:5236"

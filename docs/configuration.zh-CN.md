@@ -68,6 +68,36 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 
 这三个提示词属性默认为 `null`，表示 ASON 会使用内置提示词。这些预设是**公开可读**的：`Ason.AgentPrompts` 暴露了 `ScriptAgentTemplate`、`ReceptionAgentTemplate`、`ExplainerAgentTemplate` 与 `TextToDataAgentTemplate`，而 `AgentPrompts.BuildScriptInstructions(apiSignatures)` 会把生成的 operator API 填入脚本提示词。
 
+### 读取预设并追加自己的规则
+
+预设就是普通字符串，因此应用可以在构造 `AsonClientOptions` **之前**先读取预设，拼接自己的规则再赋值。WPF 示例正是用这种方式让非英文的 Windows 用用户自己的语言作答：
+
+```csharp
+var culture = CultureInfo.CurrentUICulture;
+var directive = $"""
+    Language rule: always answer the user in {culture.EnglishName} ({culture.Name}).
+    Write every user-facing sentence in that language, even when earlier answers in this
+    conversation were written in another one.
+
+    """;
+
+AsonClientOptions options = new() {
+    ReceptionInstructions = directive + AgentPrompts.ReceptionAgentTemplate,
+    ExplainerInstructions = directive + AgentPrompts.ExplainerAgentTemplate,
+};
+```
+
+| 属性 | `null` 时的默认值 | 赋值后如何使用 |
+| --- | --- | --- |
+| `ReceptionInstructions` | `AgentPrompts.ReceptionAgentTemplate` | 纯文本，作为 agent 指令发送。可自由前置或追加。 |
+| `ExplainerInstructions` | `AgentPrompts.ExplainerAgentTemplate` | 纯文本，作为 agent 指令发送。可自由前置或追加。 |
+| `ScriptInstructions` | 把 operator API 填入 `{0}` 后的脚本预设 | **原样**发送，不会做格式化，所以 `{0}` 会保持字面量。请用 `AgentPrompts.BuildScriptInstructions(api)` 构造，并注意这样会覆盖 ASON 内部追加到预设 API 块之后的 operator 实例声明。 |
+
+两点实践经验：
+
+- 规则必须作用到真正输出可见文本的 agent：直接回答来自 `Reception`，结果说明来自 `Explainer`。只给 `ScriptInstructions` 加前缀不会改变回答语言，因为 Script Agent 只输出 C#（它表示无法完成时会刻意以字面单词 `Cannot` 开头，重试逻辑会对该词做字符串匹配）。
+- 对话历史会把模型拉回之前几轮的语言。请在指令里显式说明，如上面片段中的 “even when earlier answers in this conversation were written in another one”。
+
 ## 服务注册（ASP.NET Core / Blazor）
 
 你可以使用 `AddAson` 将 `AsonClient` 注册为服务容器中的 scoped 依赖项：

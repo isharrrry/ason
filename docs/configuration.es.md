@@ -68,6 +68,36 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 
 Estas tres propiedades tienen `null` como valor predeterminado, lo que significa que ASON aplica el prompt integrado. Esos presets son de lectura pública: `Ason.AgentPrompts` expone `ScriptAgentTemplate`, `ReceptionAgentTemplate`, `ExplainerAgentTemplate` y `TextToDataAgentTemplate`, y `AgentPrompts.BuildScriptInstructions(apiSignatures)` rellena el prompt del script con la API de operadores generada.
 
+### Leer un preset y añadir tus propias reglas
+
+Los presets son cadenas normales, así que una aplicación puede leer un preset **antes** de construir `AsonClientOptions`, concatenar sus propias reglas y asignar el resultado. Así consigue el ejemplo de WPF que un Windows no inglés responda en el idioma del usuario:
+
+```csharp
+var culture = CultureInfo.CurrentUICulture;
+var directive = $"""
+    Language rule: always answer the user in {culture.EnglishName} ({culture.Name}).
+    Write every user-facing sentence in that language, even when earlier answers in this
+    conversation were written in another one.
+
+    """;
+
+AsonClientOptions options = new() {
+    ReceptionInstructions = directive + AgentPrompts.ReceptionAgentTemplate,
+    ExplainerInstructions = directive + AgentPrompts.ExplainerAgentTemplate,
+};
+```
+
+| Propiedad | Valor por defecto cuando es `null` | Como se usa el valor asignado |
+| --- | --- | --- |
+| `ReceptionInstructions` | `AgentPrompts.ReceptionAgentTemplate` | Texto plano que se envía como instrucciones del agente. Se puede prefijar o ampliar libremente. |
+| `ExplainerInstructions` | `AgentPrompts.ExplainerAgentTemplate` | Texto plano que se envía como instrucciones del agente. Se puede prefijar o ampliar libremente. |
+| `ScriptInstructions` | el preset del script con la API de operadores en `{0}` | Se envía **tal cual**: no se formatea, así que `{0}` quedaría literal. Constrúyelo con `AgentPrompts.BuildScriptInstructions(api)` y ten en cuenta que sustituye las declaraciones de instancias de operadores que ASON anexa internamente al bloque de API del preset. |
+
+Dos notas prácticas:
+
+- La regla debe llegar al agente que escribe el texto visible: `Reception` para respuestas directas y `Explainer` para resultados. Prefijar solo `ScriptInstructions` no cambia el idioma de la respuesta, porque el Script Agent solo emite C# (sus frases de fallo empiezan a propósito con la palabra literal `Cannot`, que la lógica de reintentos compara como cadena).
+- El historial de la conversación puede devolver al modelo al idioma de turnos anteriores. Indícalo de forma explícita, como en el fragmento anterior ("even when earlier answers in this conversation were written in another one").
+
 ## Registro de servicios (ASP.NET Core / Blazor)
 
 Puede registrar `AsonClient` como una dependencia scoped en su contenedor de servicios usando `AddAson`:

@@ -68,6 +68,36 @@ ChatResponse = await asonChatClient.SendAsync(userText);
 
 These three instruction properties default to `null`, which means ASON applies the built-in prompt. Those presets are publicly readable: `Ason.AgentPrompts` exposes `ScriptAgentTemplate`, `ReceptionAgentTemplate`, `ExplainerAgentTemplate` and `TextToDataAgentTemplate`, and `AgentPrompts.BuildScriptInstructions(apiSignatures)` fills the generated operator API into the script prompt.
 
+### Reading a preset and adding your own rules
+
+The presets are ordinary strings, so an application can read a preset **before** it builds `AsonClientOptions`, concatenate its own rules and assign the result. This is how the WPF sample makes a non-English Windows answer in the user's own language:
+
+```csharp
+var culture = CultureInfo.CurrentUICulture;
+var directive = $"""
+    Language rule: always answer the user in {culture.EnglishName} ({culture.Name}).
+    Write every user-facing sentence in that language, even when earlier answers in this
+    conversation were written in another one.
+
+    """;
+
+AsonClientOptions options = new() {
+    ReceptionInstructions = directive + AgentPrompts.ReceptionAgentTemplate,
+    ExplainerInstructions = directive + AgentPrompts.ExplainerAgentTemplate,
+};
+```
+
+| Property | Default when `null` | How an assigned value is used |
+| --- | --- | --- |
+| `ReceptionInstructions` | `AgentPrompts.ReceptionAgentTemplate` | Plain text, sent as the agent instructions. Prefix or append freely. |
+| `ExplainerInstructions` | `AgentPrompts.ExplainerAgentTemplate` | Plain text, sent as the agent instructions. Prefix or append freely. |
+| `ScriptInstructions` | the script preset with the operator API formats into `{0}` | Sent **verbatim** - it is not formatted, so `{0}` would stay literal. Build it with `AgentPrompts.BuildScriptInstructions(api)`, and note that this replaces the operator instance declarations ASON appends to the preset API block internally. |
+
+Two practical notes:
+
+- The rule has to reach the agent that writes the visible text: `Reception` for direct answers and `Explainer` for results. Prefixing `ScriptInstructions` alone does not change the language of an answer, because the Script Agent only emits C# (its failure sentences deliberately start with the literal word `Cannot`, which the retry logic string-matches).
+- The conversation history can pull a model back into the language of earlier turns. State it explicitly, as in the snippet above ("even when earlier answers in this conversation were written in another one").
+
 ## Service registration (ASP.NET Core / Blazor)
 
 You can register `AsonClient` as a scoped dependency in your service container using `AddAson`:

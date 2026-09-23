@@ -639,3 +639,57 @@ README 现有三份（`README.md` / `README.zh-CN.md` / `README.es.md`，各 419
 
 **坑 B：校验器本身也会错。** 原 README 是 CRLF、重建文档是 LF → 行尾 `\r` 使内容比对全失配，假报"278/285 行丢失"；图片路径有意改成 `../images/` → 2 行误报。两处归一化后均为 0。
 与 §12.3「我自己的 slug 实现错了」属同一类教训：**校验器必须被校验**。
+
+---
+
+## 15. WPF 示例按系统语言作答（本轮）
+
+### 15.1 需求
+
+先确认"预设提示词可以在构造 `AsonClientOptions` 之前读取并拼接"，然后在 WPF 示例里读取系统语言，非英文时给提示词加前缀，让回答落到用户自己的语言。
+
+### 15.2 结论：可读，但三个属性的代价不同
+
+| 属性 | `null` 时的默认 | 赋值后如何使用 |
+|---|---|---|
+| `ReceptionInstructions` | `AgentPrompts.ReceptionAgentTemplate` | 纯文本，原样作为 agent 指令，可自由前后拼接 |
+| `ExplainerInstructions` | `AgentPrompts.ExplainerAgentTemplate` | 同上 |
+| `ScriptInstructions` | `string.Format(ScriptAgentTemplate, api + 实例声明)` | **原样**使用（`AsonClient.cs:273` 走 `??`，不再格式化）→ 直接给模板加前缀会留下字面量 `{0}`；改用 `BuildScriptInstructions(api)` 又会丢掉 `AsonClient` 内部追加的 operator 实例声明（`AsonClient.cs:153-155`） |
+
+所以示例只本地化 Reception + Explainer：真正给用户看的句子出自这两者。Script Agent 只输出 C#，它表示"无法完成"时必须以字面单词 `Cannot` 开头，而 `ScriptRouteExecutor` / `ScriptRepairExecutor` 正是对该前缀做字符串匹配来短路，本地化它反而会破坏这条路径。
+
+### 15.3 改动
+
+- 新增 `samples/WptDemoApp/AI/PromptLanguage.cs`：`SystemUiCulture` / `IsEnglish` / `BuildDirective` / `WithSystemLanguage` / `BuildNotice`。
+- `ChatViewModel.Init()`：先算 `LanguageNotice`，再在 `CultureInfo.CurrentUICulture` 非 `en` 时把 directive 拼到 Reception / Explainer 预设之前。
+- `ChatView.xaml`：新增**始终可见**的 `LanguageNotice`（放在输入框下方新行，不依赖建议面板的可见性）。
+- `AsonClientOptions`：三个指令属性补 XML 文档，写明"原样使用"与 `{0}` 语义（这是最容易踩的坑）。
+- 文档：`docs/configuration.md`（+ zh-CN / es）新增「读取预设并追加自己的规则」小节。
+
+### 15.4 验证
+
+| 项 | 结果 |
+|---|---|
+| `dotnet build Ason.sln` | 0 错误（84 警告全是既有 TFM 支持类警告，无一条来自本次改动） |
+| 新增 `PromptLanguageTests`（9 个，纯字符串，不调模型） | 9/9 |
+| FlaUI UI 套件 | 14 通过 / 1 跳过（缺 key 路径因 key 已配置而跳过） |
+| 运行时语言（全新会话首条消息） | `你好！我是你的助手，很高兴为你服务。这个应用里共有 30 名员工。` |
+| 语言提示可见 | `language notice: Replies in 中文（中国） (zh-CN) - your system language` |
+| 其余套件 | LibDemo 11/11 × 3 TFM、Ason.Tests 66/66、Runner 1/1、RemoteRunner 1 通过/1 跳过 |
+| docs / i18n 校验 | 坏链 0、坏锚点 0、内容丢失 0；翻译结构 16/16 OK |
+
+### 15.5 真实的坑：历史会把语言拉回来
+
+第一版 directive 只写了"即使用户用别的语言提问"。全量套件里第二个 live 用例拿到的是**英文**回答；单独跑（新进程、首条消息）却是中文。不是管道问题，而是**上一轮英文问答留在 history 里，模型跟着历史走**。
+
+用同一端点做对照实验（同样的 Explainer 预设、同样的输入、同样的 model）：
+
+| system prompt | 输出语言 |
+|---|---|
+| 预设 | 英文 |
+| directive + 预设 | 中文 |
+| 预设 + directive | 中文 |
+
+可见前缀本身有效，问题只在历史漂移。directive 补上 "even when earlier answers in this conversation were written in another one" 之后，全量套件里的回答也变成中文。
+
+教训：**同一句提示词在"单轮隔离"与"多轮历史"下不是同一件事**，验证必须两种都跑；只跑全量套件会把中文回答误判为失败，只跑隔离用例又会漏掉漂移。

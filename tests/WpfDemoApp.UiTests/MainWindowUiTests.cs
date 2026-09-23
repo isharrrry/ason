@@ -11,6 +11,7 @@ public class MainWindowUiTests {
     const string ChatInputId = "ChatInput";
     const string ChatResponseId = "ChatResponseBox";
     const string SendButtonId = "SendButton";
+    const string LanguageNoticeId = "LanguageNotice";
 
     readonly WpfAppFixture _fixture;
     readonly ITestOutputHelper _output;
@@ -45,6 +46,21 @@ public class MainWindowUiTests {
 
         NavigateTo("Employees");
         Assert.NotNull(Find("EmployeesGrid"));
+    }
+
+    [Fact]
+    public void Chat_panel_announces_the_reply_language_taken_from_the_system() {
+        // Proves the running app read the Windows display language (not the test process only): the panel
+        // shows the note built from CultureInfo.CurrentUICulture of the app, formatted with its native name.
+        var expected = WpfSampleApp.AI.PromptLanguage.BuildNotice();
+
+        var noticeText = Retry.WhileEmpty(
+            () => Find(LanguageNoticeId).Name,
+            TimeSpan.FromSeconds(20),
+            TimeSpan.FromMilliseconds(250)).Result;
+
+        _output.WriteLine($"language notice: {noticeText}");
+        Assert.Equal(expected, noticeText);
     }
 
     [MissingApiKeyFact]
@@ -87,6 +103,39 @@ public class MainWindowUiTests {
 
         // The task asks for a count, so a digit proves the agent actually ran a script against the app.
         Assert.Matches(@"\d", reply!);
+    }
+
+    [LiveEndpointFact]
+    public void Chat_answers_in_the_system_language_when_it_is_not_English() {
+        // The demo prefixes the preset prompts with a language rule, so on a non-English Windows the sentence
+        // the user reads must be written in that language. The question asks for prose on purpose: a bare
+        // number (what the test above gets) would carry no language signal at all.
+        Find(ChatInputId).AsTextBox().Text =
+            "Introduce yourself in one friendly sentence and then tell me how many employees are in the app.";
+
+        Find(SendButtonId).AsButton().Invoke();
+
+        var response = Find(ChatResponseId).AsTextBox();
+        var reply = Retry.WhileEmpty(
+            () => response.Text,
+            TimeSpan.FromSeconds(180),
+            TimeSpan.FromSeconds(1)).Result;
+
+        _output.WriteLine("assistant reply: " + reply);
+        Assert.False(string.IsNullOrWhiteSpace(reply), "the assistant produced no reply");
+
+        foreach (var failureMarker in new[] { "invalid_api_key", "Unauthorized", "401", "Exception", "No API key configured" }) {
+            Assert.False(
+                reply!.Contains(failureMarker, StringComparison.OrdinalIgnoreCase),
+                $"the reply looks like a configuration/endpoint failure (matched '{failureMarker}'): {reply}");
+        }
+
+        var uiCulture = System.Globalization.CultureInfo.CurrentUICulture;
+        if (uiCulture.TwoLetterISOLanguageName == "zh") {
+            Assert.True(
+                reply!.Any(c => c >= '\u4E00' && c <= '\u9FFF'),
+                $"the system UI language is {uiCulture.Name}, so the reply should contain Chinese text: {reply}");
+        }
     }
 
     void NavigateTo(string itemName) {
