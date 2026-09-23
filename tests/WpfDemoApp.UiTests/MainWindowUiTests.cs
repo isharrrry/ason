@@ -85,10 +85,7 @@ public class MainWindowUiTests {
         Find(SendButtonId).AsButton().Invoke();
 
         var response = Find(ChatResponseId).AsTextBox();
-        var reply = Retry.WhileEmpty(
-            () => response.Text,
-            TimeSpan.FromSeconds(180),
-            TimeSpan.FromSeconds(1)).Result;
+        var reply = WaitForStableReply(response);
 
         _output.WriteLine("assistant reply: " + reply);
 
@@ -116,10 +113,7 @@ public class MainWindowUiTests {
         Find(SendButtonId).AsButton().Invoke();
 
         var response = Find(ChatResponseId).AsTextBox();
-        var reply = Retry.WhileEmpty(
-            () => response.Text,
-            TimeSpan.FromSeconds(180),
-            TimeSpan.FromSeconds(1)).Result;
+        var reply = WaitForStableReply(response);
 
         _output.WriteLine("assistant reply: " + reply);
         Assert.False(string.IsNullOrWhiteSpace(reply), "the assistant produced no reply");
@@ -136,6 +130,62 @@ public class MainWindowUiTests {
                 reply!.Any(c => c >= '\u4E00' && c <= '\u9FFF'),
                 $"the system UI language is {uiCulture.Name}, so the reply should contain Chinese text: {reply}");
         }
+    }
+
+    [LiveEndpointFact]
+    public void Chat_answers_an_api_query_with_the_markdown_listing() {
+        // The demo exposes OperatorApiCatalog through an operator, so this proves the whole chain: the model
+        // routes the question to GetApiListing, the script returns the Markdown, and the answer carries it.
+        Find(ChatInputId).AsTextBox().Text = "List all available APIs and operations as a Markdown table.";
+
+        Find(SendButtonId).AsButton().Invoke();
+
+        var response = Find(ChatResponseId).AsTextBox();
+        var reply = WaitForStableReply(response);
+
+        _output.WriteLine("assistant reply: " + reply);
+
+        Assert.False(string.IsNullOrWhiteSpace(reply), "the assistant produced no reply");
+        foreach (var failureMarker in new[] { "invalid_api_key", "Unauthorized", "401", "Exception", "No API key configured" }) {
+            Assert.False(
+                reply!.Contains(failureMarker, StringComparison.OrdinalIgnoreCase),
+                $"the reply looks like a configuration/endpoint failure (matched '{failureMarker}'): {reply}");
+        }
+
+        // A Markdown table naming real operators from both registered assemblies: prose, a truncated answer or
+        // a single row would fail this.
+        Assert.Contains("|", reply!);
+        Assert.Contains("---", reply!);
+        Assert.Contains("EmployeesViewOperator", reply!);
+        Assert.Contains("ChartsViewOperator", reply!);
+        Assert.Contains("LibDemoOperator", reply!);
+    }
+
+    /// <summary>
+    /// Reads a streamed reply once it stopped growing. Retry.WhileEmpty returns on the first chunk, which makes
+    /// assertions race the stream: a long answer gets asserted while only its opening lines have arrived.
+    /// </summary>
+    string WaitForStableReply(TextBox response, TimeSpan? quietPeriod = null) {
+        var quiet = quietPeriod ?? TimeSpan.FromSeconds(3);
+        var deadline = DateTime.UtcNow.AddSeconds(180);
+        var last = string.Empty;
+        var lastChange = DateTime.UtcNow;
+
+        while (DateTime.UtcNow < deadline) {
+            var current = response.Text;
+            if (!string.Equals(current, last, StringComparison.Ordinal)) {
+                last = current;
+                lastChange = DateTime.UtcNow;
+            }
+            else if (!string.IsNullOrEmpty(current) && DateTime.UtcNow - lastChange > quiet) {
+                return current;
+            }
+            FlaUI.Core.Input.Wait.UntilInputIsProcessed();
+            Thread.Sleep(250);
+        }
+
+        _output.WriteLine($"reply did not stabilize within the timeout; returning {last.Length} characters");
+        return last;
     }
 
     void NavigateTo(string itemName) {

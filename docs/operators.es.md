@@ -139,3 +139,31 @@ public class Order {
 
 Esto permite que ASON genere scripts que usen el modelo `Order` y gestionen automáticamente la serialización y deserialización entre el cliente y el entorno de ejecución.
 
+## Listar la API
+
+La API que pueden llamar los scripts también está disponible como datos. `OperatorApiCatalog.Describe(assemblies)` devuelve los operators, sus métodos (con los nombres y tipos exactos que muestra el prompt del script), sus parámetros y los tipos `[AsonModel]`; `ToMarkdown()` los renderiza como tablas:
+
+```csharp
+OperatorApiCatalog catalog = OperatorApiCatalog.Describe(
+    typeof(MainAppOperator).Assembly,
+    typeof(LibDemo.LibDemoOperator).Assembly);
+
+catalog.Operators;    // the operators, ordered by type name
+catalog.MethodCount;  // total callable methods
+catalog.Models;       // the [AsonModel] types
+Console.WriteLine(catalog.ToMarkdown());
+```
+
+Pasa los mismos ensamblados que registraste en el cliente. El catálogo reutiliza los ayudantes que generan el texto del prompt, así que un listado no puede contradecir lo que se le dice al modelo, y deduplica los ensamblados igual que `OperatorBuilder.AddAssemblies`.
+
+Exponer el listado como un operator es lo que lo hace accesible desde el chat, y es lo que hace el ejemplo de WPF:
+
+```csharp
+[AsonMethod("Lists every available operator API as a Markdown table. CALL THIS METHOD WHEN THE USER ASKS WHICH APIs, OPERATIONS OR COMMANDS ARE AVAILABLE.")]
+public string GetApiListing() => OperatorApiCatalog
+    .Describe(typeof(MainAppOperator).Assembly, typeof(LibDemo.LibDemoOperator).Assembly)
+    .ToMarkdown();   // the sample caches the result in a static field
+```
+
+Markdown es hoy el único renderizado; el catálogo estructurado es la única fuente para cualquier otro formato (JSON, un esquema tool/function-calling) cuando haga falta.
+

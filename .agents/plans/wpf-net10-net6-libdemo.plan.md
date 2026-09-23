@@ -740,3 +740,47 @@ README 现有三份（`README.md` / `README.zh-CN.md` / `README.es.md`，各 419
 |---|---|
 | `TestHarness.CreateBasicClient` 重建 options 时**静默丢弃**未列出的字段（新增选项若不转发就"看起来没生效"） | 转发 `AnswerLanguage` 与三个 `*Instructions`，并注明"这里就是完整转发清单" |
 | 同一方法还会**忽略按 agent 指定的 chat service**，三个 agent 一律用传入的那一个 | 改为 `receptionChat ?? options.ReceptionChatCompletion ?? chat`，并新增可选参数；该方法此前只有新测试在用，零回归风险 |
+
+---
+
+## 17. 对话里查询 API：`OperatorApiCatalog` + Markdown 清单（本轮）
+
+### 17.1 决定
+
+用户新增需求："WPF demo 在对话中能够查询 API，返回结构化 + Markdown 清单"。两个设计点由用户拍板：
+
+| 问题 | 选择 |
+|---|---|
+| 回复形态 | **只要 Markdown 清单**（不含 JSON/tools 渲染） |
+| 能力放哪 | **库内公共能力**（而不是 demo 内部实现） |
+
+第二条是关键：demo 在另一个程序集，无法调用 `ProxySerializer` 里那四个映射助手，若在 demo 里自己反射就必然出现**第二份类型映射**——正是 §16 前面反复警告的漂移。既然出现了真实消费者，就把切片放进库：
+
+- `OperatorApiCatalog.Describe(assemblies)`：结构化条目（算子/方法/参数/`[AsonModel]` 类型），命名与类型复用 `ProxySerializer` 的映射助手；
+- `ToMarkdown()`：人类可读的表格清单（确定性、无时间戳，可断言）；
+- 记录类型 `OperatorApiOperator` / `OperatorApiMethod` / `OperatorApiParameter` / `OperatorApiModel` / `OperatorApiField`。
+
+为此把 `ProxySerializer.IsExcludedBase` 也由 `private` 改为 `internal`（连同 §前一轮的四个助手，现在共五个共享点）。
+
+### 17.2 demo 接线
+
+`MainAppOperator` 新增 `[AsonMethod] GetApiListing()`（并静态缓存结果），描述里写 "CALL THIS METHOD WHEN THE USER ASKS WHICH APIs, OPERATIONS OR COMMANDS ARE AVAILABLE."；同时把 `"Which APIs and operations are available?"` 加进提示词建议列表。这样"查询 API"由模型路由到该算子，脚本返回 Markdown，再经 Explainer 答复。
+
+### 17.3 验证
+
+| 项 | 结果 |
+|---|---|
+| 解决方案构建 | 0 错误 |
+| `Ason.Tests`（新增 13 个 catalog 用例） | 101/101 |
+| **与提示词文本的一致性护栏** | 用例把 catalog 里每个方法重建成签名行，并要求它逐字出现在 `SerializeSignatures` 输出中（≥15 个方法参与），杜绝"清单与模型看到的不一致" |
+| 其余 catalog 用例 | 静态模块标记、排除基类、Async 去尾/Task 展开、描述透传、模型字段、管道/换行转义、空输入不扫描进程、渲染确定性、重复程序集去重、汇总计数一致、无方法算子仍列出 |
+| WPF UI 套件（live） | 14 通过 / 1 跳过；"查询 API" 得到完整 Markdown 表格（算子表 + 模型表，含 LibDemo 的 `DemoProduct`） |
+| 文档 | `operators.md` 三语新增「列出 API 清单」小节；坏链 0、锚点 0、i18n 16/16 |
+
+### 17.4 实测到的两件事
+
+**a) 回复会被"翻译"，不是逐字复制。** 因为 `AnswerLanguage = zh-CN`，模型把表头改写成 `| 方法 | 返回类型 | 参数 | 说明 |`，描述列也译成中文，而标识符（类型名、字段名）保持英文——正符合语言规则的"代码/标识符/数据不变"。这是可接受的（甚至更友好），但若将来要求**逐字**输出清单，需要在 Explainer 层面处理。
+
+**b) 我的 live 断言原来跑在"流式回复的第一段"上。** `Retry.WhileEmpty` 一有内容就返回，长回答会被断言在只到开头几行时——第一版 dump 里 `## LibDemoOperator` 后面断掉，就是快照竞态而非模型截断。已改为 `WaitForStableReply`（内容 3 秒无变化才读），三个 live 用例统一使用，并顺带把该用例的断言加强为"必须列出两个程序集里的真实算子名"。
+
+教训（第三条同类）：**流式输出的断言必须等稳定，否则测的是第一条 chunk**。

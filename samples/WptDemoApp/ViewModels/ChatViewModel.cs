@@ -28,6 +28,7 @@ public partial class ChatViewModel(MainViewModel mainViewModel) : ObservableObje
         "Number of employees hired in 2025",
         "Create a chart with sales for the top 3 products in 2025",
         "Add an appointment based on data from the last email",
+        "Which APIs and operations are available?",
     };
 
 

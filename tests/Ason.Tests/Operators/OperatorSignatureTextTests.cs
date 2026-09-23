@@ -94,6 +94,14 @@ public class SignatureShapeOp : OperatorBase {
     public async Task TouchAsync() => await Task.Yield();
 }
 
+[AsonOperator(description: "Pipes | and\nnewlines must not break a Markdown table")]
+public class SignatureShapeEscapingOp : OperatorBase {
+    public SignatureShapeEscapingOp() { }
+
+    [AsonMethod("Returns a | b")]
+    public string Pick(string a, string b) => a;
+}
+
 [AsonOperator(description: "Static signature shape module")]
 public static class SignatureShapeStatic {
     [AsonMethod("Echoes the text")]

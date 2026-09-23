@@ -1,4 +1,4 @@
-﻿using Ason;
+using Ason;
 using WpfSampleApp.Model;
 using WpfSampleApp.ViewModels;
 using WpfSampleApp.Views;
@@ -28,6 +28,16 @@ public class MainAppOperator : RootOperator<MainViewModel> {
     public async Task<ChartsViewOperator> GetChartsViewOperatorAsync() {
         return await GetViewOperator<ChartsViewOperator>(Navigate<ChartsViewModel>);
     }
+
+    [AsonMethod("Lists every available operator API as a Markdown table. CALL THIS METHOD WHEN THE USER ASKS WHICH APIs, OPERATIONS OR COMMANDS ARE AVAILABLE.")]
+    public string GetApiListing() => ApiListing;
+
+    // Built once: Describe walks the same assemblies the client was configured with, and the walk is pure
+    // reflection. Cached because every chat turn that asks for the listing would otherwise redo it.
+    static string? _apiListing;
+    static string ApiListing => _apiListing ??= OperatorApiCatalog
+        .Describe(typeof(MainAppOperator).Assembly, typeof(LibDemo.LibDemoOperator).Assembly)
+        .ToMarkdown();
 
     public void Navigate<TViewModelType>() {
         AttachedObject.CurrentNavigationItem = AttachedObject.NavigatoinItems.FirstOrDefault(i => i.ViewModel.GetType() == typeof(TViewModelType));

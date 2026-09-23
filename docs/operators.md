@@ -139,3 +139,31 @@ public class Order {
 
 This enables ASON to generate scripts that use the `Order` model and automatically handle serialization and deserialization between the client and the execution environment.
 
+## Listing the API
+
+The API that scripts can call is also available as data. `OperatorApiCatalog.Describe(assemblies)` returns the operators, their methods (named and typed exactly as the script prompt shows them), their parameters and the `[AsonModel]` types; `ToMarkdown()` renders that as tables:
+
+```csharp
+OperatorApiCatalog catalog = OperatorApiCatalog.Describe(
+    typeof(MainAppOperator).Assembly,
+    typeof(LibDemo.LibDemoOperator).Assembly);
+
+catalog.Operators;    // the operators, ordered by type name
+catalog.MethodCount;  // total callable methods
+catalog.Models;       // the [AsonModel] types
+Console.WriteLine(catalog.ToMarkdown());
+```
+
+Pass the same assemblies you registered with the client. The catalog reuses the helpers that generate the prompt text, so a listing cannot disagree with what the model is told, and it de-duplicates assemblies just like `OperatorBuilder.AddAssemblies`.
+
+Exposing the listing as an operator is what makes it reachable from the chat, which is what the WPF sample does:
+
+```csharp
+[AsonMethod("Lists every available operator API as a Markdown table. CALL THIS METHOD WHEN THE USER ASKS WHICH APIs, OPERATIONS OR COMMANDS ARE AVAILABLE.")]
+public string GetApiListing() => OperatorApiCatalog
+    .Describe(typeof(MainAppOperator).Assembly, typeof(LibDemo.LibDemoOperator).Assembly)
+    .ToMarkdown();   // the sample caches the result in a static field
+```
+
+Markdown is the only rendering today; the structured catalog is the single source for any other format (JSON, a tool/function-calling schema) when one is needed.
+

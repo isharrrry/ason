@@ -139,3 +139,31 @@ public class Order {
 
 这样一来，ASON 就能生成使用 `Order` 模型的脚本，并自动处理客户端与执行环境之间的序列化和反序列化。
 
+## 列出 API 清单
+
+脚本能调用的这套 API 也可以当作**数据**使用。`OperatorApiCatalog.Describe(assemblies)` 会返回算子、它们的方法（命名与类型和脚本提示词里完全一致）、参数以及 `[AsonModel]` 类型；`ToMarkdown()` 把它们渲染成表格：
+
+```csharp
+OperatorApiCatalog catalog = OperatorApiCatalog.Describe(
+    typeof(MainAppOperator).Assembly,
+    typeof(LibDemo.LibDemoOperator).Assembly);
+
+catalog.Operators;    // the operators, ordered by type name
+catalog.MethodCount;  // total callable methods
+catalog.Models;       // the [AsonModel] types
+Console.WriteLine(catalog.ToMarkdown());
+```
+
+请传入与注册客户端时相同的程序集。该清单复用生成提示词文本的同一批助手，因此清单与模型看到的 API **不可能出现不一致**；它也会像 `OperatorBuilder.AddAssemblies` 那样对程序集去重。
+
+把清单封装成一个算子，它就能在对话里被问到 —— WPF 示例正是这么做的：
+
+```csharp
+[AsonMethod("Lists every available operator API as a Markdown table. CALL THIS METHOD WHEN THE USER ASKS WHICH APIs, OPERATIONS OR COMMANDS ARE AVAILABLE.")]
+public string GetApiListing() => OperatorApiCatalog
+    .Describe(typeof(MainAppOperator).Assembly, typeof(LibDemo.LibDemoOperator).Assembly)
+    .ToMarkdown();   // the sample caches the result in a static field
+```
+
+目前 Markdown 是唯一的渲染格式；结构化的 catalog 是将来需要其他格式（JSON、tool/function-calling schema）时的唯一数据源。
+

@@ -244,7 +244,7 @@ public static class ProxySerializer {
         }
     }
 
-    private static bool IsExcludedBase(Type t) {
+    internal static bool IsExcludedBase(Type t) {
         if (t == typeof(OperatorBase) || t == typeof(RootOperator)) return true;
         var n = t.Name;
         if (n.StartsWith("OperatorBase`", StringComparison.Ordinal) || n.StartsWith("RootOperator`", StringComparison.Ordinal)) return true;
