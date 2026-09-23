@@ -218,7 +218,7 @@ var operatorLibrary = new OperatorBuilder()
 
 ## 文档
 
-所有指南（服务商接入、operator 编写、客户端配置、执行模式、架构与贡献指南）都集中在 **[docs/index.zh-CN.md](docs/index.zh-CN.md)**，每篇均提供英文、中文与西班牙语版本。关于**桥**（把应用的 operator 通过 gRPC、MCP 或 HTTP/OpenAPI 发布出去，让独立的 Agent 驱动它），见 **[应用 / Agent 分离](docs/app-agent-separation.zh-CN.md)**，两侧各有一个 WPF 示例。
+所有指南（服务商接入、operator 编写、客户端配置、执行模式、架构与贡献指南）都集中在 **[docs/index.zh-CN.md](docs/index.zh-CN.md)**，每篇均提供英文、中文与西班牙语版本。关于**桥**（把应用的 operator 通过 gRPC、MCP 或 HTTP/OpenAPI 发布出去，让独立的 Agent —— 或任何不含模型的其它程序 —— 驱动它），见 **[应用 / Agent 分离](docs/app-agent-separation.zh-CN.md)**，两侧各有一个 WPF 示例。
 
 ## ASON 相对于 Tool Calling / MCP 的优势
 

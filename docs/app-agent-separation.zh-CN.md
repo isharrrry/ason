@@ -150,6 +150,47 @@ runner 协议（`exec` 下行、结果上行）送到应用，而代理生成、
 应用在自己的进程内解析 operator 调用，因此传输**永远不会**看到 `invoke` 消息。若它还是出现了（意味着部署被指向了
 并非应用本身的执行器），会以错误应答，而不是让调用方永久等待。
 
+## 不用 Agent：外部程序直接驱动应用
+
+桥没有任何一处是专为 Agent 设计的。同一批端点就是普通程序的 RPC 面：驱动真实应用的测试夹具、灌入或检查状态的 CI 步骤、
+运维/自动化脚本、另一个服务，或者拿 `curl` 的开发者。它们像任何客户端一样调用应用 —— 通常直接用**单函数接口**，
+因为已经知道要调什么的程序不需要模型来写调用：
+
+| 调用方 | 通道 | 典型调用 |
+|---|---|---|
+| .NET 程序 | `GrpcAsonBridgeClient` | `InvokeFunctionAsync(call)` —— 一次往返，JSON 进、JSON 出 |
+| .NET 程序 | `McpAsonBridgeClient` | 同样的调用走 MCP（调用方本就会说 MCP 时） |
+| 任意 HTTP 客户端 | `Ason.Bridge.OpenApi` | `POST /ason/functions/{operator}/{method}`，或 `POST /ason/script` |
+| 测试夹具 / CI 任务 | 上述任一 | 一串调用，断言其返回的 JSON |
+
+```bash
+# 这条工作流里没有任何模型
+curl -s http://localhost:5223/ason/manifest                       # 发现能调用什么
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/Rename \
+     -H "Content-Type: application/json" -d '{"arguments":[1,"Ada"]}'
+curl -s -X POST http://localhost:5223/ason/script \
+     -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
+
+# 同样的调用用 .NET 客户端（示例 console 客户端正是这个场景）
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
+```
+
+这类调用方能拿到：清单（用于发现）、单函数接口、需要组合多次调用时的整段脚本接口，以及 gRPC 上的流式日志。
+它拿不到的是模型与编排 —— 调用序列由它自己决定，没有人替它把结果讲成人话，也没有超出它自身的重试。对自动化而言这正是重点：
+**确定性的调用本身就是价值**。
+
+两个值得知道的推论：
+
+- **函数调用完全绕过脚本通道。** `ForbiddenScriptKeywords` 守的是"生成代码"；`invokeFunction` 不是代码。此时保护应用的是
+  **暴露出去的 API**（打了 `[Ason*]` 的 operator，以及宿主收窄时的 `AdditionalMethodFilter`）、开启的能力开关，以及下面的
+  网络控制。另外，函数级调用根本不涉及脚本宿主：没有执行器进程、没有编译、一次往返 —— 而一段脚本可能按它调用的 operator
+  数量产生 N 次往返。
+- **桥端点就是管理面。** 任何能到达它的东西都能调用清单上的每个 operator，因此请绑 loopback；要暴露到更远处，就在前面加 key
+  或真正的认证。HTTP 适配器有可选的共享密钥；gRPC 与 MCP 期望由网关或 ASP.NET 授权挡在前面。
+
+Agent 场景与这个场景**共用一切**：同一宿主、同一运行时、同一批适配器与端点。区别只在于由谁来组织调用 —— 模型，还是程序自己。
+
 ## 执行位置
 
 `AsonBridgeOptions.Execution` 与传输是正交的两件事：

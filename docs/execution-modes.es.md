@@ -90,7 +90,10 @@ Con `AsonClientOptions.TransportFactory` (por debajo, `RunnerClient.UseTransport
 transporte propio, de modo que el script puede evaluarlo **otro proceso** — una aplicación que publica sus
 operadores por gRPC, MCP o HTTP/OpenAPI — mientras el cliente conserva la generación de proxies, los reintentos,
 la validación y el manejo del resultado. Los tres ejes se combinan libremente: el modo describe el aislamiento
-**en el lado que evalúa** y el transporte solo dice cómo llegar a ese lado.
+**en el lado que evalúa** y el transporte solo dice cómo llegar a ese lado. La invocación a nivel de función
+queda fuera de estos ejes: llamar a un método de operador no implica ningún host de scripts (sin proceso
+ejecutor, sin compilación, un solo viaje), y por eso un arnés de pruebas o un script de automatización puede
+usarla sin preocuparse por dónde se ejecutarían los scripts.
 
 ## Qué configuración encaja con cada forma de aplicación
 

@@ -162,6 +162,20 @@ Caso 4 - un cliente HTTP genérico
       v
 [2] Host de la aplicación   Ason.Bridge.OpenApi      opcional: cabecera con clave compartida
 
+Caso 5 - un programa corriente sin modelo (arnés de pruebas, paso de CI, automatización, otro servicio)
+
+[1] Programa llamador   cliente gRPC, cliente HTTP o McpAsonBridgeClient - sin modelo, sin prompts y sin
+      |                 scripts escritos por un modelo: el programa compone las llamadas él mismo
+      |
+      |  otra vez la frontera D: manifiesto (descubrimiento), invokeFunction, opcionalmente un script, logs
+      |
+      +--> [2] Host de la aplicación   los mismos endpoints que usan los agentes
+
+El caso 5 es el caso 1 con otro llamador: nada del puente es específico de los agentes. El programa puede leer el
+manifiesto para descubrir qué se puede llamar, invocar un método de operador o ejecutar un script escrito por él
+mismo — y conserva todo el determinismo que quiere una automatización. Consulta la sección de la guía sobre
+[usar el puente sin un agente](app-agent-separation.es.md#usar-el-puente-sin-un-agente).
+
 En todos los casos lo único que cruza la frontera es el texto del script generado, y las llamadas a operadores
 no: se resuelven dentro de [2], donde están los métodos reales y los datos. Dónde se evalúa el script (en el
 proceso de la aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner remoto) lo decide
@@ -170,7 +184,7 @@ la aplicación.
 
 | Frontera | Protocolo | Dirección | Quién la posee |
 |---|---|---|---|
-| D: agente ↔ aplicación | gRPC, MCP o HTTP/OpenAPI, con el manifiesto, las peticiones `exec` y las llamadas a funciones | en ambos sentidos (el script y los argumentos bajan, los resultados suben) | la aplicación, que aloja los endpoints; el agente es solo un cliente |
+| D: llamador ↔ aplicación (agente, arnés de pruebas, paso de CI, otro servicio) | gRPC, MCP o HTTP/OpenAPI, con el manifiesto, las peticiones `exec` y las llamadas a funciones | en ambos sentidos (el script y los argumentos bajan, los resultados suben) | la aplicación, que aloja los endpoints; el llamador es solo un cliente |
 | E: relé ↔ aplicación | uno de los transportes de D, elegido con `--transport` | en ambos sentidos | la aplicación, igual que en D; el relé lo toma prestado |
 | A': aplicación ↔ su propio ejecutor (opcional) | el mismo protocolo stdio que la frontera A anterior | en ambos sentidos | la aplicación (`ScriptRunnerProcessHost`) |
 

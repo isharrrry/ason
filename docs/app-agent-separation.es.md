@@ -90,6 +90,56 @@ a partir del manifiesto y apunta su runner a la aplicación con
 operadores en su propio proceso, de modo que el transporte nunca ve un mensaje `invoke`; si llegara uno, se
 responde con un error en lugar de dejar al llamador esperando.
 
+## Usar el puente sin un agente
+
+Nada del puente es específico de los agentes. Los mismos endpoints son una superficie RPC para programas
+corrientes: un arnés de pruebas que conduce la aplicación real, un paso de CI que siembra o verifica estado, un
+script de automatización o mantenimiento, otro servicio, o un desarrollador con `curl`. Llaman a la aplicación
+como cualquier cliente — normalmente con la interfaz de función única, porque un programa que ya sabe qué llamar
+no necesita un modelo que escriba la llamada:
+
+| Llamador | Canal | Llamada típica |
+|---|---|---|
+| Programa .NET | `GrpcAsonBridgeClient` | `InvokeFunctionAsync(call)` — un solo viaje, JSON de entrada y de salida |
+| Programa .NET | `McpAsonBridgeClient` | la misma llamada por MCP, cuando el llamador ya habla MCP |
+| Cualquier cliente HTTP | `Ason.Bridge.OpenApi` | `POST /ason/functions/{operator}/{method}`, o `POST /ason/script` |
+| Arnés de pruebas / job de CI | cualquiera de ellos | una secuencia de llamadas cuyo JSON devuelto se verifica |
+
+```bash
+# aquí no hay ningún modelo en juego
+curl -s http://localhost:5223/ason/manifest                       # descubrir qué se puede llamar
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/Rename \
+     -H "Content-Type: application/json" -d '{"arguments":[1,"Ada"]}'
+curl -s -X POST http://localhost:5223/ason/script \
+     -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
+
+# las mismas llamadas desde un cliente .NET (el ejemplo de consola es exactamente este caso)
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
+```
+
+Lo que obtiene ese llamador: el manifiesto (descubrimiento), la interfaz de función única, la interfaz de script
+completo si quiere componer varias llamadas, y los logs en streaming por gRPC. Lo que no obtiene es el modelo ni
+la orquestación: la secuencia de llamadas es suya, nadie explica el resultado en palabras y no hay reintentos
+más allá de los suyos. Para la automatización eso es precisamente lo deseable: la llamada determinista es la
+ventaja.
+
+Dos consecuencias que conviene conocer:
+
+- **Las llamadas a función omiten por completo el canal de scripts.** `ForbiddenScriptKeywords` protege el
+  código generado; una llamada `invokeFunction` no es código. Lo que protege ahí a la aplicación es la API
+  expuesta (los operadores marcados y `AdditionalMethodFilter` cuando el host lo restringe), las capacidades
+  habilitadas y los controles de red de abajo. Además, la invocación a nivel de función nunca implica un host de
+  scripts: sin proceso ejecutor, sin compilación, un solo viaje — a diferencia de un script, que puede costar un
+  viaje por cada llamada a operador que haga.
+- **Un endpoint del puente es una superficie de administración.** Quien pueda alcanzarlo podrá llamar a todos
+  los operadores del manifiesto, así que enlázalo a loopback y pon delante una clave o autenticación real
+  cuando se exponga más lejos. El adaptador HTTP tiene una clave compartida opcional; se espera que gRPC y MCP
+  queden detrás de una pasarela o de la autorización de ASP.NET.
+
+El escenario con agente y este comparten todo: el mismo host, el mismo runtime, los mismos adaptadores y
+endpoints. Lo único que cambia es quién compone las llamadas — un modelo, o el propio programa.
+
 ## Seguridad
 
 - Enlazar a loopback por defecto; un puente expuesto en red necesita autenticación delante.

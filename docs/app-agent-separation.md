@@ -188,6 +188,54 @@ The application resolves operator calls in its own process, so the transport nev
 If one arrives anyway — a deployment pointed at an executor that is not the application — it is answered with
 an error instead of leaving the caller waiting.
 
+## Using the bridge without an agent
+
+Nothing about the bridge is agent-specific. The same endpoints are an RPC surface for ordinary programs: a test
+harness that drives the real application, a CI step that seeds or checks state, an automation or maintenance
+script, another service, or a developer with `curl`. They call the application the way any client would —
+usually the single-function interface, because a program that already knows what to call does not need a model
+to write the call:
+
+| Caller | Channel | Typical call |
+|---|---|---|
+| .NET program | `GrpcAsonBridgeClient` | `InvokeFunctionAsync(call)` — one round trip, JSON in and out |
+| .NET program | `McpAsonBridgeClient` | the same call over MCP, when the caller already speaks MCP |
+| any HTTP client | `Ason.Bridge.OpenApi` | `POST /ason/functions/{operator}/{method}`, or `POST /ason/script` |
+| test harness / CI job | any of them | a sequence of calls whose returned JSON is asserted |
+
+```bash
+# no model anywhere in this workflow
+curl -s http://localhost:5223/ason/manifest                       # discover what can be called
+curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/Rename \
+     -H "Content-Type: application/json" -d '{"arguments":[1,"Ada"]}'
+curl -s -X POST http://localhost:5223/ason/script \
+     -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
+
+# the same calls from a .NET client (the sample console client is exactly this case)
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
+dotnet run --project samples/ConsoleGrpcBridgeDemo -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
+```
+
+What such a caller gets: the manifest (discovery), the single-function interface, the whole-script interface if
+it wants to compose several calls, and streamed logs over gRPC. What it does not get is the model and the
+orchestration — the call sequence is its own, there is nobody to explain a result in words, and there are no
+retries beyond its own. For automation that is the point: the deterministic call is the feature.
+
+Two consequences worth knowing:
+
+- **Function calls bypass the script channel entirely.** `ForbiddenScriptKeywords` guards generated code; an
+  `invokeFunction` call is not code. What protects the application there is the exposed API (the marked
+  operators, and `AdditionalMethodFilter` when the host narrows it), the capabilities that are enabled, and the
+  network controls below. Function-level invocation also never involves a script host: no executor process, no
+  compilation, one round trip — unlike a script, which may cost one round trip per operator call it makes.
+- **A bridge endpoint is an administration surface.** Anything that can reach it can call every operator the
+  manifest lists, so bind it to loopback and put a key or real authentication in front when it is exposed
+  further. The HTTP adapter has an optional shared key; gRPC and MCP are expected to sit behind a gateway or
+  ASP.NET authorization.
+
+The agent scenario and this one share everything: the same host, runtime, adapters and endpoints. What differs
+is only who composes the calls — a model, or the program itself.
+
 ## Execution location
 
 `AsonBridgeOptions.Execution` is orthogonal to the transport:

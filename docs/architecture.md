@@ -141,6 +141,20 @@ Case 4 - a generic HTTP client
       v
 [2] Application host   Ason.Bridge.OpenApi      optional: shared key header
 
+Case 5 - an ordinary program with no model (test harness, CI step, automation, another service)
+
+[1] Caller program   gRPC client, HTTP client or McpAsonBridgeClient - no model, no prompts, no scripts written
+      |              by a model: the program composes the calls itself
+      |
+      |  boundary D again: manifest (discovery), invokeFunction, optionally a script, logs
+      |
+      +--> [2] Application host   the same endpoints the agents use
+
+Case 5 is case 1 with a different caller: nothing in the bridge is agent-specific. The program can read the
+manifest to discover what is callable, call one operator method, or run a script it wrote itself - and it keeps
+all of the determinism an automation wants. See the guide's section on
+[using the bridge without an agent](app-agent-separation.md#using-the-bridge-without-an-agent).
+
 In every case the generated script text crosses the boundary, and operator calls do not: they are resolved
 inside [2], where the real methods and the data are. Where the script itself is evaluated (in the application
 process, in its own Ason.ExternalExecutor, in a container or on a remote runner) is the application's decision.
@@ -148,7 +162,7 @@ process, in its own Ason.ExternalExecutor, in a container or on a remote runner)
 
 | Boundary | Protocol | Direction | Owned by |
 |---|---|---|---|
-| D: agent ↔ application | gRPC, MCP or HTTP/OpenAPI, carrying the manifest, `exec` requests and function calls | both ways (script and arguments down, results up) | the application, which hosts the endpoints; the agent is only a client |
+| D: caller ↔ application (agent, test harness, CI step, another service) | gRPC, MCP or HTTP/OpenAPI, carrying the manifest, `exec` requests and function calls | both ways (script and arguments down, results up) | the application, which hosts the endpoints; the caller is only a client |
 | E: relay ↔ application | one of D's transports, selected with `--transport` | both ways | the application, exactly as for D; the relay borrows it |
 | A': application ↔ its own executor (optional) | the identical stdio protocol of boundary A above | both ways | the application (`ScriptRunnerProcessHost`) |
 

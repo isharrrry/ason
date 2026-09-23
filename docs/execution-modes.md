@@ -90,7 +90,10 @@ A third axis appeared with the [bridge](app-agent-separation.md): **who supplies
 transport of its own, so the script can be evaluated by another process — an application that publishes its
 operators over gRPC, MCP or HTTP/OpenAPI — while the client keeps proxy generation, retries, validation and
 result handling. The three axes combine freely: the mode still describes the isolation **on the side that
-evaluates**, and the transport only says how to reach that side.
+evaluates**, and the transport only says how to reach that side. Function-level invocation is outside these
+axes altogether: calling one operator method does not involve a script host at all (no executor process, no
+compilation, one round trip), which is why a test harness or an automation script can use it without caring
+where scripts would run.
 
 ## Which configuration fits which application shape
 

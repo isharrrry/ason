@@ -84,7 +84,8 @@ RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
 随着[桥](app-agent-separation.zh-CN.md)的出现，出现了第三条轴线：**由谁提供 runner 传输**。通过
 `AsonClientOptions.TransportFactory`（底层即 `RunnerClient.UseTransport`），宿主可以把自有传输交给客户端，从而让脚本由**另一个进程**求值
 ——例如一个通过 gRPC、MCP 或 HTTP/OpenAPI 发布 operator 的应用 —— 而客户端保留代理生成、重试、校验与结果处理。三条轴线可自由组合：
-执行模式描述的是**求值一侧**的隔离方式，传输只说明如何到达那一侧。
+执行模式描述的是**求值一侧**的隔离方式，传输只说明如何到达那一侧。而**函数级调用根本不属于这些轴线**：调用单个 operator 方法
+不涉及脚本宿主（没有执行器进程、没有编译、一次往返），因此测试夹具或自动化脚本可以放心用它，而不必关心"脚本会在哪里运行"。
 
 ## 哪种配置适合哪种应用形态
 
