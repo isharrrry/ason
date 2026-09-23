@@ -349,11 +349,16 @@ Agent 场景与这个场景**共用一切**：同一宿主、同一运行时、�
 |---|---|---|
 | `InProcess` | 应用进程内 | 应用 |
 | `ExternalProcess` | 应用的 `Ason.ExternalExecutor` 子进程 | 应用（经 stdio） |
-| `Docker` | 由应用启动的容器 | 应用 |
-| `RemoteRunner` | 远端 `Ason.RemoteBridge` 宿主 | 应用 |
+| `Docker` | 由应用启动的容器 —— **需要应用所在机器有 Docker 守护进程** | 应用 |
+| `RemoteRunner` | 远端 `Ason.RemoteBridge` 宿主，由它在自己那侧拉起执行器 | 应用 |
 
 无论哪种，**operator、数据与凭据都留在应用侧**。参见[执行模式](execution-modes.zh-CN.md)与
 [部署拓扑](architecture.zh-CN.md#部署拓扑)。
+
+执行位置由应用选定并上报，调用方无需配置：示例应用侧接受 `--execution inprocess|external|remote`
+（`remote` 用 `--remote-url` 或 `ASON_BRIDGE_REMOTE_URL` 给出运行器地址），WPF 应用侧同样支持
+`--execution inprocess|external`。切到 `external` 或 `remote` 只改变生成代码在哪里编译与运行，**不改变 operator
+所在处**：它们的调用会回到应用，并且仍然跑在捕获到的 dispatcher 线程上。
 
 operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 封送，因此 WPF 应用中它们跑在 dispatcher 线程 ——
 请在 UI 线程上构造运行时。只有在没有 UI 关联性的宿主里才设置 `CaptureSynchronizationContext = false`。
@@ -417,6 +422,7 @@ MCP 与 HTTP 报 `401`；应用级失败仍保留各自的错误码。
 | **分离** —— 自带编排的 .NET Agent | `samples/WpfAppOnlyDemo` 或 `samples/ConsoleBridgeAppSample` | `samples/WpfAgentDemo`，或任何用 `TransportFactory` 的 `AsonClient` | Agent 拉取应用的 operator API 并驱动它；Agent 侧一个 operator 都没有 |
 | 分离 —— 同样的 Agent 侧但**没有界面**（任意系统） | 任一应用侧 | `samples/ConsoleAgentSample`（`--list` 不需要密钥；`--send "…"` 需要） | console agent 打印它从清单构建出的 API，然后驱动应用 |
 | 分离，且**脚本宿主是应用自己的子进程** | `samples/ConsoleBridgeAppSample --execution external` | 上面任一调用方 | 清单报告 `execution=external-process`；脚本文本在子进程执行，而 operator 调用仍在应用内解析 |
+| 分离，且**脚本宿主在远端运行器上** | `samples/ConsoleBridgeAppSample --execution remote --remote-url http://localhost:5236` + `samples/RemoteRunnerService` | 上面任一调用方 | 清单报告 `execution=remote-runner`；执行器跑在运行器宿主上，而每次 operator 调用仍回调到应用 |
 | 分离 —— 用 HTTP MCP 的 Agent | 任一应用侧 | 任何 MCP 客户端（Claude Desktop、IDE）指向 `/mcp` | 应用表现为五个 MCP 工具 |
 | 分离 —— 为 **stdio MCP** 配置的客户端 | 任一应用侧 | `samples/mcp/claude_desktop_config.json`（stdio 中继）或 `http_mcp_config.json`（HTTP） | 真实桌面客户端能看到应用的工具；没有客户端时可用 `samples/python/ason_mcp_caller` 先验一遍配置 |
 | 分离 —— 由**模型**自行挑选 MCP 工具（作为测试） | 任一应用侧 | `samples/python/ason_mcp_agent`（🔑 `MY_OPEN_AI_KEY`） | 模型挑工具、operator 在应用内执行；若结果没出现，`--expect` 会让这次运行失败 |
@@ -436,6 +442,11 @@ dotnet new install samples/templates && dotnet new ason.console   # 已安装过
 dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
 #   在 samples/WptDemoApp/ViewModels/ChatViewModel.cs 取消注释：
 #     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- 分离，且脚本宿主也放到那台远端运行器上 ---
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222 --execution remote --remote-url http://localhost:5236
+#   此时清单报告 execution=remote-runner；operator 调用仍在应用内解析
 
 # --- 分离：应用侧（无模型、无需密钥） ---
 dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222

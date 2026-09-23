@@ -143,6 +143,59 @@ builder.Services.AddAson(
 ```
 
 
+## Bridge hosting and adapters
+
+An application that *publishes* its operators configures a bridge instead of a client. Everything here is opt-in,
+every option is a plain settable property, and [application / agent separation](app-agent-separation.md) explains
+what the resulting endpoints mean to a caller.
+
+### `AsonBridgeOptions` — the application side
+
+| Option | Type | Default | Meaning |
+|---|---|---|---|
+| `AppName` | `string` | `"ASON application"` | Reported in the manifest, for display and log correlation |
+| `Assemblies` | `IReadOnlyList<Assembly>` | empty — **required** | The assemblies whose `[Ason*]` types form the API. At least one: with none, the proxy generator would scan every assembly loaded in the process |
+| `Execution` | `AsonBridgeExecution` | `InProcess` | Where scripts are evaluated: `InProcess`, `ExternalProcess`, `Docker`, `RemoteRunner` — see [execution modes](execution-modes.md) |
+| `DockerImage` | `string?` | `null` | Container image for `Docker` |
+| `RunnerExecutablePath` | `string?` | `null` | Explicit `Ason.ExternalExecutor` path when discovery does not apply |
+| `RemoteRunnerBaseUrl` | `string?` | `null` | Required by `Execution = RemoteRunner` |
+| `Capabilities` | `AsonBridgeCapabilities` | list + script + function + logs on, `invokeMcpTool` off | Which interfaces exist at all; the manifest publishes exactly this |
+| `ForbiddenScriptKeywords` | `IReadOnlyList<string>?` | `null` (rejects empty scripts only) | Keyword deny list applied before anything is executed |
+| `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | Extra filter applied on top of the `[AsonMethod]` marker |
+| `OperatorInstances` | `ConcurrentDictionary<string, OperatorBase>?` | `null` | The live instance directory — normally `RootOperator.OperatorInstances` |
+| `SingletonOperators` | `ConcurrentDictionary<string, object>?` | `null` | Marker-only operators, materialised once and addressed by type name |
+| `CaptureSynchronizationContext` | `bool` | `true` | Marshals operator calls to the context current at construction — in WPF, the dispatcher |
+| `SynchronizationContext` | `SynchronizationContext?` | `null` | Explicit context; wins over capture |
+| `Executor` | `IAsonExecutor?` | `null` | Replaces the executor the execution location would resolve to |
+| `Logger` | `ILogger?` | `null` | Sink for the bridge's own diagnostics |
+
+### Adapter options
+
+| Adapter | Registration | Options |
+|---|---|---|
+| gRPC | `services.AddAsonGrpcBridge(runtime, authorizationPolicy, enableReflection)` + `app.MapAsonGrpcBridge(enableReflection?)` | `AsonGrpcBridgeOptions.AuthorizationPolicy` — an ASP.NET Core policy every call must satisfy (`Unauthenticated` otherwise, never `Unimplemented`); `.EnableReflection` — publishes the gRPC reflection service, **off by default** |
+| MCP (Streamable HTTP) | `services.AddAsonMcpBridge(endpoint, requireAuthorization)` + `app.MapAsonMcpBridge("/mcp")` | `AsonMcpBridgeOptions.RequireAuthorization` — **off by default**; an unauthorized caller gets `401` |
+| MCP (stdio) | `services.AddAsonMcpStdioBridge(endpoint)` | — the relay host uses exactly this |
+| HTTP + OpenAPI | `services.AddAsonOpenApiBridge(endpoint, options => …)` + `app.MapAsonOpenApiBridge("/ason")` | `BasePath` (`/ason`), `ApiKey` (`null` = no key), `ApiKeyHeader` (`X-Ason-Bridge-Key`), `EnableFunctionPathEndpoint` (`true` — the `POST /functions/{operator}/{method}` form) |
+
+Authorization is off on every adapter by default, because the development setup is a loopback bridge with no
+credentials; `MapAsonGrpcBridge(enableReflection: true)` also carries the configured policy, so a caller that may
+not call the bridge may not read its contract either.
+
+### Relay host — `Ason.Bridge.McpHost`
+
+| Argument | Environment variable | Meaning |
+|---|---|---|
+| `--url <url>` | `ASON_BRIDGE_URL` | The application's gRPC address, or its `/mcp` endpoint when `--transport mcp` |
+| `--transport grpc\|mcp` | `ASON_BRIDGE_TRANSPORT` | Which transport reaches the application (default `grpc`) |
+| `--key <value>` | `ASON_BRIDGE_KEY` | Shorthand for `--header X-Ason-Bridge-Key=<value>` |
+| `--header Name=Value` | — | Repeatable; whatever header the application's policy expects |
+
+A `--transport` it does not recognise, or a keyed application reached without credentials, makes the relay exit
+with code `3` and the reason on stderr, instead of serving tools that could not work.
+
+Ready-made client configurations for this relay live in [`samples/mcp`](../samples/mcp/README.md).
+
 ## Logging
 
 ASON provides centralized logging via the `AsonClient.Log` event, which reports activity from all execution levels.

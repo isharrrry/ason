@@ -37,8 +37,14 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/ConsoleBridgeCallerSample` | 外部请求侧：清单、单函数调用、脚本、流式日志 |
 | `samples/WptDemoApp` | WPF 演示（`net10.0`、`net9.0`、`net6.0-windows`） |
 | `samples/LibDemo` | 仅使用标记的类库（`net6.0`、`netstandard2.0`） |
+| `samples/mcp` | 可直接复制的 MCP 客户端配置（stdio 中继与 HTTP）以及工具清单 |
+| `samples/python` | 非 .NET 调用方：gRPC 客户端、纯标准库 MCP 客户端、OpenAI 驱动的 MCP 工具调用测试 |
+| `samples/bridge-examples.http` | 桥的全部 HTTP 路由，按组整理，可逐条发送 |
 | `samples/templates` | `dotnet new` 模板 |
+| `scripts` | CI 执行的仓库级检查（覆盖率下限） |
 | `tests/*` | 测试套件，见下文 |
+| `.agents/plans` | 实现计划；**故意**留在仓库里，便于把决策与代码一起评审 |
+| `CHANGELOG.md` | 已发布变更，每个版本一节 |
 
 ## 测试套件
 

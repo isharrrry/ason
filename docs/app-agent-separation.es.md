@@ -114,12 +114,20 @@ argumentos de la herramienta como objeto JSON. Todo lo añadido en el protocolo 
 |---|---|---|
 | `InProcess` | En el proceso de la aplicación | La aplicación |
 | `ExternalProcess` | En un proceso hijo `Ason.ExternalExecutor` | La aplicación (por stdio) |
-| `Docker` | En un contenedor iniciado por la aplicación | La aplicación |
-| `RemoteRunner` | En un host remoto de `Ason.RemoteBridge` | La aplicación |
+| `Docker` | En un contenedor iniciado por la aplicación — **requiere un demonio Docker en el host de la aplicación** | La aplicación |
+| `RemoteRunner` | En un host remoto de `Ason.RemoteBridge`, que arranca el ejecutor en su lado | La aplicación |
 
-En todos los casos los operadores, los datos y las credenciales permanecen en la aplicación. Las llamadas se
-serializan a través del `SynchronizationContext` capturado al construir el runtime; en WPF eso es el hilo del
-dispatcher.
+En todos los casos los operadores, los datos y las credenciales permanecen en la aplicación.
+
+La ubicación la elige y la publica la aplicación, así que el llamador nunca la configura: el ejemplo de aplicación
+acepta `--execution inprocess|external|remote` (`--remote-url` o `ASON_BRIDGE_REMOTE_URL` da la dirección del runner
+para `remote`), y el ejemplo de WPF acepta también `--execution inprocess|external`. Cambiar a `external` o
+`remote` mueve dónde se compila y se ejecuta el código generado, no dónde viven los operadores: sus llamadas
+vuelven a la aplicación y siguen corriendo en el hilo del dispatcher capturado.
+
+Las llamadas a operadores se serializan a través del `SynchronizationContext` capturado al construir el runtime;
+construye el runtime en el hilo de UI. Pon `CaptureSynchronizationContext = false` solo en un host sin afinidad de
+interfaz.
 
 ## Ver cómo se ejecuta un script
 
@@ -367,6 +375,7 @@ llamador de la aplicación y, a la vez, aplicación (servidor) para el agente qu
 | **Separado** — agente .NET con su propia orquestación | `samples/WpfAppOnlyDemo` o `samples/ConsoleBridgeAppSample` | `samples/WpfAgentDemo`, o cualquier `AsonClient` con `TransportFactory` | el agente lee la API de operadores de la aplicación y la conduce; en el lado del agente no existe ningún operador |
 | Separado — el mismo lado agente **sin interfaz** (cualquier SO) | cualquiera de los lados aplicación | `samples/ConsoleAgentSample` (`--list` no necesita clave; `--send "…"` sí) | el agente de consola imprime la API que construyó desde el manifiesto y luego conduce la aplicación |
 | Separado, con el **host de scripts como proceso hijo de la aplicación** | `samples/ConsoleBridgeAppSample --execution external` | cualquier llamador de arriba | el manifiesto informa `execution=external-process`; el texto del script se ejecuta en el hijo mientras las llamadas a operadores se resuelven dentro de la aplicación |
+| Separado, con el **host de scripts en un runner remoto** | `samples/ConsoleBridgeAppSample --execution remote --remote-url http://localhost:5236` + `samples/RemoteRunnerService` | cualquier llamador de arriba | el manifiesto informa `execution=remote-runner`; el ejecutor corre en el host del runner y sigue llamando a la aplicación en cada operador |
 | Separado — agente que habla MCP por HTTP | cualquiera de los lados aplicación | cualquier cliente MCP (Claude Desktop, un IDE) apuntando a `/mcp` | la aplicación aparece como cinco herramientas MCP |
 | Separado — un cliente configurado para **MCP por stdio** | cualquiera de los lados aplicación | `samples/mcp/claude_desktop_config.json` (relé stdio) o `http_mcp_config.json` (HTTP) | un cliente de escritorio real ve las herramientas de la aplicación; `samples/python/ason_mcp_caller` comprueba esa configuración sin él |
 | Separado — un **modelo** eligiendo herramientas MCP, como prueba | cualquiera de los lados aplicación | `samples/python/ason_mcp_agent` (🔑 `MY_OPEN_AI_KEY`) | el modelo elige la herramienta, el operador se ejecuta en la aplicación y `--expect` falla la ejecución si el resultado no aparece |
@@ -386,6 +395,11 @@ dotnet new install samples/templates && dotnet new ason.console   # añade --for
 dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
 #   en samples/WptDemoApp/ViewModels/ChatViewModel.cs descomenta:
 #     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- separado, y con el host de scripts también en ese runner remoto ---
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222 --execution remote --remote-url http://localhost:5236
+#   el manifiesto informa execution=remote-runner; las llamadas a operadores siguen resolviéndose en la aplicación
 
 # --- separado: el lado aplicación (sin modelo, sin clave) ---
 dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222

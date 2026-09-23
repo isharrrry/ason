@@ -143,6 +143,59 @@ builder.Services.AddAson(
 ```
 
 
+## Hospedar el puente y sus adaptadores
+
+Una aplicación que **publica** sus operadores configura un puente, no un cliente. Todo lo de esta sección es
+opt-in, cada opción es una propiedad normal, y [separación aplicación / agente](app-agent-separation.es.md)
+explica qué significan los endpoints resultantes para un llamador.
+
+### `AsonBridgeOptions` — el lado aplicación
+
+| Opción | Tipo | Predeterminado | Significado |
+|---|---|---|---|
+| `AppName` | `string` | `"ASON application"` | Se publica en el manifiesto, para mostrar y correlacionar logs |
+| `Assemblies` | `IReadOnlyList<Assembly>` | vacío — **obligatorio** | Los ensamblados cuyos tipos `[Ason*]` forman la API. Al menos uno: sin ninguno, el generador de proxies recorrería todos los ensamblados cargados |
+| `Execution` | `AsonBridgeExecution` | `InProcess` | Dónde se evalúan los scripts: `InProcess`, `ExternalProcess`, `Docker`, `RemoteRunner` — ver [modos de ejecución](execution-modes.es.md) |
+| `DockerImage` | `string?` | `null` | Imagen del contenedor para `Docker` |
+| `RunnerExecutablePath` | `string?` | `null` | Ruta explícita a `Ason.ExternalExecutor` cuando el descubrimiento no aplica |
+| `RemoteRunnerBaseUrl` | `string?` | `null` | Obligatoria con `Execution = RemoteRunner` |
+| `Capabilities` | `AsonBridgeCapabilities` | lista + script + función + logs activos, `invokeMcpTool` desactivado | Qué interfaces existen; el manifiesto publica exactamente eso |
+| `ForbiddenScriptKeywords` | `IReadOnlyList<string>?` | `null` (solo rechaza scripts vacíos) | Lista de palabras prohibidas que se aplica antes de ejecutar nada |
+| `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | Filtro extra sobre el marcador `[AsonMethod]` |
+| `OperatorInstances` | `ConcurrentDictionary<string, OperatorBase>?` | `null` | El directorio de instancias vivas — normalmente `RootOperator.OperatorInstances` |
+| `SingletonOperators` | `ConcurrentDictionary<string, object>?` | `null` | Operadores solo con marcador, materializados una vez y direccionados por nombre de tipo |
+| `CaptureSynchronizationContext` | `bool` | `true` | Serializa las llamadas a operadores al contexto vigente al construir — en WPF, el hilo del dispatcher |
+| `SynchronizationContext` | `SynchronizationContext?` | `null` | Contexto explícito; gana sobre la captura |
+| `Executor` | `IAsonExecutor?` | `null` | Sustituye por completo al ejecutor que resolvería la ubicación de ejecución |
+| `Logger` | `ILogger?` | `null` | Destino de los diagnósticos del propio puente |
+
+### Opciones de los adaptadores
+
+| Adaptador | Registro | Opciones |
+|---|---|---|
+| gRPC | `services.AddAsonGrpcBridge(runtime, authorizationPolicy, enableReflection)` + `app.MapAsonGrpcBridge(enableReflection?)` | `AsonGrpcBridgeOptions.AuthorizationPolicy` — policy de ASP.NET Core que toda llamada debe cumplir (`Unauthenticated` en caso contrario, nunca `Unimplemented`); `.EnableReflection` — publica el servicio de reflexión gRPC, **desactivado por defecto** |
+| MCP (Streamable HTTP) | `services.AddAsonMcpBridge(endpoint, requireAuthorization)` + `app.MapAsonMcpBridge("/mcp")` | `AsonMcpBridgeOptions.RequireAuthorization` — **desactivado por defecto**; un llamador no autorizado recibe `401` |
+| MCP (stdio) | `services.AddAsonMcpStdioBridge(endpoint)` | — es exactamente lo que usa el host del relé |
+| HTTP + OpenAPI | `services.AddAsonOpenApiBridge(endpoint, options => …)` + `app.MapAsonOpenApiBridge("/ason")` | `BasePath` (`/ason`), `ApiKey` (`null` = sin clave), `ApiKeyHeader` (`X-Ason-Bridge-Key`), `EnableFunctionPathEndpoint` (`true`, la forma `POST /functions/{operator}/{method}`) |
+
+La autorización está desactivada por defecto en todos los adaptadores, porque el entorno de desarrollo es un
+puente en loopback sin credenciales; `MapAsonGrpcBridge(enableReflection: true)` hereda la misma policy, así que
+quien no puede llamar al puente tampoco puede leer su contrato.
+
+### Host del relé — `Ason.Bridge.McpHost`
+
+| Argumento | Variable de entorno | Significado |
+|---|---|---|
+| `--url <url>` | `ASON_BRIDGE_URL` | La dirección gRPC de la aplicación, o su endpoint `/mcp` con `--transport mcp` |
+| `--transport grpc\|mcp` | `ASON_BRIDGE_TRANSPORT` | Qué transporte llega hasta la aplicación (por defecto `grpc`) |
+| `--key <value>` | `ASON_BRIDGE_KEY` | Atajo de `--header X-Ason-Bridge-Key=<value>` |
+| `--header Name=Value` | — | Repetible; cualquier cabecera que espere la policy de la aplicación |
+
+Un `--transport` desconocido, o una aplicación con clave alcanzada sin credenciales, hacen que el relé termine con
+código `3` y el motivo en stderr, en lugar de servir herramientas que no podrían funcionar.
+
+Las configuraciones de cliente listas para copiar están en [`samples/mcp`](../samples/mcp/README.md).
+
 ## Registro de logs
 
 ASON proporciona un registro centralizado mediante el evento `AsonClient.Log`, que informa la actividad de todos los niveles de ejecución.

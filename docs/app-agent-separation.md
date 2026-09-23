@@ -411,11 +411,17 @@ The boundaries this crosses are drawn in [architecture](architecture.md#applicat
 |---|---|---|
 | `InProcess` | In the application process | The application |
 | `ExternalProcess` | In an `Ason.ExternalExecutor` child process of the application | The application (over stdio) |
-| `Docker` | In a container started by the application | The application |
-| `RemoteRunner` | On a remote `Ason.RemoteBridge` host | The application |
+| `Docker` | In a container started by the application — **needs a Docker daemon on the application host** | The application |
+| `RemoteRunner` | On a remote `Ason.RemoteBridge` host, which spawns the executor on its side | The application |
 
 In every case the operators, the data and the credentials stay in the application. See
 [execution modes](execution-modes.md) and [deployment topology](architecture.md#deployment-topology).
+
+The application chooses and reports the location, so a caller never configures it: the sample application side
+takes `--execution inprocess|external|remote` (`--remote-url` or `ASON_BRIDGE_REMOTE_URL` supplies the runner
+address for `remote`), and the WPF application side takes `--execution inprocess|external` as well. Switching to
+`external` or `remote` moves where the generated code is compiled and run without moving the operators: their
+calls come back to the application and still run on the captured dispatcher thread.
 
 Operator calls are marshalled through the `SynchronizationContext` captured when the runtime was built, so in
 a WPF application they run on the dispatcher thread — build the runtime on that thread. Set
@@ -490,6 +496,7 @@ the application and, at the same time, an application (a server) to the agent th
 | **Separated** — .NET agent with its own orchestration | `samples/WpfAppOnlyDemo` or `samples/ConsoleBridgeAppSample` | `samples/WpfAgentDemo`, or any `AsonClient` using `TransportFactory` | the agent lists the application's operator API and calls it; no operator exists on the agent side |
 | Separated — the same agent side **without a UI** (any OS) | either application side | `samples/ConsoleAgentSample` (`--list` needs no key; `--send "…"` needs one) | the console agent prints the API it built from the manifest and then drives the application |
 | Separated, with the **script host as the application's child process** | `samples/ConsoleBridgeAppSample --execution external` | any caller above | the manifest reports `execution=external-process`; the script text runs in the child while operator calls still resolve inside the application |
+| Separated, with the **script host on a remote runner** | `samples/ConsoleBridgeAppSample --execution remote --remote-url http://localhost:5236` + `samples/RemoteRunnerService` | any caller above | the manifest reports `execution=remote-runner`; the executor runs on the runner host and still calls back into the application for every operator |
 | Separated — an agent that speaks MCP over HTTP | either application side | any MCP client (Claude Desktop, an IDE) pointed at `/mcp` | the application appears as five MCP tools |
 | Separated — a client configured for **stdio MCP** | either application side | `samples/mcp/claude_desktop_config.json` (stdio relay) or `http_mcp_config.json` (HTTP) | a real desktop client sees the application's tools; `samples/python/ason_mcp_caller` checks such a configuration without one |
 | Separated — a **model** choosing MCP tools, as a test | either application side | `samples/python/ason_mcp_agent` (🔑 `MY_OPEN_AI_KEY`) | the model picks the tool, the operator runs in the application, and `--expect` fails the run if the result never appears |
@@ -509,6 +516,11 @@ dotnet new install samples/templates && dotnet new ason.console   # add --force 
 dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
 #   in samples/WptDemoApp/ViewModels/ChatViewModel.cs uncomment:
 #     UseRemoteRunner = true, RemoteRunnerBaseUrl = "http://localhost:5236"
+
+# --- separated, with the script host on that remote runner too ---
+dotnet run --project samples/RemoteRunnerService/RunnerServiceSample.csproj    # http://localhost:5236
+dotnet run --project samples/ConsoleBridgeAppSample -- --port 5222 --execution remote --remote-url http://localhost:5236
+#   the manifest then reports execution=remote-runner; operator calls still resolve in the application
 
 # --- separated: the application side (no model, no key) ---
 dotnet run --project samples/WpfAppOnlyDemo -- --bridge-only --port 5222

@@ -143,6 +143,57 @@ builder.Services.AddAson(
 ```
 
 
+## 桥的宿主与适配器
+
+**发布**自己 operator 的应用配置的是桥，而不是客户端。以下全部是可选开启的，每个选项都是普通的可写属性；
+这些端点对调用方意味着什么，见[应用 / Agent 分离](app-agent-separation.zh-CN.md)。
+
+### `AsonBridgeOptions` —— 应用侧
+
+| 选项 | 类型 | 默认值 | 含义 |
+|---|---|---|---|
+| `AppName` | `string` | `"ASON application"` | 写进清单，用于展示与日志关联 |
+| `Assemblies` | `IReadOnlyList<Assembly>` | 空 —— **必填** | 其 `[Ason*]` 类型构成 API 的程序集。至少要有一个：一个都没有时，代理生成器会扫描进程内所有程序集 |
+| `Execution` | `AsonBridgeExecution` | `InProcess` | 脚本在哪里求值：`InProcess`、`ExternalProcess`、`Docker`、`RemoteRunner` —— 见[执行模式](execution-modes.zh-CN.md) |
+| `DockerImage` | `string?` | `null` | `Docker` 模式使用的容器镜像 |
+| `RunnerExecutablePath` | `string?` | `null` | 自动发现不适用时，显式指定 `Ason.ExternalExecutor` 路径 |
+| `RemoteRunnerBaseUrl` | `string?` | `null` | `Execution = RemoteRunner` 时必填 |
+| `Capabilities` | `AsonBridgeCapabilities` | 列表 + 脚本 + 单函数 + 日志开启，`invokeMcpTool` 关闭 | 到底"存在哪些接口"；清单如实发布它 |
+| `ForbiddenScriptKeywords` | `IReadOnlyList<string>?` | `null`（只拒绝空脚本） | 执行前施加的关键字拒绝列表 |
+| `AdditionalMethodFilter` | `Func<MethodInfo, bool>?` | `null` | 在 `[AsonMethod]` 标记之上额外过滤 |
+| `OperatorInstances` | `ConcurrentDictionary<string, OperatorBase>?` | `null` | 存活实例目录 —— 通常是 `RootOperator.OperatorInstances` |
+| `SingletonOperators` | `ConcurrentDictionary<string, object>?` | `null` | 仅含标记的 operator，一次性实例化后按类型名寻址 |
+| `CaptureSynchronizationContext` | `bool` | `true` | 把 operator 调用编组到构造时所在的上下文 —— 在 WPF 里就是 dispatcher 线程 |
+| `SynchronizationContext` | `SynchronizationContext?` | `null` | 显式指定上下文，优先于"捕获" |
+| `Executor` | `IAsonExecutor?` | `null` | 完全替换按执行位置解析出的执行器 |
+| `Logger` | `ILogger?` | `null` | 桥自身诊断日志的输出目标 |
+
+### 适配器选项
+
+| 适配器 | 注册 | 选项 |
+|---|---|---|
+| gRPC | `services.AddAsonGrpcBridge(runtime, authorizationPolicy, enableReflection)` + `app.MapAsonGrpcBridge(enableReflection?)` | `AsonGrpcBridgeOptions.AuthorizationPolicy` —— 每次调用都必须满足的 ASP.NET Core 策略（否则 `Unauthenticated`，**绝不**是 `Unimplemented`）；`.EnableReflection` —— 是否发布 gRPC 反射服务，**默认关闭** |
+| MCP（Streamable HTTP） | `services.AddAsonMcpBridge(endpoint, requireAuthorization)` + `app.MapAsonMcpBridge("/mcp")` | `AsonMcpBridgeOptions.RequireAuthorization` —— **默认关闭**；未授权的调用方拿到 `401` |
+| MCP（stdio） | `services.AddAsonMcpStdioBridge(endpoint)` | —— 中继宿主用的正是这个 |
+| HTTP + OpenAPI | `services.AddAsonOpenApiBridge(endpoint, options => …)` + `app.MapAsonOpenApiBridge("/ason")` | `BasePath`（`/ason`）、`ApiKey`（`null` = 不校验）、`ApiKeyHeader`（`X-Ason-Bridge-Key`）、`EnableFunctionPathEndpoint`（`true` —— 即 `POST /functions/{operator}/{method}` 这种路径式调用） |
+
+所有适配器的鉴权**默认关闭**，因为开发形态就是 loopback 上无凭据的桥；`MapAsonGrpcBridge(enableReflection: true)`
+会让反射端点继承同一策略 —— 没资格调用桥的调用方，也没资格读它的契约。
+
+### 中继宿主 —— `Ason.Bridge.McpHost`
+
+| 参数 | 环境变量 | 含义 |
+|---|---|---|
+| `--url <url>` | `ASON_BRIDGE_URL` | 应用的 gRPC 地址；配合 `--transport mcp` 时是它的 `/mcp` 端点 |
+| `--transport grpc\|mcp` | `ASON_BRIDGE_TRANSPORT` | 用哪种传输连到应用（默认 `grpc`） |
+| `--key <value>` | `ASON_BRIDGE_KEY` | `--header X-Ason-Bridge-Key=<value>` 的简写 |
+| `--header Name=Value` | —— | 可重复；应用侧策略期望的任何头 |
+
+无法识别的 `--transport`，或对开了鉴权的应用不带凭据，都会让中继以退出码 `3` 结束并把原因写到 stderr，
+而不是提供一组根本用不了的工具。
+
+该中继的现成客户端配置见 [`samples/mcp`](../samples/mcp/README.md)。
+
 ## 日志
 
 ASON 通过 `AsonClient.Log` 事件提供集中式日志，该事件会报告来自所有执行层级的活动。

@@ -1,0 +1,25 @@
+# Line endings and binary detection, so a contribution from any OS produces the same diff.
+#
+# The whole repository is stored with LF in the index; `text=auto` normalises on the way in and this file's
+# `eol=lf` keeps checkouts identical too, which is what the docs, the .http file and the Python samples expect.
+* text=auto eol=lf
+
+# Generated or binary content: never touch it.
+*.png binary
+*.jpg binary
+*.ico binary
+*.nupkg binary
+*.snk binary
+*.pfx binary
+
+# Windows-only sources and scripts are edited with Windows tooling, so keep their working-tree endings native
+# while the repository stays LF.
+*.sln text eol=crlf
+*.csproj text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.ps1 text eol=lf
+
+# Linguist hints: the two Python sample trees and the plan documents are real source here.
+samples/python/** linguist-language=Python
+.agents/plans/*.plan.md linguist-documentation

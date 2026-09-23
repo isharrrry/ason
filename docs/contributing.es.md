@@ -37,8 +37,14 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/ConsoleBridgeCallerSample` | lado solicitante externo: manifiesto, llamadas a funciones, scripts, logs |
 | `samples/WptDemoApp` | demo de WPF (`net10.0`, `net9.0`, `net6.0-windows`) |
 | `samples/LibDemo` | biblioteca de clases que solo usa los marcadores (`net6.0`, `netstandard2.0`) |
+| `samples/mcp` | configuraciones de cliente MCP listas para copiar (relé stdio y HTTP) y la lista de herramientas |
+| `samples/python` | llamadores que no son .NET: cliente gRPC, cliente MCP de biblioteca estándar y una prueba de tool calling MCP dirigida por OpenAI |
+| `samples/bridge-examples.http` | todas las rutas HTTP del puente, agrupadas y listas para enviar de una en una |
 | `samples/templates` | las plantillas de `dotnet new` |
+| `scripts` | comprobaciones del repositorio que ejecuta CI (el suelo de cobertura) |
 | `tests/*` | suites de pruebas, ver más abajo |
+| `.agents/plans` | planes de implementación, guardados en el repositorio a propósito para revisar las decisiones junto al código |
+| `CHANGELOG.md` | cambios publicados, una sección por versión |
 
 ## Suites de pruebas
 
