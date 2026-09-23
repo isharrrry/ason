@@ -183,7 +183,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
   需要在本地安装 Docker。  
   在运行应用之前拉取所需的容器：
 
-  > docker pull ghcr.io/alexgoon/ason:0.8.1
+  > docker pull ghcr.io/alexgoon/ason:0.9.0
 
 - **远程服务器（Remote server）** – 脚本在远程服务器上执行，可以是在外部进程中，也可以是在 Docker 容器中。  
   详情请参阅[执行模式与远程执行](docs/execution-modes.zh-CN.md)。

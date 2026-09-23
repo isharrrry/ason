@@ -17,7 +17,7 @@
   需要在本地安装 Docker。  
   运行应用前请先拉取所需的容器：
 
-  > docker pull ghcr.io/alexgoon/ason:0.8.1
+  > docker pull ghcr.io/alexgoon/ason:0.9.0
 
 - **Remote server（远程服务器）** —— 脚本在远程服务器上执行，可能位于外部进程或 Docker 容器中。  
   配置细节见下一节。

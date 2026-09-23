@@ -17,7 +17,7 @@
   Requiere tener Docker instalado localmente.  
   Extraiga el contenedor necesario antes de ejecutar la aplicación:
 
-  > docker pull ghcr.io/alexgoon/ason:0.8.1
+  > docker pull ghcr.io/alexgoon/ason:0.9.0
 
 - **Servidor remoto** – Los scripts se ejecutan en un servidor remoto, ya sea en un proceso externo o en un contenedor Docker.  
   Consulte la siguiente sección para obtener los detalles de configuración.
