@@ -75,10 +75,26 @@ jobs:
           dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
 
       # The bridge suite hosts gRPC and MCP in process and drives them over the wire; no Docker, desktop
-      # session or network access is needed.
-      - name: Bridge tests
+      # session or network access is needed. Coverage is collected here because this is the job that always
+      # runs the whole suite; the floor is checked per adapter right after.
+      - name: Bridge tests (with coverage)
         run: |
-          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release \
+            --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory artifacts/coverage
+
+      # Floors, not targets: a change that drops a whole area fails, ordinary refactoring does not. Sample
+      # assemblies are excluded on purpose - each sample is a separate process, so its own assembly cannot be
+      # measured from inside the test host; the process-level end-to-end tests cover those.
+      - name: Coverage floor (bridge adapters)
+        shell: pwsh
+        run: ./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
+
+      # A non-.NET caller needs the contract, and the contract travels inside the package. Unpacking the nupkg
+      # is the only honest way to check that: the .proto being present in the repository proves nothing.
+      - name: The contract ships with the package
+        run: |
+          dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release -o ./artifacts/pack
+          unzip -l ./artifacts/pack/Ason.Bridge.Grpc.*.nupkg | grep -q 'protos/ason_bridge.proto'
 
   # The WPF samples are Windows-only, so their end-to-end tests (which start the real application and drive it
   # over gRPC and MCP) run here. Building the samples first is what makes those tests execute instead of skip.
@@ -108,3 +124,22 @@ jobs:
       - name: Bridge tests (includes the WPF application and agent end-to-end tests)
         run: |
           dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+
+      # The library's own hermetic suite also runs here, so a Windows-only failure (file paths, the external
+      # executor's process handling, a culture-dependent format) is caught on the platform most users are on.
+      - name: Library unit tests (Windows)
+        run: |
+          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
+
+      # The net10.0 leg of the smoke tests stays out until that SDK is GA: the project targets it, but a
+      # preview SDK on CI would make unrelated pull requests red for reasons that are not this repository's.
+
+      # FlaUI drives the original WPF demo through UI Automation. That needs an interactive desktop session,
+      # which a hosted runner provides only inconsistently, so this job observes it instead of gating on it:
+      # a failure here does not fail the build. What it looks for - a request that arrives over the network
+      # ends up running on the UI thread - is asserted headlessly (and gating) by the bridge end-to-end tests
+      # above, so nothing is left unverified when this step is red.
+      - name: UI automation (non-blocking)
+        continue-on-error: true
+        run: |
+          dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release

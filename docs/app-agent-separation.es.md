@@ -233,6 +233,9 @@ curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/Rename \
 curl -s -X POST http://localhost:5223/ason/script \
      -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
 
+# todas las rutas, agrupadas y listas para enviar de una en una: samples/bridge-examples.http
+# (VS Code REST Client, Rider, o copia un bloque a curl)
+
 # las mismas llamadas desde un cliente .NET (el ejemplo de consola es exactamente este caso)
 dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
 dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream

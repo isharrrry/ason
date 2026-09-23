@@ -417,5 +417,110 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `docs: complete the bridge flow diagrams (T0)` | architecture `Case 1` boundary A′ + `Case 6` remote runner, three languages |
 | `feat: authorization hooks for gRPC and MCP, header-carrying clients and relay (T1) - GREEN` | tests + implementation + the three-language security section |
 | `feat: cross-platform agent sample, external script-host mode and the manifest-to-library helper - GREEN` | follow-up round 2: `samples/ConsoleAgentSample`, `--execution external`, `AsonBridgeAgent.ToOperatorsLibrary()`, 5 new process-level tests (91/91) |
+| `T3+T4 GREEN: MCP pass-through on gRPC/MCP and fresh instance declarations (proto 1.1)` | contract round: `InvokeMcpTool` rpc + `ason_invoke_mcp_tool`, `includeInstanceDeclarations`, `instancesRevision`, transport `Proxies`, protocol 1.1 (126/126) |
+| `T10 GREEN: ship protos/ason_bridge.proto in the package, opt-in gRPC reflection, Python caller example` | non-.NET callers: packaged contract, `enableReflection`, `samples/python` gRPC client |
+| `T5 GREEN: HTTP SSE + MCP ason_stream_script, relays carry the application's logs` | log streaming on the two adapters that lacked it, plus relay log collection |
+| `T11: rename console samples to ConsoleBridgeAppSample/ConsoleBridgeCallerSample + role legend` | naming: directories, csproj, sln, CI, three-language docs, test helpers |
+| `T12: what a caller has to know and configure (3 languages) + cross-links` | docs: the caller-setup matrix and its three premises |
+| `T13: WPF --execution external, remote-runner process E2E, execution reporting tests` | execution locations: WPF switch, second real process for the runner, reporting assertions |
+| `T14: MCP client configs, minimal Python MCP caller, OpenAI-driven MCP tool-calling agent` | the stdio-only client path, made copy-pasteable and testable |
+
+## Wave 2 report — the 0.9.0 round (T0–T15)
+
+### Executive summary
+
+The bridge that Wave 1 built was correct but incomplete at its edges: two capabilities could not be reached from
+every adapter, a caller that kept a manifest snapshot silently went stale, log streaming existed on gRPC only,
+and the repository had no way to check that a non-.NET or non-configured client could actually connect. Wave 2
+closed those gaps **without a breaking change**, and this section is its evidence.
+
+| Task | What shipped | State |
+|---|---|---|
+| T0 | `Case 1` boundary A′ (the executor `invoke` round trip) and `Case 6` (remote runner) in three languages | ✅ |
+| T1 | Authorization opt-in for gRPC and MCP, header-carrying clients, relay `--key`/`--header` | ✅ |
+| T3 | MCP pass-through reachable over gRPC (`InvokeMcpTool`) and MCP (`ason_invoke_mcp_tool`) | ✅ |
+| T4 | `instancesRevision`, `includeInstanceDeclarations` (body-only mode), transport `Proxies` hand-back | ✅ |
+| T5 | HTTP `POST /script/stream` (SSE), MCP `ason_stream_script`, relay log collection, `Case 7` | ✅ |
+| T6 | Coverage measured, floors set and enforced; FlaUI decision recorded | ✅ |
+| T7 | Version `0.9.0` across the repository, `CHANGELOG.md` | ✅ |
+| T8 | CI: coverage floors, packaged-contract assertion, Windows library suite, non-blocking UI automation | ✅ |
+| T9 | This report, the three-language docs and the plan's acceptance list | ✅ |
+| T10 | `protos/ason_bridge.proto` inside the nupkg, opt-in gRPC reflection, Python gRPC caller | ✅ (Python not executed here — see limits) |
+| T11 | `ConsoleBridgeAppSample` / `ConsoleBridgeCallerSample`, role legend in the sample matrix | ✅ |
+| T12 | "What a caller has to know and configure": the shape matrix and the three premises | ✅ |
+| T13 | WPF `--execution external`, remote-runner across two processes, execution reporting tests | ✅ |
+| T14 | `samples/mcp` client configurations, stdlib MCP caller, OpenAI-driven MCP tool-calling agent | ✅ (Python not executed here — see limits) |
+| T15 | `samples/bridge-examples.http` with the four request groups | ✅ |
+
+### Verification commands and results
+
+```bash
+# the whole matrix, all green on this machine (Windows, .NET SDK 9.0.306)
+dotnet build Ason.sln -c Release                                        # 0 errors
+dotnet test tests/Ason.Bridge.Tests -c Release                          # 158/158
+dotnet test tests/Ason.Tests -c Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"   # 105/105
+dotnet test tests/LibDemo.SmokeTests -c Release --framework net9.0      # 11/11
+dotnet test tests/LibDemo.SmokeTests -c Release --framework net6.0      # 11/11
+dotnet test tests/Ason.Runner.Tests -c Release                          # 1/1
+dotnet test tests/Ason.RemoteRunner.Tests -c Release                    # 1/1 (1 skipped: needs a live runner host)
+
+# coverage, and the floor the CI job now enforces
+dotnet test tests/Ason.Bridge.Tests -c Release --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+./scripts/check-bridge-coverage.ps1 -CoverageFile 'artifacts/coverage/*/coverage.cobertura.xml'
+
+# the contract really is in the package
+dotnet pack src/Ason.Bridge.Grpc -c Release -o ./artifacts/pack
+#   -> protos/ason_bridge.proto (4563 bytes) alongside lib/net9.0/Ason.Bridge.Grpc.dll
+```
+
+| Assembly | Line | Branch | Floor |
+|---|---|---|---|
+| `Ason.Bridge` | 89.4% | 82.3% | line ≥ 87%, branch ≥ 70% ✅ |
+| `Ason.Bridge.Grpc` | 93.6% | 75.0% | ✅ |
+| `Ason.Bridge.Mcp` | 95.6% | 79.3% | ✅ |
+| `Ason.Bridge.OpenApi` | 98.3% | 80.4% | ✅ |
+
+Coverage of the adapters went from 53.8% (a metric artefact of counting protoc output, fixed by
+`coverlet.runsettings`) to the numbers above, with two batches of branch tests (`AdapterBranchTests`,
+`McpBranchTests`) targeting exactly the paths a passing deployment never walks: forwarding endpoints used in
+full, runner transports answering messages that must never travel that way, registration guards, wire-level
+argument errors, and missing/optional tool arguments.
+
+### What each round guarantees
+
+| Guarantee | Evidence |
+|---|---|
+| A capability that is off is absent on every adapter, and never confused with an authorization failure | `CapabilityTests`, `GrpcAuthTests`, `McpAuthTests`, `ReflectionAndContractTests` |
+| MCP pass-through answers "capability off" and "no MCP server registered" differently | `McpPassthroughTests` |
+| A stale manifest snapshot can be detected *and* worked around | `InstanceFreshnessTests` |
+| Logs reach a caller on gRPC, MCP and HTTP, and a relay's logs are the application's | `LogStreamingTests` |
+| A non-.NET caller can obtain the contract and call the application | `ReflectionAndContractTests`, `samples/python`, packaged `.proto` assertion |
+| The execution location a caller is told is the one in force | `ExecutionReportingTests`, `RemoteRunnerBridgeEndToEndTests`, `WpfApplicationEndToEndTests` |
+| An MCP client can be configured from a file that is valid and points at the relay | `McpClientConfigTests` |
+| The console/desktop samples keep working over both transports | `ConsoleSamplesEndToEndTests` (5), `WpfApplicationEndToEndTests` (3) |
+
+### Honest limits of this round
+
+- **The Python programs were not executed end to end here.** `pip install grpcio grpcio-tools` failed twice with
+  a read timeout against `files.pythonhosted.org`, and the machine has no local wheels or mirror, so
+  `samples/python/ason_bridge_client.py`, `ason_mcp_caller/main.py` and `ason_mcp_agent/main.py` were verified
+  statically instead: `py_compile` on each, the CLI surfaces (`--help`), the "no key → exit 2" contract, and — for
+  the MCP configurations they mirror — the .NET-side `McpClientConfigTests`. Running them is a copy-paste away
+  on a machine with PyPI access; nothing else in this repository depends on them.
+- **Real Docker execution is still excluded** from the default test filter, as it was before this round: those
+  cases need a daemon. What is asserted is the reporting path (an injected executor whose name is `docker`
+  reaches every adapter's manifest) and the documentation states the requirement.
+- **UI automation (FlaUI) is observed, not gated.** The Windows job runs `tests/WpfDemoApp.UiTests` with
+  `continue-on-error: true`, because UI Automation needs an interactive desktop session that a hosted runner
+  provides only inconsistently. The property it checks is asserted headlessly — and gating — by the WPF
+  end-to-end tests in the same job.
+- **Reflection is off by default** and, when on, carries the same authorization policy as the service; a caller
+  that may not call the bridge may not read its contract either.
+
+### Gap list after Wave 2
+
+Wave 1's gap table (A–M) is closed: A→T0/T10, B/C→T1/T3, D→T4, E→T5, F/G→T6/T7, H→T10, I→T11, J→T12, K→T13,
+L→T14, M→T15. What remains is deliberately open rather than unfinished: the Python end-to-end runs above, the
+Docker daemon cases, and UI automation as a gate.
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

@@ -1,0 +1,125 @@
+### ASON bridge — one file to try every HTTP route
+###
+### Start an application side first:
+###     dotnet run --project samples/ConsoleBridgeAppSample              # gRPC :5222, MCP + HTTP :5223
+### or  dotnet run --project samples/WpfAppOnlyDemo
+###
+### Then send the requests below one by one (VS Code REST Client, Rider, or `curl`). @key is empty because the
+### development setup has no authorization; fill it in (and start the application with a key) to exercise group 4.
+
+@base = http://localhost:5223
+@key =
+@contentType = application/json
+
+### ---------------------------------------------------------------------------------------------------
+### 1. Discovery — what does this application expose?
+### ---------------------------------------------------------------------------------------------------
+
+### The whole contract: protocol version, execution location, capabilities, the operator API, the live instances
+GET {{base}}/ason/manifest
+Accept: {{contentType}}
+
+### Only the live instances, with the handle that addresses each one
+GET {{base}}/ason/instances
+Accept: {{contentType}}
+
+### The generated OpenAPI document (the same manifest, rendered for generic HTTP clients and Swagger UI)
+GET {{base}}/ason/openapi.json
+Accept: {{contentType}}
+
+### ---------------------------------------------------------------------------------------------------
+### 2. Execution — the two independent interfaces
+### ---------------------------------------------------------------------------------------------------
+
+### Whole script, proxy layer prepended by the application (the default)
+POST {{base}}/ason/script
+Content-Type: {{contentType}}
+
+{ "code": "return LibDemoStaticOperator.Add(40, 2);" }
+
+### Whole script, sent exactly as it is: the application adds nothing, so the caller owes the proxy layer.
+### This one answers 400 execution-failed - only the caller's own code arrived, and `LibDemoStaticOperator` is not
+### declared anywhere. It is the honest demonstration of what includeProxyPreamble=false means.
+POST {{base}}/ason/script
+Content-Type: {{contentType}}
+
+{ "code": "return LibDemoStaticOperator.Add(40, 2);", "includeProxyPreamble": false }
+
+### Body-only mode: the application supplies its proxy layer *and* today's instance declarations, which is how a
+### caller whose manifest snapshot went stale is rescued.
+POST {{base}}/ason/script
+Content-Type: {{contentType}}
+
+{ "code": "return employeesOperator.GetEmployees().Count;", "includeProxyPreamble": false, "includeInstanceDeclarations": true }
+
+### One function, a static module: no handle needed
+POST {{base}}/ason/functions/invoke
+Content-Type: {{contentType}}
+
+{ "operator": "LibDemoStaticOperator", "method": "Add", "arguments": [20, 22] }
+
+### One function, an instance operator: the handle comes from /ason/instances
+POST {{base}}/ason/functions/invoke
+Content-Type: {{contentType}}
+
+{ "operator": "EmployeesOperator", "method": "GetEmployees", "handle": "EmployeesOperator" }
+
+### The same call as a path, so it shows up in Swagger UI (the handle may also travel as a query parameter)
+POST {{base}}/ason/functions/LibDemoStaticOperator/Add?handle=
+Content-Type: {{contentType}}
+
+{ "arguments": [20, 22] }
+
+### ---------------------------------------------------------------------------------------------------
+### 3. The error surface — a refusal is a code, not a paragraph
+### ---------------------------------------------------------------------------------------------------
+
+### An operator the manifest does not list: 400 + operator-not-found
+POST {{base}}/ason/functions/invoke
+Content-Type: {{contentType}}
+
+{ "operator": "NoSuchOperator", "method": "Add", "arguments": [1, 2] }
+
+### An instance operator with several live instances and no handle: 400 + handle-ambiguous
+### (attach two EmployeesOperator instances first; with one instance the call resolves on its own. On the console
+### application side the LibDemo operators are marker-only, so this one answers operator-not-found instead.)
+POST {{base}}/ason/functions/invoke
+Content-Type: {{contentType}}
+
+{ "operator": "EmployeesOperator", "method": "GetEmployees" }
+
+### A capability that is switched off is not served at all: 404 + not-supported
+### (start the application with executeScript disabled to see it)
+POST {{base}}/ason/script
+Content-Type: {{contentType}}
+
+{ "code": "return 1;" }
+
+### A malformed body is rejected before anything runs: 400 + invalid-arguments
+POST {{base}}/ason/script
+Content-Type: {{contentType}}
+
+{ "code": "" }
+
+### ---------------------------------------------------------------------------------------------------
+### 4. Authorization — only meaningful when the application was started with a key
+### ---------------------------------------------------------------------------------------------------
+
+### Without the key: 401 (never 404, which would mean "capability disabled")
+GET {{base}}/ason/manifest
+Accept: {{contentType}}
+
+### With the key: 200. X-Ason-Bridge-Key is AsonOpenApiBridgeOptions.ApiKeyHeader.
+GET {{base}}/ason/manifest
+Accept: {{contentType}}
+X-Ason-Bridge-Key: {{key}}
+
+### ---------------------------------------------------------------------------------------------------
+### 5. Streaming — server-sent events, one request per line: `event: log`* then `event: result|error`
+### ---------------------------------------------------------------------------------------------------
+
+### Watch a script run (the REST Client shows the stream as it arrives; with curl add -N to disable buffering)
+POST {{base}}/ason/script/stream
+Content-Type: {{contentType}}
+
+{ "code": "return LibDemoStaticOperator.Add(40, 2);" }

@@ -284,6 +284,9 @@ curl -s -X POST http://localhost:5223/ason/functions/EmployeesOperator/Rename \
 curl -s -X POST http://localhost:5223/ason/script \
      -H "Content-Type: application/json" -d '{"code":"return employeesOperator.GetEmployees().Count;"}'
 
+# 全部路由、按四组整理、可逐条发送：samples/bridge-examples.http
+# （VS Code REST Client、Rider，或把其中一段贴进 curl）
+
 # 同样的调用用 .NET 客户端（示例 console 客户端正是这个场景）
 dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --func EmployeesOperator.GetEmployees
 dotnet run --project samples/ConsoleBridgeCallerSample -- --url http://localhost:5222 --script "return employeesOperator.GetDiagnostics().OnUiThread;" --stream
