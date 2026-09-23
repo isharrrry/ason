@@ -29,11 +29,9 @@ public class AgentOverBridgeTests {
         await using var bridgeClient = GrpcAsonBridgeClient.Connect(host.Url);
         var manifest = await bridgeClient.GetManifestAsync();
 
-        var library = new OperatorsLibrary(
-            Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NullOperatorMethodCache())),
-            false,
-            Array.Empty<IMcpClient>(),
-            Array.Empty<Assembly>());
+        // One call turns the application's manifest into the library the client works against: the proxy layer
+        // and signatures the application published, and no local operators at all.
+        var library = manifest.ToOperatorsLibrary();
 
         // The script a script-agent would produce: a body, written against the proxy layer it was shown.
         var body = "return bridgeCalculatorOperator.Add(20, 22);";
@@ -68,11 +66,7 @@ public class AgentOverBridgeTests {
         await using var bridgeClient = GrpcAsonBridgeClient.Connect(host.Url);
         var manifest = await bridgeClient.GetManifestAsync();
 
-        var library = new OperatorsLibrary(
-            Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NullOperatorMethodCache())),
-            false,
-            Array.Empty<IMcpClient>(),
-            Array.Empty<Assembly>());
+        var library = manifest.ToOperatorsLibrary();
 
         // The script compiles and runs in the application, where it throws: the failure must travel back and
         // be reported as a failed task, with the application's own error text.

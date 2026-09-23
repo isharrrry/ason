@@ -131,10 +131,8 @@ Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 await using var client = GrpcAsonBridgeClient.Connect("http://localhost:5222");
 var manifest = await client.GetManifestAsync();
 
-// 清单里带着脚本所针对的代理层
-var library = new OperatorsLibrary(
-    Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NoOperatorCache())),
-    false, Array.Empty<IMcpClient>(), Array.Empty<Assembly>());
+// 清单里带着应用发布出来的代理层与签名列表，因此构建客户端库只需一次调用 —— 这一侧不复制任何 operator
+var library = manifest.ToOperatorsLibrary();
 
 var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
     // 隔离由应用侧决定；这一侧只负责怎么连上它
@@ -233,6 +231,8 @@ operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 
 | 不分离 —— 全新应用 | `samples/templates` | 同一进程 | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` 直接生成可跑的聊天应用 |
 | 不分离，但**脚本宿主**在远端 | `samples/WptDemoApp` + `samples/RemoteRunnerService`（http://localhost:5236） | 同一进程 | 只有执行被搬走；应用、Agent、operator 与数据仍在一起 |
 | **分离** —— 自带编排的 .NET Agent | `samples/WpfAppOnlyDemo` 或 `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`，或任何用 `TransportFactory` 的 `AsonClient` | Agent 拉取应用的 operator API 并驱动它；Agent 侧一个 operator 都没有 |
+| 分离 —— 同样的 Agent 侧但**没有界面**（任意系统） | 任一应用侧 | `samples/ConsoleAgentSample`（`--list` 不需要密钥；`--send "…"` 需要） | console agent 打印它从清单构建出的 API，然后驱动应用 |
+| 分离，且**脚本宿主是应用自己的子进程** | `samples/ConsoleGrpcBridgeHost --execution external` | 上面任一调用方 | 清单报告 `execution=external-process`；脚本文本在子进程执行，而 operator 调用仍在应用内解析 |
 | 分离 —— 用 HTTP MCP 的 Agent | 任一应用侧 | 任何 MCP 客户端（Claude Desktop、IDE）指向 `/mcp` | 应用表现为五个 MCP 工具 |
 | 分离 —— 只能启动 stdio MCP 的 Agent | 任一应用侧 | `src/Ason.Bridge.McpHost`（`--transport grpc` 或 `--transport mcp`） | 同样的工具，走 Agent 的 stdin/stdout |
 | 分离 —— **完全没有 Agent** | 任一应用侧 | `samples/ConsoleGrpcBridgeDemo`、`curl`、Swagger UI/Postman | 程序或 shell 驱动应用：一次函数调用，或一段脚本 |
@@ -262,6 +262,14 @@ dotnet run --project samples/WpfAgentDemo                            # 聊天窗
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # gRPC 自检，无需密钥
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP 自检，无需密钥
 Ason.Bridge.McpHost --url http://localhost:5222                      # 供 Claude Desktop/Code 使用的 stdio MCP 中继
+
+# 同样的 Agent 侧，改成 console 程序：任意系统可跑，且查看它不需要密钥
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5223/mcp --transport mcp --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --send "add 20 and 22"   # 需要密钥
+
+# 应用也可以在子进程中求值脚本，把 operator 留在自己进程里
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222 --execution external
 
 # --- 分离：不要 Agent，只要一个程序 ---
 #   对着上面的 console 宿主（它的 operator 来自 LibDemo）

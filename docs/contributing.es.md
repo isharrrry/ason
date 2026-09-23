@@ -33,6 +33,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/WpfAppOnlyDemo` | lado aplicación en WPF: operadores `[Ason*]` más servicios gRPC, MCP y HTTP/OpenAPI, sin agente |
 | `samples/WpfAgentDemo` | lado agente en WPF: chat y selección de endpoint/transporte, sin un solo `[AsonOperator]` |
 | `samples/ConsoleGrpcBridgeHost` | lado aplicación de un despliegue dividido: operadores `[Ason*]` más servicios gRPC y MCP |
+| `samples/ConsoleAgentSample` | lado agente como programa de consola: construye su API desde el manifiesto de la aplicación y la conduce por gRPC o MCP (multiplataforma, sin interfaz) |
 | `samples/ConsoleGrpcBridgeDemo` | lado solicitante externo: manifiesto, llamadas a funciones, scripts, logs |
 | `samples/WptDemoApp` | demo de WPF (`net10.0`, `net9.0`, `net6.0-windows`) |
 | `samples/LibDemo` | biblioteca de clases que solo usa los marcadores (`net6.0`, `netstandard2.0`) |

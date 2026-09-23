@@ -167,10 +167,9 @@ agent builds its operator library from the manifest and points its runner at the
 await using var client = GrpcAsonBridgeClient.Connect("http://localhost:5222");
 var manifest = await client.GetManifestAsync();
 
-// The manifest carries the proxy layer the scripts are written against.
-var library = new OperatorsLibrary(
-    Task.FromResult((manifest.Proxies, manifest.Signatures, (IOperatorMethodCache)new NoOperatorCache())),
-    false, Array.Empty<IMcpClient>(), Array.Empty<Assembly>());
+// The manifest carries the proxy layer and the signatures the application published, so building the
+// client's library is one call - and no operator is duplicated on this side.
+var library = manifest.ToOperatorsLibrary();
 
 var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
     // The application decides where the script is isolated; this side only says how to reach it.
@@ -285,6 +284,8 @@ of splitting it. Rows marked 🔑 need a model key: `MY_OPEN_AI_KEY` (plus optio
 | Not separated — a brand-new app | `samples/templates` | the same process | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` scaffold a working chat app |
 | Not separated, but the **script host** is remote | `samples/WptDemoApp` + `samples/RemoteRunnerService` (http://localhost:5236) | the same process | only execution moves; app, agent, operators and data stay together |
 | **Separated** — .NET agent with its own orchestration | `samples/WpfAppOnlyDemo` or `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`, or any `AsonClient` using `TransportFactory` | the agent lists the application's operator API and calls it; no operator exists on the agent side |
+| Separated — the same agent side **without a UI** (any OS) | either application side | `samples/ConsoleAgentSample` (`--list` needs no key; `--send "…"` needs one) | the console agent prints the API it built from the manifest and then drives the application |
+| Separated, with the **script host as the application's child process** | `samples/ConsoleGrpcBridgeHost --execution external` | any caller above | the manifest reports `execution=external-process`; the script text runs in the child while operator calls still resolve inside the application |
 | Separated — an agent that speaks MCP over HTTP | either application side | any MCP client (Claude Desktop, an IDE) pointed at `/mcp` | the application appears as five MCP tools |
 | Separated — an agent that can only start a stdio MCP server | either application side | `src/Ason.Bridge.McpHost` (`--transport grpc` or `--transport mcp`) | the same tools over the agent's stdin/stdout |
 | Separated — **no agent at all** | either application side | `samples/ConsoleGrpcBridgeDemo`, `curl`, Swagger UI/Postman | a program or a shell drives the application: one function call, or a script |
@@ -314,6 +315,14 @@ dotnet run --project samples/WpfAgentDemo                            # chat wind
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222          # gRPC self-check, no key
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # MCP self-check, no key
 Ason.Bridge.McpHost --url http://localhost:5222                      # stdio MCP relay for Claude Desktop/Code
+
+# the same agent side as a console program, on any OS and with no key needed to inspect it
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5223/mcp --transport mcp --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --send "add 20 and 22"   # needs the key
+
+# the application can also evaluate scripts in a child process, keeping its operators to itself
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222 --execution external
 
 # --- separated: no agent, just a program ---
 #   against the console host above (its operators come from LibDemo)

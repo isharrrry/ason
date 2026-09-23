@@ -83,9 +83,9 @@ dispatcher.
 
 ## Delegar la orquestación al agente
 
-El agente puede conservar la orquestación de ASON sin poseer operadores: construye su biblioteca de operadores
-a partir del manifiesto y apunta su runner a la aplicación con
-`AsonClientOptions.TransportFactory` (por debajo, `RunnerClient.UseTransport`), por ejemplo
+El agente puede conservar la orquestación de ASON sin poseer operadores: `manifest.ToOperatorsLibrary()` convierte
+el manifiesto en la biblioteca de operadores con la que trabaja el cliente, y `AsonClientOptions.TransportFactory`
+(por debajo, `RunnerClient.UseTransport`) apunta su runner a la aplicación, por ejemplo
 `TransportFactory = () => new GrpcAsonBridgeTransport(client)`. La aplicación resuelve las llamadas a
 operadores en su propio proceso, de modo que el transporte nunca ve un mensaje `invoke`; si llegara uno, se
 responde con un error en lugar de dejar al llamador esperando.
@@ -163,6 +163,8 @@ manera de separarla. Las filas con 🔑 necesitan una clave de modelo: `MY_OPEN_
 | Sin separar — una aplicación nueva | `samples/templates` | el mismo proceso | `dotnet new ason.wpf` / `ason.winforms` / `ason.console` / `ason.blaz.srv` / `ason.maui` generan una app de chat funcional |
 | Sin separar, pero con el **host de scripts** en remoto | `samples/WptDemoApp` + `samples/RemoteRunnerService` (http://localhost:5236) | el mismo proceso | solo se mueve la ejecución; app, agente, operadores y datos siguen juntos |
 | **Separado** — agente .NET con su propia orquestación | `samples/WpfAppOnlyDemo` o `samples/ConsoleGrpcBridgeHost` | `samples/WpfAgentDemo`, o cualquier `AsonClient` con `TransportFactory` | el agente lee la API de operadores de la aplicación y la conduce; en el lado del agente no existe ningún operador |
+| Separado — el mismo lado agente **sin interfaz** (cualquier SO) | cualquiera de los lados aplicación | `samples/ConsoleAgentSample` (`--list` no necesita clave; `--send "…"` sí) | el agente de consola imprime la API que construyó desde el manifiesto y luego conduce la aplicación |
+| Separado, con el **host de scripts como proceso hijo de la aplicación** | `samples/ConsoleGrpcBridgeHost --execution external` | cualquier llamador de arriba | el manifiesto informa `execution=external-process`; el texto del script se ejecuta en el hijo mientras las llamadas a operadores se resuelven dentro de la aplicación |
 | Separado — agente que habla MCP por HTTP | cualquiera de los lados aplicación | cualquier cliente MCP (Claude Desktop, un IDE) apuntando a `/mcp` | la aplicación aparece como cinco herramientas MCP |
 | Separado — agente que solo puede arrancar un servidor MCP por stdio | cualquiera de los lados aplicación | `src/Ason.Bridge.McpHost` (`--transport grpc` o `--transport mcp`) | las mismas herramientas por el stdin/stdout del agente |
 | Separado — **sin agente alguno** | cualquiera de los lados aplicación | `samples/ConsoleGrpcBridgeDemo`, `curl`, Swagger UI/Postman | un programa o un shell conduce la aplicación: una llamada a función o un script |
@@ -192,6 +194,14 @@ dotnet run --project samples/WpfAgentDemo                            # ventana d
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5222           # autocomprobación gRPC, sin clave
 dotnet run --project samples/WpfAgentDemo -- --verify http://localhost:5223/mcp --mcp # autocomprobación MCP, sin clave
 Ason.Bridge.McpHost --url http://localhost:5222                      # relé MCP por stdio para Claude Desktop/Code
+
+# el mismo lado agente como programa de consola: cualquier SO, y sin clave para inspeccionarlo
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5223/mcp --transport mcp --list
+dotnet run --project samples/ConsoleAgentSample -- --url http://localhost:5222 --send "add 20 and 22"   # requiere la clave
+
+# la aplicación también puede evaluar scripts en un proceso hijo, quedándose con sus operadores
+dotnet run --project samples/ConsoleGrpcBridgeHost -- --port 5222 --execution external
 
 # --- separado: sin agente, solo un programa ---
 #   contra el host de consola de arriba (sus operadores vienen de LibDemo)

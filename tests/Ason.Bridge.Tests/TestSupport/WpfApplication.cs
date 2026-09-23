@@ -43,13 +43,11 @@ internal sealed class WpfApplication : IDisposable {
     public static async Task<WpfApplication> StartAsync(string executable, TimeSpan? startupTimeout = null) {
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < 3; attempt++) {
-            var (grpcPort, _) = FreePortPair();
+            var (grpcPort, _) = TestPorts.Pair();
             try {
                 return await StartOnceAsync(executable, grpcPort, startupTimeout).ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) {
-                // "address already in use" only: another process took the pair between check and bind.
-                if (!ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase)) throw;
+            catch (InvalidOperationException ex) when (TestPorts.IsPortRace(ex)) {
                 lastFailure = ex;
             }
         }
@@ -113,21 +111,6 @@ internal sealed class WpfApplication : IDisposable {
     }
 
     /// <summary>
-    /// The sample binds two ports (gRPC and MCP, next to each other), so both are claimed at once before they
-    /// are released for the application to use.
+    /// The sample binds two ports (gRPC and MCP, next to each other); see <see cref="TestPorts.Pair"/>.
     /// </summary>
-    static (int GrpcPort, int McpPort) FreePortPair() {
-        for (var attempt = 0; attempt < 100; attempt++) {
-            var first = new TcpListener(IPAddress.Loopback, 0);
-            first.Start();
-            var second = new TcpListener(IPAddress.Loopback, 0);
-            second.Start();
-            var grpcPort = ((IPEndPoint)first.LocalEndpoint).Port;
-            var mcpPort = ((IPEndPoint)second.LocalEndpoint).Port;
-            first.Stop();
-            second.Stop();
-            if (mcpPort == grpcPort + 1) return (grpcPort, mcpPort);
-        }
-        throw new InvalidOperationException("Could not find two consecutive free ports for the application sample.");
-    }
 }

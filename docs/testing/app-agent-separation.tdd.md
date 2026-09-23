@@ -215,6 +215,11 @@ requirement of a gRPC client executable demonstrating precise function execution
 | 34 | A cancelled stream ends promptly (as `StatusCode.Cancelled`) instead of hanging | `GrpcErrorPathTests` | integration | PASS |
 | 35 | The gRPC contract reports MCP pass-through as unsupported instead of pretending | `GrpcErrorPathTests` | integration | PASS |
 | 36 | A client disposes only the channel it created; disposing twice is harmless | `GrpcErrorPathTests` | integration | PASS |
+| 37 | The console agent builds its API from the application's manifest and declares no operator (gRPC) | `ConsoleSamplesEndToEndTests` | e2e | PASS |
+| 38 | The same console agent works over MCP | `ConsoleSamplesEndToEndTests` | e2e | PASS |
+| 39 | Without a model key the agent reports it and the key-free `--list` path keeps working | `ConsoleSamplesEndToEndTests` | e2e | PASS |
+| 40 | `--execution external` is reported in the manifest and a script still runs, with operators resolved in the application | `ConsoleSamplesEndToEndTests` | e2e | PASS |
+| 41 | The external-execution choice is visible and functional over MCP too | `ConsoleSamplesEndToEndTests` | e2e | PASS |
 
 Commands used for every row above:
 
@@ -224,9 +229,9 @@ dotnet test tests/Ason.Tests/Ason.Tests.csproj -c Release --filter "DisplayName!
 dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj -c Release --framework net9.0
 ```
 
-Final counts: `Ason.Bridge.Tests` 86/86, `Ason.Tests` 105/105 (hermetic filter), `LibDemo.SmokeTests` 11/11.
-On Windows with the samples built, 6 of the 86 start real processes (the two WPF samples and the relay); the
-WPF ones report as skipped on Linux, while the relay ones run there too.
+Final counts: `Ason.Bridge.Tests` 91/91, `Ason.Tests` 105/105 (hermetic filter), `LibDemo.SmokeTests` 11/11.
+11 of the 91 start real processes (two WPF samples, the console host, the console agent, the relay); the WPF
+ones report as skipped on Linux, while the console and relay ones run there too.
 
 ### Follow-up — closing the gaps the first report listed
 
@@ -257,6 +262,34 @@ real risk, each starting from a failing test:
   keep working), while its FlaUI UI tests need an interactive desktop session and would add a flaky, slow job
   for little extra signal. One target framework only, because the project also targets `net10.0-windows` and
   that SDK is still a preview.
+
+## Follow-up round 2 — is the sample coverage enough?
+
+The question was whether the existing samples cover every shape. The audit said: yes for the desktop and
+headless pairs, but two things were genuinely missing, and both are now in place rather than only documented.
+
+- **The agent side had no cross-platform sample.** `WpfAgentDemo` is Windows-only, so the headline feature of
+  the split — an agent whose API comes from the application — could not be run on Linux or in CI. New:
+  `samples/ConsoleAgentSample` (`--list` needs no model key; `--send "…"` drives the application with a model).
+- **The application side only ever demonstrated `InProcess`.** `AsonBridgeOptions.Execution` has four values and
+  no sample showed the isolation choice. `samples/ConsoleGrpcBridgeHost` now takes
+  `--execution inprocess|external`: the manifest reports `external-process`, the script text runs in an
+  `Ason.ExternalExecutor` child process, and operator calls still resolve inside the application — the two-way
+  protocol in action.
+- **The boilerplate both agent samples needed became library code.** `manifest.ToOperatorsLibrary()` (new, in
+  `Ason.Bridge`) turns a manifest into the client's operator library; the WPF agent, the console agent and
+  `AgentOverBridgeTests` all use it now, so the documented integration is one line instead of eight.
+- Tests: `ConsoleSamplesEndToEndTests` (5 cases) starts the console application, drives it from the console
+  agent over gRPC and MCP, asserts `agent-operators=0 library=manifest`, covers the key-free behaviour of the
+  chat path, and asserts `execution=external-process` with a working script in both adapters. They run on Linux
+  CI, unlike the WPF pair. A port-pair race that showed up while adding them is now handled once, in
+  `TestPorts`, for every process-based sample test.
+
+Verdict on what is *not* worth a new sample: a separate ASP.NET Core application side (the console host already
+is an ASP.NET Core host), a MAUI sample (workload-bound; the template demonstrates it) and a Blazor application
+side (same host shape). The remaining gaps are features, not samples: `invokeMcpTool` is not in the gRPC
+contract, `logStream` is only realised by the gRPC adapter, and the bridge key is not reachable through the
+relay or the typed MCP client.
 
 ## Coverage and known gaps
 
@@ -328,5 +361,6 @@ The work is carried by checkpoint commits on this branch (one per TDD stage, in 
 | `docs: draw the application/agent flow diagrams for every deployment shape` | architecture: four-case ASCII flows (en/zh/es) |
 | `docs: document non-agent callers driving an application over gRPC, MCP or HTTP` | the guide's *Using the bridge without an agent* section, a fifth flow diagram, and the index/README pointers |
 | `docs: map every shape (single-process and split) to its sample and run command` | the guide's *Samples and how to run them* matrix; every command in it was executed against the built samples, including the HTTP/curl and template-install paths |
+| `feat: cross-platform agent sample, external script-host mode and the manifest-to-library helper - GREEN` | follow-up round 2: `samples/ConsoleAgentSample`, `--execution external`, `AsonBridgeAgent.ToOperatorsLibrary()`, 5 new process-level tests (91/91) |
 
 Copy the RED/GREEN summary above into the pull-request body if these commits are squashed.

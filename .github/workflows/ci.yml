@@ -48,8 +48,10 @@ jobs:
           dotnet build src/Ason.Bridge.OpenApi/Ason.Bridge.OpenApi.csproj --configuration Release
           dotnet build src/Ason.Bridge.McpHost/Ason.Bridge.McpHost.csproj --configuration Release
           dotnet build samples/LibDemo/LibDemo.csproj --configuration Release
-          # The bridge samples are console applications, so unlike the WPF sample they also run here.
+          # The bridge samples are console applications, so unlike the WPF sample they also run here, and the
+          # console end-to-end tests exercise them on this job.
           dotnet build samples/ConsoleGrpcBridgeHost/ConsoleGrpcBridgeHost.csproj --configuration Release
+          dotnet build samples/ConsoleAgentSample/ConsoleAgentSample.csproj --configuration Release
           dotnet build samples/ConsoleGrpcBridgeDemo/ConsoleGrpcBridgeDemo.csproj --configuration Release
 
       # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test

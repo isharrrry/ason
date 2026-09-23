@@ -18,6 +18,17 @@
     <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.OpenApi\Ason.Bridge.OpenApi.csproj" />
     <ProjectReference Include="..\LibDemo\LibDemo.csproj" />
+    <!-- Referenced so the sample can demonstrate Execution = ExternalProcess. The NuGet package copies the
+         executor's host manifest files through its buildTransitive targets; a project reference does not, so
+         the target below does the same thing from the referenced project's output. -->
+    <ProjectReference Include="..\..\src\Ason.ExternalExecutor\Ason.ExternalExecutor.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build">
+    <ItemGroup>
+      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AsonExternalExecutorHostFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(AsonExternalExecutorHostFiles)' != ''" />
+  </Target>
 
 </Project>

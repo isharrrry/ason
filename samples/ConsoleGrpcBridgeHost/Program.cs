@@ -18,15 +18,26 @@ using Microsoft.Extensions.Logging;
 //   gRPC  -> http://localhost:<port>       (ConsoleGrpcBridgeDemo, or any gRPC client)
 //   MCP   -> http://localhost:<port+1>/mcp (an MCP-speaking agent, or the stdio relay host)
 //
-// Usage: ConsoleGrpcBridgeHost [--port 5222]
+// Usage: ConsoleGrpcBridgeHost [--port 5222] [--execution inprocess|external]
+//
+//   inprocess (default) - scripts are evaluated in this process, so they can touch the operators directly
+//   external            - scripts are evaluated in an Ason.ExternalExecutor child process, which calls back
+//                         here for every operator invocation; use it when generated code must not run inside
+//                         the application process. The manifest reports which one is in use.
 
 var port = ParsePort() ?? 5222;
 var mcpPort = port + 1;
 
+var execution = (Value("--execution") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_EXECUTION") ?? "inprocess").ToLowerInvariant();
+if (execution is not ("inprocess" or "external")) {
+    Console.Error.WriteLine($"unknown execution '{execution}'; expected 'inprocess' or 'external'");
+    return 2;
+}
+
 var runtime = new AsonBridgeRuntime(new AsonBridgeOptions {
     AppName = "LibDemo application",
     Assemblies = new[] { typeof(LibDemoOperator).Assembly },
-    Execution = AsonBridgeExecution.InProcess,
+    Execution = execution == "external" ? AsonBridgeExecution.ExternalProcess : AsonBridgeExecution.InProcess,
     // LibDemoOperator is a marker-only operator: it has no view to attach to, so the host materialises it
     // once and the bridge addresses it by type name.
     SingletonOperators = AsonBridgeOperators.MaterializeMarkerOnly(typeof(LibDemoOperator).Assembly),
@@ -62,11 +73,19 @@ Console.WriteLine($"  gRPC : http://localhost:{port}");
 Console.WriteLine($"  MCP  : http://localhost:{mcpPort}/mcp");
 Console.WriteLine($"  HTTP : http://localhost:{mcpPort}/ason/openapi.json");
 Console.WriteLine($"  {manifest.Api.Operators.Count} operators, {manifest.Api.MethodCount} methods, execution {manifest.Execution}");
+// One line that says "the bridge is up and this is what it is", so a script or a test can wait for it.
+Console.WriteLine($"ASON_BRIDGE_READY grpc=http://localhost:{port} mcp=http://localhost:{mcpPort}/mcp execution={manifest.Execution} app={manifest.AppName}");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 await app.WaitForShutdownAsync();
 await runtime.DisposeAsync();
 return 0;
+
+string? Value(string name) {
+    var args = Environment.GetCommandLineArgs();
+    var index = Array.IndexOf(args, name);
+    return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+}
 
 int? ParsePort() {
     var args = Environment.GetCommandLineArgs();
