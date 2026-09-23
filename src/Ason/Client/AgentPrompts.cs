@@ -142,6 +142,11 @@ public static class AgentPrompts
     /// tag - the visible symptom of a typo. It is deliberately not second-guessed with a hand-rolled registry
     /// check: legitimate tags such as <c>en-001</c> resolve like unregistered ones, and the display name of an
     /// unregistered tag differs between runtimes.
+    ///
+    /// Because "well-formed" is decided by the runtime, it is not identical on every platform either: NLS
+    /// (.NET on Windows) rejects a digits-only tag such as <c>12345</c>, while ICU (Linux and macOS) resolves
+    /// it, so that call throws at client construction on Windows and produces a directive naming the tag on
+    /// Linux. Pass a real tag; the library does not add a registry of its own to paper over the difference.
     /// </remarks>
     /// <exception cref="ArgumentException">The name is not a culture name the current runtime accepts.</exception>
     public static string BuildLanguageDirective(string? answerLanguage) {

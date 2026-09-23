@@ -84,12 +84,18 @@ public class AnswerLanguageTests {
 
     [Fact]
     public void A_malformed_language_fails_at_client_construction_not_later() {
+        // The input has to be malformed in a way *every* runtime rejects. A digits-only tag such as "12345" is
+        // rejected by NLS (.NET on Windows) but accepted by ICU, which resolves it to a culture named after the
+        // tag itself - so on Linux the client was constructed happily and this test failed on a platform
+        // difference instead of on a regression. "en/US" contains a character that cannot appear in a language
+        // tag at all, and both implementations reject it (the sibling test above proves the same input throws
+        // when the directive is built directly, on both runners).
         var chat = TestChatServices.CreateReceptionService("script");
-        var options = new AsonClientOptions { AnswerLanguage = "12345" };
+        var options = new AsonClientOptions { AnswerLanguage = "en/US" };
 
         var ex = Assert.Throws<ArgumentException>(() => TestHarness.CreateBasicClient(chat, options));
 
-        Assert.Contains("12345", ex.Message);
+        Assert.Contains("en/US", ex.Message);
     }
 
     [Fact]
