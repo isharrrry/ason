@@ -17,6 +17,83 @@ Below is a simplified overview of the ASON architecture.
 
 > How operators are declared and attached is described in [writing operators](operators.md).
 
+## Deployment topology
+
+`ExecutionMode` and `UseRemoteRunner` are independent settings: the first says *how* the generated
+code is isolated, the second says *where* the script host lives. Together they produce five real link
+paths across three process boundaries.
+
+```
+[1] Client host  (your app: AsonClient, RootOperator, operators, LLM agents, MCP clients)
+      |
+      |  boundary A: stdio, one JSON line per message          (local)
+      |  boundary B: SignalR carrying the same JSON lines      (remote)
+      |
+      +--> [2] Client-side external executor               local ExternalProcess / Docker
+      |        Ason.ExternalExecutor child process on the client machine
+      |        (Docker mode: the child is "docker run --rm -i <image>")
+      |
+      +--> [3] Remote runner service                       remote
+               ASP.NET Core + /scriptRunnerHub  (Ason.RemoteBridge)
+                  |
+                  |  boundary C: identical stdio protocol, initiated by the server
+                  |
+                  +--> [4] Server-side external executor     remote ExternalProcess / Docker
+                  |        Ason.ExternalExecutor child process on the server
+                  |
+                  +--> [4'] Server in-process evaluation      remote InProcess
+                           ScriptExecutor runs inside the web server process
+
+Operator calls always travel back to [1]: the script calls an operator, the invocation crosses the
+boundary or boundaries back to your process, the real method runs there, and the result returns.
+```
+
+| Boundary | Protocol | Direction | Owned by |
+|---|---|---|---|
+| A: client ↔ client-side executor | ASON JSON messages over the child's stdin/stdout | both ways (script down, operator calls up) | the client (`ScriptRunnerProcessHost`; the process tree is killed on dispose) |
+| B: client ↔ remote runner service | the same JSON messages inside SignalR, plus a `StartRunner` handshake | both ways, including server-initiated callbacks (`OnRunnerMessage`, `OnRunnerClosed`) | the server (one session per connection, idle sessions reclaimed); the client reconnects automatically |
+| C: remote runner service ↔ server-side executor | the identical stdio protocol of boundary A | both ways | the server (reuses the same `ScriptRunnerProcessHost`) |
+
+Because the script host only ever receives *text* — the generated script — and always calls back for
+operators, both transports share one message set (`exec`, `execResult`, `invoke`, `invokeResult`,
+`log`, `mcpInvoke`, …). Moving the script host therefore does **not** move your operators or your data;
+[execution modes](execution-modes.md) covers how to pick a configuration.
+
+### Credentials and data boundaries
+
+| Thing | Where it lives | Crosses a boundary? |
+|---|---|---|
+| LLM API key and model configuration | the client host only | no |
+| MCP client credentials | the client host only | no |
+| Business data reachable through operators | the client host only | no, apart from the arguments and results of the operator calls themselves |
+| Generated script text (`exec`) | produced on the client | yes — it is sent to the script host |
+| Log messages, operator arguments and results | both sides | yes |
+
+The non-client components have no LLM dependency: `Ason.RemoteBridge`, `Ason.ExternalExecutor` and
+`Ason.Runner.Core` contain no chat-completion code, and the executor only needs Roslyn. The extractor
+agent is itself an operator, so even its model call happens on the client.
+
+Practical consequences:
+
+- a remote runner host does **not** need outbound access to your model provider, and a desktop client
+  does not need a local runtime or Docker for the script host;
+- credentials stay wherever your operators live, so an LLM or HTTP call placed inside an operator
+  keeps its secrets on the client;
+- anything that reaches the model's context can end up inside the script text, and that text does
+  cross the boundary — choose what operator return values you expose to agents accordingly.
+
+> Static analysis (`AsonClientOptions.ForbiddenScriptKeywords`, which denies `System.IO`,
+> `Process.Start`, `System.Reflection`, `Environment.GetEnvironmentVariable`, …) is a keyword filter,
+> not a sandbox. In **In-process** mode the script runs inside your own process, so that filter is the
+> only barrier — which is why In-process is not recommended for untrusted input.
+
+### UI thread affinity
+
+Operator methods are always invoked through the `SynchronizationContext` captured when the `AsonClient`
+is constructed. In a WPF application that means every operator call runs on the UI thread, locally and
+remotely alike, so operators can touch UI-bound objects without extra marshalling. Construct the
+`AsonClient` on the UI thread (as the sample does) for this to hold.
+
 ## ASON agents
 
 ASON uses multiple internal AI agents to coordinate the workflow, generate scripts, extract data, and explain results:

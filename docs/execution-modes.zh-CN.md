@@ -60,3 +60,48 @@ AsonClientOptions options = new() {
 
 演示此配置的示例项目包含在 **MAUI Project Template** 中。
 
+## 模式与部署的两种独立轴线
+
+`ExecutionMode` 和 `UseRemoteRunner` 是正交的：前者选择脚本如何被隔离，后者选择脚本宿主在哪里运行。传输方式则由这一组合决定：
+
+```csharp
+// RunnerTransportManager
+RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
+// CreateTransport(): UseRemoteRunner -> SignalRTransport(RemoteUrl)
+//                    otherwise      -> StdIoProcessTransport(Mode, DockerImage, RunnerExecutablePath)
+```
+
+| # | `ExecutionMode` | `UseRemoteRunner` | 脚本在何处被求值 | 链路 |
+|---|---|---|---|---|
+| 1 | `InProcess` | `false` | 你自己的进程 —— 完全不使用传输 | 仅客户端 |
+| 2 | `ExternalProcess` | `false` | 客户端机器上的 `Ason.ExternalExecutor` 子进程 | 客户端 → 子进程 |
+| 3 | `Docker` | `false` | 客户端机器上以 `docker run --rm -i <image>` 启动的容器 | 客户端 → 子进程 → 容器 |
+| 4 | `InProcess` | `true` | 远程运行器的**服务进程** | 客户端 → 服务器 |
+| 5 | `ExternalProcess` / `Docker` | `true` | **服务器**上的子进程或容器 | 客户端 → 服务器 → 服务器侧执行器 |
+
+在每一行中，operator 方法仍然在客户端进程中运行。当 `UseRemoteRunner = true` 时，所选模式会被发送到服务器（`StartRunner((int)mode, dockerImage)`），由服务器决定是在自己的进程内求值脚本，还是启动一个执行器。这些边界在[架构](architecture.zh-CN.md#部署拓扑)中有所描述。
+
+## 哪种配置适合哪种应用形态
+
+| 应用形态 | 推荐 | 原因 |
+|---|---|---|
+| WPF 或 WinForms 桌面应用，且输入可信 | `InProcess`（示例默认值）或 `ExternalProcess` | 数据与 UI 都留在本地，operator 调用要么是进程内调用，要么是机器内 IPC —— 延迟尽可能低 |
+| 不应在自身进程中运行生成代码的桌面应用 | `ExternalProcess`，机器上有 Docker 时则用 `Docker` | 无需任何额外基础设施即可获得隔离 |
+| 用户无法安装 Docker，但生成代码仍不应在他们的机器上运行的桌面应用 | 在你的服务器上远程执行，并在那里使用 `Docker`（或 `InProcess`） | 脚本宿主离开客户端，而 operator、数据和凭据仍留在本地 —— 参见[凭据与数据边界](architecture.zh-CN.md#凭据与数据边界) |
+| 数据已经位于服务器上的 Blazor Server / ASP.NET Core 应用 | 通过 `AddAson` 在该应用**内部**运行 `AsonClient` | 客户端主机*就是*服务器；operator 本就在处理服务器数据，因此远程执行并不会带来额外价值 |
+| Blazor WebAssembly | 远程执行；如果 operator 接口允许，也可在浏览器中使用 `InProcess` | 浏览器无法启动进程或容器 |
+| MAUI / 移动端或其他瘦客户端 | 远程（`Ason.RemoteBridge` + `UseRemoteRunner`） | 设备无法承载执行器 —— 这正是 MAUI 模板所演示的内容 |
+| 一个服务为众多客户端运行脚本 | 专用的远程运行器主机 | 统一在一处为执行器定版本、实施策略并收集日志 |
+
+## 如何在两者之间选择以及每种选择的代价
+
+```
+Do you need isolation from the generated code?
+  no  -> In-process                     fastest; no extra process; the keyword filter is the only barrier
+  yes -> Can this client host a runner (a child process, plus Docker for containers)?
+           yes -> local External process / Docker    lowest latency, data never leaves the machine
+           no  -> remote, with Docker / external process / in-process on the server
+                  (mobile, browser, locked-down and thin clients)
+```
+
+延迟是远程执行的主要代价：每次 operator 调用都是一次网络往返（当服务器启动执行器时还要再加一次本地跳转），并且每次调用都会被封送回客户端的 UI 线程。因此，如果一个脚本对 N 个条目逐个调用 operator，其代价约为 N 次往返，而在本地求值的脚本则没有任何往返。

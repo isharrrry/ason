@@ -60,3 +60,66 @@ AsonClientOptions options = new() {
 
 En la **MAUI Project Template** se incluye un proyecto de ejemplo que demuestra esta configuración.
 
+## Modos vs. despliegue: dos ejes independientes
+
+`ExecutionMode` y `UseRemoteRunner` son ortogonales: el primero selecciona cómo se aísla el script y el
+segundo selecciona dónde se ejecuta el host del script. El transporte se deriva de esa combinación:
+
+```csharp
+// RunnerTransportManager
+RequiresTransport => UseRemoteRunner || Mode != ExecutionMode.InProcess;
+// CreateTransport(): UseRemoteRunner -> SignalRTransport(RemoteUrl)
+//                    otherwise      -> StdIoProcessTransport(Mode, DockerImage, RunnerExecutablePath)
+```
+
+| # | `ExecutionMode` | `UseRemoteRunner` | El script se evalúa en | Ruta de enlace |
+|---|---|---|---|---|
+| 1 | `InProcess` | `false` | tu propio proceso — sin ningún transporte | solo el cliente |
+| 2 | `ExternalProcess` | `false` | proceso hijo de `Ason.ExternalExecutor` en la máquina del cliente | cliente → hijo |
+| 3 | `Docker` | `false` | contenedor iniciado como `docker run --rm -i <image>` en la máquina del cliente | cliente → hijo → contenedor |
+| 4 | `InProcess` | `true` | el **proceso del servicio** de ejecución remota | cliente → servidor |
+| 5 | `ExternalProcess` / `Docker` | `true` | un proceso hijo o un contenedor en el **servidor** | cliente → servidor → ejecutor del lado del servidor |
+
+En todas las filas los métodos de los operadores se siguen ejecutando en el proceso del cliente. Con
+`UseRemoteRunner = true` el modo seleccionado se envía al servidor (`StartRunner((int)mode, dockerImage)`),
+que decide si evalúa el script en su propio proceso o si lanza un ejecutor. Las fronteras se describen en
+[arquitectura](architecture.es.md#topología-de-despliegue).
+
+## Qué configuración encaja con cada forma de aplicación
+
+| Forma de la aplicación | Recomendado | Por qué |
+|---|---|---|
+| Aplicación de escritorio WPF o WinForms, entrada confiable | `InProcess` (lo predeterminado del ejemplo) o `ExternalProcess` | los datos y la UI permanecen locales, y una llamada a un operador es IPC en proceso o dentro de la misma máquina — la latencia más baja posible |
+| Aplicación de escritorio que no debe ejecutar código generado en su propio proceso | `ExternalProcess`, o `Docker` cuando la máquina tiene Docker | aislamiento sin infraestructura adicional |
+| Aplicación de escritorio cuyos usuarios no pueden instalar Docker, pero el código generado tampoco debería ejecutarse en su máquina | remoto en tu servidor, con `Docker` (o `InProcess`) allí | el host del script sale del cliente mientras los operadores, los datos y las credenciales permanecen locales — consulta [credenciales y fronteras de datos](architecture.es.md#credenciales-y-fronteras-de-datos) |
+| Aplicación Blazor Server / ASP.NET Core donde los datos ya viven en el servidor | ejecutar `AsonClient` **dentro** de esa aplicación mediante `AddAson` | el host del cliente *es* el servidor; los operadores ya trabajan sobre los datos del servidor, así que la ejecución remota no aporta nada |
+| Blazor WebAssembly | remoto, o `InProcess` en el navegador si la superficie de operadores lo permite | un navegador no puede lanzar procesos ni contenedores |
+| MAUI / clientes móviles u otros clientes ligeros | remoto (`Ason.RemoteBridge` + `UseRemoteRunner`) | el dispositivo no puede alojar un ejecutor — esto es lo que demuestra la plantilla de MAUI |
+| Un solo servicio ejecutando scripts para muchos clientes | un host de ejecución remota dedicado | un único lugar para versionar el ejecutor, aplicar políticas y recopilar logs |
+
+## Cómo elegir entre ellos y cuánto cuesta cada opción
+
+```
+Do you need isolation from the generated code?
+  no  -> In-process                     fastest; no extra process; the keyword filter is the only barrier
+  yes -> Can this client host a runner (a child process, plus Docker for containers)?
+           yes -> local External process / Docker    lowest latency, data never leaves the machine
+           no  -> remote, with Docker / external process / in-process on the server
+                  (mobile, browser, locked-down and thin clients)
+```
+
+El árbol de decisión anterior se lee como una serie de preguntas encadenadas. La primera pregunta es si
+necesitas aislamiento respecto del código generado. Si la respuesta es *no*, la rama izquierda lleva
+directamente a In-process: es la opción más rápida, no añade ningún proceso extra y el filtro de palabras
+clave es la única barrera. Si la respuesta es *sí*, aparece una segunda pregunta: si este host de cliente
+puede alojar un runner, es decir, un proceso hijo y, para contenedores, Docker. Una respuesta afirmativa
+lleva a un External process o a Docker local, con la latencia más baja y sin que los datos salgan nunca de
+la máquina. Una respuesta negativa lleva a la ejecución remota, con Docker, un proceso externo o
+In-process en el servidor; la propia rama enumera los casos típicos: clientes móviles, navegadores y
+clientes restringidos o ligeros.
+
+La latencia es el principal costo de la ejecución remota: cada llamada a un operador es una ida y vuelta
+por la red (más un salto local cuando el servidor lanza un ejecutor), y cada llamada se marshalla de
+vuelta al hilo de la UI del cliente. Por lo tanto, un script que llama a operadores una vez por elemento
+sobre N elementos cuesta aproximadamente N idas y vueltas, mientras que un script evaluado localmente no
+cuesta ninguna.
