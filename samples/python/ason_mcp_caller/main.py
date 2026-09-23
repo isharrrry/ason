@@ -31,6 +31,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent.parent
 
+# A Windows console usually hands Python a legacy codepage (GBK, cp1252, ...), which would turn a Chinese
+# operator description into UnicodeEncodeError. Force UTF-8 on the streams this prints to.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def find_relay() -> Path:
     """The relay's built assembly, wherever this repository puts it.

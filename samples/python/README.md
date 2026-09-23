@@ -79,6 +79,24 @@ MY_OPEN_AI_KEY=… python samples/python/ason_mcp_agent/main.py \
   --instruction "Add 40 and 2 with the application's operator and tell me the result." --expect 42
 ```
 
+`--base-url` and `--model` point the agent at any OpenAI-compatible endpoint, so a domestic provider works
+without changing code — for example `--base-url https://api.deepseek.com --model deepseek-chat`. `--instruction`
+may be repeated (one case each) and `--expect` pairs with it positionally: with `--expect 42` the run fails
+unless the number the *application* returned appears in the model's answer, which is what makes this a test of
+tool calling rather than of connectivity. `--verbose` prints every tool call and its result to stderr.
+
+A run looks like this (application side: `samples/ConsoleBridgeAppSample`):
+
+```
+# 6 tools: ason_list_instances, ason_get_manifest, ason_invoke_function, ason_stream_script, ason_execute_script, ason_get_script_api
+--- instruction: Use the application to add 40 and 2, then tell me the result.
+--- answer: LibDemoStaticOperator.Add(40, 2) returned 42.
+```
+
+Give the model room to be wrong: on an instruction where it invents an operator name it receives the
+application's `operator-not-found` result, reads the manifest with `ason_get_manifest`, and calls the right one -
+the loop feeds every result (including errors) back to the model.
+
 Only the first program needs gRPC. The MCP caller uses nothing but the standard library (JSON-RPC over the relay's
 stdio, or Streamable HTTP over `urllib`), and the agent adds just the `openai` client — the MCP tools it hands to
 the model are the application's own, so a deployment can be driven from Python without a `.proto` file at all.

@@ -450,7 +450,7 @@ closed those gaps **without a breaking change**, and this section is its evidenc
 | T11 | `ConsoleBridgeAppSample` / `ConsoleBridgeCallerSample`, role legend in the sample matrix | ✅ |
 | T12 | "What a caller has to know and configure": the shape matrix and the three premises | ✅ |
 | T13 | WPF `--execution external`, remote-runner across two processes, execution reporting tests | ✅ |
-| T14 | `samples/mcp` client configurations, stdlib MCP caller, OpenAI-driven MCP tool-calling agent | ✅ (Python not executed here — see limits) |
+| T14 | `samples/mcp` client configurations, stdlib MCP caller, OpenAI-driven MCP tool-calling agent | ✅ (executed end to end with a real model) |
 | T15 | `samples/bridge-examples.http` with the four request groups | ✅ |
 
 ### Verification commands and results
@@ -499,6 +499,7 @@ argument errors, and missing/optional tool arguments.
 | The execution location a caller is told is the one in force | `ExecutionReportingTests`, `RemoteRunnerBridgeEndToEndTests`, `WpfApplicationEndToEndTests` |
 | An MCP client can be configured from a file that is valid and points at the relay | `McpClientConfigTests` |
 | The console/desktop samples keep working over both transports | `ConsoleSamplesEndToEndTests` (5), `WpfApplicationEndToEndTests` (3) |
+| A real model can drive the application through MCP and the operator really runs | `samples/python/ason_mcp_agent` with `--expect 42`: named operator, discovery, error recovery over stdio, Chinese answer |
 | The HTTP routes behave as `samples/bridge-examples.http` documents | executed one by one against a running application: `GET /ason/manifest`, `/instances`, `/openapi.json` → 200; `POST /ason/script` → 200 `{"success":true,"result":42}`; `POST /ason/functions/invoke` (static) → 200 `42`; unknown operator → 400 `operator-not-found`; path form → 200 `42`; body-only mode → 200 `3`; empty `code` → 400 `invalid-arguments`; `POST /ason/script/stream` → 200 with two `event: log` frames then `event: result` |
 
 ### Honest limits of this round
@@ -521,8 +522,24 @@ argument errors, and missing/optional tool arguments.
   LibDemoStaticOperator.Add` → `42`, `script … --stream` → logs + `42`; MCP over HTTP `--list` → 6 tools and
   `--call ason_invoke_function` → `42`; MCP over stdio through the real relay process → 6 tools and `42`.
   `--args` now also accepts `@file.json`, because PowerShell rewrites nested quotes before Python sees them.
-  The OpenAI-driven agent still needs a key: without one it exits 2 with an explicit message, which is the
-  contract it was written to keep.
+- **The OpenAI-driven MCP agent was run against a real model**, which closed the last gap and found two more
+  defects that no static check could:
+  1. `run_instruction()` took one `client` parameter and used it as **both** the OpenAI client and the MCP
+     transport, so the first tool the model chose crashed with `AttributeError: 'dict' object has no attribute
+     'headers'`. It now takes `llm` and `mcp` separately, with a comment saying why.
+  2. Python on this machine hands stdout the **GBK** codepage, so a Chinese answer (or a Chinese operator
+     description) died with `UnicodeEncodeError`. All three programs now force UTF-8 on the streams they print
+     to, which matters for exactly the audience these samples are written for.
+  Results against `ConsoleBridgeAppSample` (model `deepseek-chat` through an OpenAI-compatible endpoint), each
+  with `--expect 42`, all exit `0`:
+  | Case | What the model did |
+  |---|---|
+  | operator named in the instruction | `ason_invoke_function(LibDemoStaticOperator.Add, [40, 2])` → `42` |
+  | API not named (discovery) | `ason_get_script_api` → read the operators → `ason_invoke_function` → `42` |
+  | error recovery, over **stdio** | `NoSuchOperator` → `operator-not-found` → `ason_get_manifest` → the right operator → `42` |
+  | Chinese instruction | answered in Chinese: "40 加 2 的结果是 42。" |
+  The API key was supplied as an environment variable for the run only; nothing about it is stored in the
+  repository or in this report.
 - **Real Docker execution is still excluded** from the default test filter, as it was before this round: those
   cases need a daemon. What is asserted is the reporting path (an injected executor whose name is `docker`
   reaches every adapter's manifest) and the documentation states the requirement.

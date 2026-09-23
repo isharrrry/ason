@@ -30,6 +30,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "ason_mcp_caller
 
 from main import DEFAULT_RELAY, connect_tools, initialize  # noqa: E402  (sibling helper module)
 
+# A Windows console usually hands Python a legacy codepage (GBK, cp1252, ...), which turns a model's Chinese
+# answer or a Chinese operator description into UnicodeEncodeError. Force UTF-8 on the streams this prints to.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def build_transport(args):
     """Reuses the caller's transports so the agent and the plain caller cannot drift apart."""
@@ -48,18 +56,24 @@ def openai_tools(tools: list[dict]) -> list[dict]:
     } for tool in tools]
 
 
-def run_instruction(client, tools: list[dict], instruction: str, model: str, max_rounds: int, verbose: bool) -> str:
+def run_instruction(llm, mcp, tools: list[dict], instruction: str, model: str, max_rounds: int, verbose: bool) -> str:
+    """One instruction: the model picks tools, the application runs them, the results go back to the model.
+
+    `llm` and `mcp` are two different clients on purpose - the first talks to the model, the second to the
+    application - and mixing them up is the kind of mistake only a real run reveals.
+    """
     messages = [
         {"role": "system", "content": (
             "You drive a running application through its MCP tools. Call a tool whenever the request needs the "
             "application's data or operators, then answer in one short sentence using the result. Never invent a "
-            "result you did not receive from a tool."
+            "result you did not receive from a tool. If a tool reports an error, read it and try a different "
+            "operator, method or argument rather than repeating the same call."
         )},
         {"role": "user", "content": instruction},
     ]
 
     for round_number in range(1, max_rounds + 1):
-        completion = client.chat.completions.create(model=model, messages=messages, tools=openai_tools(tools), temperature=0)
+        completion = llm.chat.completions.create(model=model, messages=messages, tools=openai_tools(tools), temperature=0)
         message = completion.choices[0].message
         messages.append(message.model_dump(exclude_none=True))
 
@@ -76,7 +90,7 @@ def run_instruction(client, tools: list[dict], instruction: str, model: str, max
             if verbose:
                 print(f"  round {round_number}: {name}({json.dumps(arguments, ensure_ascii=False)})", file=sys.stderr)
 
-            reply = mcp_request(client, "tools/call", {"name": name, "arguments": arguments})
+            reply = mcp.request("tools/call", {"name": name, "arguments": arguments})
             if "error" in reply:
                 text = json.dumps(reply["error"], ensure_ascii=False)
             else:
@@ -89,11 +103,6 @@ def run_instruction(client, tools: list[dict], instruction: str, model: str, max
             messages.append({"role": "tool", "tool_call_id": call.id, "content": text or "(empty result)"})
 
     return f"the model did not finish within {max_rounds} rounds"
-
-
-def mcp_request(client, method: str, params: dict) -> dict:
-    """The transports in ason_mcp_caller share one request/notify surface; both work here."""
-    return client.request(method, params)
 
 
 def main() -> int:
@@ -131,7 +140,7 @@ def main() -> int:
     client = build_transport(args)
     try:
         initialize(client, "ason-mcp-agent")
-        tools = mcp_request(client, "tools/list", {}).get("result", {}).get("tools", [])
+        tools = client.request("tools/list", {}).get("result", {}).get("tools", [])
         if not tools:
             print("the application published no MCP tools (are its capabilities enabled?)", file=sys.stderr)
             return 1
@@ -141,7 +150,7 @@ def main() -> int:
         failures = 0
         for index, instruction in enumerate(instructions):
             print(f"\n--- instruction: {instruction}")
-            answer = run_instruction(llm, tools, instruction, args.model, args.max_rounds, args.verbose)
+            answer = run_instruction(llm, client, tools, instruction, args.model, args.max_rounds, args.verbose)
             print(f"--- answer: {answer}")
             if index < len(args.expect):
                 expected = args.expect[index]

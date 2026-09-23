@@ -42,6 +42,14 @@ HERE = Path(__file__).resolve().parent
 GEN = HERE / ".gen"
 DEFAULT_PROTO = HERE.parent.parent / "src" / "Ason.Bridge.Grpc" / "Protos" / "ason_bridge.proto"
 
+# A Windows console usually hands Python a legacy codepage (GBK, cp1252, ...), and this program prints the
+# manifest - descriptions included - as JSON. Force UTF-8 on the streams it writes to.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 
 def ensure_stubs(proto: Path) -> None:
     """Compiles the contract into .gen/ when it is missing or older than the .proto file.
