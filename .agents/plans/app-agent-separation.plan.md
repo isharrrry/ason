@@ -667,3 +667,14 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | ① 修复（按你选的最小方案 B） | 输入改为两个运行时都拒的 `en/US`（含不可能出现在语言标签里的字符；同文件上一条用例已证明它在 Linux 上也抛）。库侧 `AgentPrompts.BuildLanguageDirective` 的 `<remarks>` 如实记录该平台差异（**纯注释、零行为改动**）。验证：默认 **105/105**、强制 NLS **105/105**、`AnswerLanguageTests` **15/15**。 |
 | ② Windows：`Bridge tests` 步骤 **0 秒**失败 = 上一轮我自己引入的回归 | `windows-samples` 作业默认 shell 是 **pwsh**，行尾反斜杠**不是续行**：`dotnet test … \` + 次行 `--logger …` → 解析期 `Missing expression after unary operator '--'`、退码 1（run 3 同命令单行时 35 秒通过；本机用同样两行复现）。已把两个 Windows 测试步骤改为一命令一行，并把"没有 TRX"的注解文案从"构建失败"改为"没有任何测试跑过"（更如实）。提交 `ca6c128`。 |
 | ③ 仍未验证 | Ubuntu 上桥测试**依然一次都没跑过**（两轮都停在 `Unit tests`）。若这轮后 `Unit tests` 转绿，桥测试将首次执行；已知的下一步风险点是 console 样例 `--execution external` 的进程级 E2E（`ConsoleBridgeAppSample.csproj` 的 `CopyAsonExternalExecutorHostFiles` 用反斜杠 `Include`，Linux 上是否真拷到子执行器**未实测**）与 remote-runner E2E —— 若红，注解会直接点名。 |
+
+### 10.10 第三轮（run 8，`4fe9b50`）：Windows 全绿；桥测试首次在 Ubuntu 执行并暴露端口助手缺陷
+
+| 项 | 内容（含核实结论） |
+|---|---|
+| Windows 作业 | **全绿**（含 `Bridge tests`、`Library unit tests (Windows)`、FlaUI UI 自动化；注解步骤因无失败而 skipped）→ 上一轮的 pwsh 续行回归确认修好，且桥测试在 Windows 上依旧 158/158。 |
+| Ubuntu 作业 | `Unit tests` **转绿** → 两处语言断言修复在 Linux 上得到确认；随后 `Bridge tests (with coverage)` 失败，**桥测试首次真正在 Ubuntu 上执行**（前两轮均被跳过）。 |
+| 失败形态（注解直接给出） | 6 条进程级 E2E 全部同一个异常：`System.InvalidOperationException : Could not find two consecutive free ports for a sample process.` at `tests/Ason.Bridge.Tests/TestSupport/TestPorts.cs:25`（`ConsoleSamplesEndToEndTests` 5 条 + `RemoteRunnerBridgeEndToEndTests` 1 条）。**与预判的执行器/反斜杠 `Include` 无关**。 |
+| 根因（平台差异，测试基础设施） | 原 `Pair()` 把两个 socket 绑到**端口 0**，再检查 OS 分配的两个临时端口是否相邻——**前提本身不成立**：Windows 顺序分配（相邻，故本地/Windows 一直绿），Linux 伪随机散布（100 次尝试必然全落空）。该实现的文档字符串写的是"同时持有两者"，代码却从没这么做过。 |
+| 修复 | `Pair()` 改为**自己挑基准端口**（20000–29999，低于两个平台的临时端口区间、也避开样例默认的 5222/5223），并在同一瞬间同时绑定 `base` 与 `base+1`：两个都能绑上才算一对，`finally` 里释放后交给子进程。新增 `TestPortsTests` 2 条，锁住"端口来自助手自选的区间"这一**使它跨平台成立的不变量**（"能凑出一对"这条断言在 Linux 上本来就是假的，在 Windows 上又恒真，锁不住任何东西）。 |
+| 仍未跑到 | `Coverage floor (bridge adapters)` 与 `The contract ships with the package` 因桥测试失败被 skipped，尚未在任何平台执行过 → 下一轮才首次执行。 |
