@@ -90,7 +90,8 @@ public static class AsonOpenApiDocument {
                         ["required"] = new JsonArray { "code" },
                         ["properties"] = new JsonObject {
                             ["code"] = new JsonObject { ["type"] = "string", ["description"] = "The script body." },
-                            ["includeProxyPreamble"] = new JsonObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Prepend the generated proxy layer." }
+                            ["includeProxyPreamble"] = new JsonObject { ["type"] = "boolean", ["default"] = true, ["description"] = "Prepend the generated proxy layer." },
+                            ["includeInstanceDeclarations"] = new JsonObject { ["type"] = "boolean", ["default"] = false, ["description"] = "Body-only mode: the application prepends its proxy layer and declarations for the operator instances alive right now, so a stale manifest snapshot cannot make the script fail." }
                         }
                     },
                     ["AsonBridgeInvokeRequest"] = new JsonObject {

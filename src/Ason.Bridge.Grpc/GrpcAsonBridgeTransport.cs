@@ -27,6 +27,17 @@ public sealed class GrpcAsonBridgeTransport : IRunnerTransport {
     /// </summary>
     public bool RelayLogs { get; init; }
 
+    /// <summary>
+    /// The proxy layer the caller prepends to every script - normally <c>manifest.Proxies</c> as it was when
+    /// the caller read the manifest. When it is set, this transport strips that layer back off before sending,
+    /// and asks the application for its own current proxy layer and instance declarations instead. That is what
+    /// keeps scripts that reference a live view working after the view was closed and reopened: the caller's
+    /// snapshot cannot know about the new instance, the application always does.
+    ///
+    /// Left unset, the code travels exactly as the caller composed it - the behaviour before this option.
+    /// </summary>
+    public string? Proxies { get; init; }
+
     public bool IsStarted { get; private set; }
 
     public event Action<string>? LineReceived;
@@ -51,16 +62,17 @@ public sealed class GrpcAsonBridgeTransport : IRunnerTransport {
         switch (type) {
             case "exec": {
                 var code = root.TryGetProperty("code", out var codeElement) ? codeElement.GetString() ?? string.Empty : string.Empty;
+                var body = StripSnapshotLayer(code, out var freshInstances);
                 if (RelayLogs) {
                     AsonBridgeCallResult? completion = null;
-                    await foreach (var evt in _client.StreamExecutionAsync(code, includeProxyPreamble: false).ConfigureAwait(false)) {
+                    await foreach (var evt in _client.StreamExecutionAsync(body, includeProxyPreamble: false, includeInstanceDeclarations: freshInstances).ConfigureAwait(false)) {
                         if (evt.Type == "log") EmitLog(id, evt.Level, evt.Message);
                         else completion = FromEvent(evt);
                     }
                     EmitExecResult(id, completion ?? AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.ExecutionFailed, "The application ended the stream without a result."));
                 }
                 else {
-                    EmitExecResult(id, await _client.ExecuteScriptAsync(code, includeProxyPreamble: false).ConfigureAwait(false));
+                    EmitExecResult(id, await _client.ExecuteScriptAsync(body, includeProxyPreamble: false, includeInstanceDeclarations: freshInstances).ConfigureAwait(false));
                 }
                 break;
             }
@@ -96,6 +108,18 @@ public sealed class GrpcAsonBridgeTransport : IRunnerTransport {
     static string InvokeNotExpected(string messageType) =>
         $"The application answered an '{messageType}' request, but operators are resolved inside the application process. " +
         "This means the bridge is pointed at an executor that is not the application itself.";
+
+    /// <summary>
+    /// Removes the caller's snapshot proxy layer from the composed script, so the application rebuilds it with
+    /// today's instance declarations. The comparison is against the exact text the caller prepended, so it
+    /// either matches completely or not at all; anything else travels untouched.
+    /// </summary>
+    string StripSnapshotLayer(string code, out bool freshInstances) {
+        freshInstances = false;
+        if (Proxies is not { Length: > 0 } proxies || !code.StartsWith(proxies, StringComparison.Ordinal)) return code;
+        freshInstances = true;
+        return code[proxies.Length..];
+    }
 
     static string Serialize(object payload) => JsonSerializer.Serialize(payload, Json);
 

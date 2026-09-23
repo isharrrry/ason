@@ -14,6 +14,13 @@ internal sealed class FakeAsonExecutor : IAsonExecutor {
 
     public AsonBridgeCallResult ScriptResult { get; set; } = AsonBridgeCallResult.Ok(JsonSerializer.SerializeToElement("script-ok"));
     public AsonBridgeCallResult FunctionResult { get; set; } = AsonBridgeCallResult.Ok(JsonSerializer.SerializeToElement("function-ok"));
+    public AsonBridgeCallResult McpToolResult { get; set; } = AsonBridgeCallResult.Ok(JsonSerializer.SerializeToElement("mcp-ok"));
+
+    /// <summary>Names of the MCP servers the fake bridge consumes; empty means "none configured".</summary>
+    public IReadOnlyCollection<string> McpServers { get; set; } = Array.Empty<string>();
+
+    /// <summary>Every MCP tool invocation the fake received, so a test can assert the call was forwarded.</summary>
+    public List<(string Server, string Tool)> InvokedMcpTools { get; } = new();
 
     // A fake never produces logs; declared explicitly so no unused-event warning is raised.
     public event EventHandler<AsonBridgeLogEventArgs>? Log { add { } remove { } }
@@ -33,8 +40,10 @@ internal sealed class FakeAsonExecutor : IAsonExecutor {
         return Task.FromResult(FunctionResult);
     }
 
-    public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken = default)
-        => Task.FromResult(AsonBridgeCallResult.Ok(null));
+    public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken = default) {
+        InvokedMcpTools.Add((server, tool));
+        return Task.FromResult(McpToolResult);
+    }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

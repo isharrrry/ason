@@ -28,4 +28,10 @@ public sealed record AsonBridgeManifest(
     /// <summary>Signature-only rendering of the same API, for prompt contexts that prefer it.</summary>
     string Signatures,
     /// <summary>Live operator instances, addressable by handle over the single-function interface.</summary>
-    IReadOnlyList<AsonBridgeInstance> Instances);
+    IReadOnlyList<AsonBridgeInstance> Instances,
+    /// <summary>
+    /// Changes whenever the instance set changes, so a caller that kept an older manifest can tell whether the
+    /// instance declarations inside <see cref="Proxies"/> are still current. It is a digest, not a timestamp:
+    /// two manifests taken while nothing changed compare equal.
+    /// </summary>
+    string InstancesRevision);

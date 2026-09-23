@@ -23,6 +23,11 @@ service AsonBridge {
   // Single-function interface: call one operator method precisely, without generating script text.
   rpc InvokeFunction (InvokeFunctionRequest) returns (ExecuteResult);
 
+  // Pass-through to a tool on an MCP server the application itself consumes. Available only when the
+  // application enabled the invokeMcpTool capability; otherwise the call is Unimplemented, exactly like the
+  // other capabilities. An application that enabled it but registered no MCP server answers "not-supported".
+  rpc InvokeMcpTool (InvokeMcpToolRequest) returns (ExecuteResult);
+
   // Same as ExecuteScript, but the server also streams the execution logs while the script runs.
   rpc StreamExecution (ExecuteScriptRequest) returns (stream ExecutionEvent);
 }
@@ -40,6 +45,9 @@ message ManifestReply {
   repeated OperatorSummary operators = 5;
   repeated Instance instances = 6;
   Capabilities capabilities = 7;
+  // Changes whenever the instance set changes; compare it with a manifest you kept to know whether its
+  // instance declarations are still current.
+  string instances_revision = 8;
 }
 
 message Capabilities {
@@ -72,6 +80,17 @@ message ExecuteScriptRequest {
   // The script body. Unless include_proxy_preamble is false, the bridge prepends the generated proxy layer.
   string code = 1;
   bool include_proxy_preamble = 2;
+  // Body-only mode: the application prepends its current proxy layer and instance declarations, so a caller
+  // whose manifest snapshot is stale is rescued. Implies include_proxy_preamble.
+  bool include_instance_declarations = 3;
+}
+
+message InvokeMcpToolRequest {
+  // Name of the MCP server as the application registered it.
+  string server = 1;
+  string tool = 2;
+  // The tool arguments as a JSON object, for example {"path":"/tmp"}. Empty means no arguments.
+  string arguments_json = 3;
 }
 
 message InvokeFunctionRequest {

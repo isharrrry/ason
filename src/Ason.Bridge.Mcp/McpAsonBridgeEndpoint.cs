@@ -38,16 +38,18 @@ public sealed class McpAsonBridgeEndpoint : IAsonBridgeEndpoint {
     public Task<IReadOnlyList<AsonBridgeInstance>> ListInstancesAsync(CancellationToken cancellationToken = default) =>
         _client.ListInstancesAsync(cancellationToken);
 
-    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) =>
-        _client.ExecuteScriptAsync(script, includeProxyPreamble, cancellationToken);
+    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) =>
+        _client.ExecuteScriptAsync(script, includeProxyPreamble, includeInstanceDeclarations, cancellationToken);
 
     public Task<AsonBridgeCallResult> InvokeFunctionAsync(AsonBridgeFunctionCall call, CancellationToken cancellationToken = default) =>
         _client.InvokeFunctionAsync(call, cancellationToken);
 
-    /// <summary>The MCP tool surface has no pass-through tool, so a relay reports it as unsupported.</summary>
+    /// <summary>
+    /// Relays the pass-through to the application that owns the MCP clients, exactly as the gRPC endpoint does:
+    /// the relay has no MCP servers of its own, so refusing locally would hide a capability the application has.
+    /// </summary>
     public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement> arguments, CancellationToken cancellationToken = default) =>
-        Task.FromResult(AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
-            "The MCP tool surface does not carry MCP tool pass-through; enable it on a bridge that owns the MCP clients."));
+        _client.InvokeMcpToolAsync(server, tool, arguments, cancellationToken);
 
     static AsonBridgeExecution ParseExecution(string execution) => execution switch {
         "external-process" => AsonBridgeExecution.ExternalProcess,

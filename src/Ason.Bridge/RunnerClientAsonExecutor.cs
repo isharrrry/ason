@@ -75,6 +75,12 @@ public sealed class RunnerClientAsonExecutor : IAsonExecutor {
     /// <summary>The underlying client, for hosts that need to register MCP clients or subscribe to calls.</summary>
     public RunnerClient Runner => _runner;
 
+    /// <summary>
+    /// The MCP servers the host registered on the runtime. Read live from the runner, so registering a client
+    /// after the bridge started is visible without rebuilding anything.
+    /// </summary>
+    public IReadOnlyCollection<string> McpServers => _runner.McpServerNames;
+
     public event EventHandler<AsonBridgeLogEventArgs>? Log;
 
     public async Task StartAsync(CancellationToken cancellationToken = default) {

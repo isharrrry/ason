@@ -19,8 +19,10 @@ public interface IAsonBridgeEndpoint {
 
     Task<IReadOnlyList<AsonBridgeInstance>> ListInstancesAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>The whole-script interface.</summary>
-    Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, CancellationToken cancellationToken = default);
+    /// <summary>The whole-script interface. <c>includeInstanceDeclarations</c> is the body-only mode: the
+    /// application supplies its current proxy layer and instance declarations, so a caller whose manifest
+    /// snapshot went stale is rescued.</summary>
+    Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default);
 
     /// <summary>The single-function interface.</summary>
     Task<AsonBridgeCallResult> InvokeFunctionAsync(AsonBridgeFunctionCall call, CancellationToken cancellationToken = default);

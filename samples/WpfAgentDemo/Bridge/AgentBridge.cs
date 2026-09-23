@@ -50,7 +50,7 @@ internal sealed class AgentBridge : IAsyncDisposable {
                 bridge._grpc = GrpcAsonBridgeClient.Connect(bridge.Endpoint);
                 break;
             case AgentTransportKind.Mcp:
-                bridge._mcp = await McpAsonBridgeClient.ConnectAsync(bridge.Endpoint, cancellationToken).ConfigureAwait(false);
+                bridge._mcp = await McpAsonBridgeClient.ConnectAsync(bridge.Endpoint, cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(transport));

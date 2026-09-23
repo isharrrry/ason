@@ -21,6 +21,7 @@ public static class AsonBridgeMcpTools {
     public const string ListInstances = "ason_list_instances";
     public const string ExecuteScript = "ason_execute_script";
     public const string InvokeFunction = "ason_invoke_function";
+    public const string InvokeMcpTool = "ason_invoke_mcp_tool";
 
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -62,12 +63,12 @@ public static class AsonBridgeMcpTools {
         if (capabilities.ExecuteScript) {
             tools.Add(McpServerTool.Create(
                 // See the note on ason_invoke_function: a parameter without a default value is required.
-                async (string code, bool? includeProxyPreamble = null, CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
-                    await runtime.ExecuteScriptAsync(code, includeProxyPreamble ?? true, cancellationToken).ConfigureAwait(false), Json),
+                async (string code, bool? includeProxyPreamble = null, bool? includeInstanceDeclarations = null, CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
+                    await runtime.ExecuteScriptAsync(code, includeProxyPreamble ?? true, includeInstanceDeclarations ?? false, cancellationToken).ConfigureAwait(false), Json),
                 new McpServerToolCreateOptions {
                     Name = ExecuteScript,
                     Destructive = true,
-                    Description = "Runs a complete ASON script body against the application and returns its result. The proxy layer is prepended unless includeProxyPreamble is false. Answers with { success, result, error, errorCode }."
+                    Description = "Runs a complete ASON script body against the application and returns its result. The proxy layer is prepended unless includeProxyPreamble is false. Set includeInstanceDeclarations to true to send nothing but the body and have the application supply its proxy layer plus declarations for the instances alive right now. Answers with { success, result, error, errorCode }."
                 }));
         }
 
@@ -87,7 +88,28 @@ public static class AsonBridgeMcpTools {
                 }));
         }
 
+        if (capabilities.InvokeMcpTool) {
+            tools.Add(McpServerTool.Create(
+                // 'argumentsJson' is a JSON object of the tool's own parameters, so it stays a string rather
+                // than a schema this bridge would have to mirror per server.
+                async (string server, string tool, string? argumentsJson = null, CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
+                    await runtime.InvokeMcpToolAsync(server, tool, ParseArgumentObject(argumentsJson), cancellationToken).ConfigureAwait(false), Json),
+                new McpServerToolCreateOptions {
+                    Name = InvokeMcpTool,
+                    Destructive = true,
+                    Description = "Calls a tool on an MCP server the application itself consumes, for example server \"filesystem\" and tool \"read_file\". 'argumentsJson' is a JSON object of that tool's parameters. Answers with { success, result, error, errorCode }; 'not-supported' means the application registered no MCP server."
+                }));
+        }
+
         return tools;
+    }
+
+    /// <summary>An MCP tool's arguments are a JSON object, so they are parsed as one - not as the argument array the single-function interface uses.</summary>
+    static IReadOnlyDictionary<string, JsonElement> ParseArgumentObject(string? argumentsJson) {
+        if (string.IsNullOrWhiteSpace(argumentsJson)) return new Dictionary<string, JsonElement>();
+        using var document = JsonDocument.Parse(argumentsJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object) return new Dictionary<string, JsonElement>();
+        return document.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
     }
 
     static IReadOnlyList<JsonElement> ParseArguments(string? argumentsJson) {

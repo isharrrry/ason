@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Ason;
 using Ason.Client.Execution;
 using Ason.CodeGen;
@@ -77,7 +79,8 @@ public sealed class AsonBridgeRuntime : IAsonBridgeEndpoint, IAsyncDisposable {
             catalog.ToMarkdown(),
             ProxySerializer.SerializeAll(assemblies) + declarations,
             ProxySerializer.SerializeSignatures(assemblies) + declarations,
-            instances);
+            instances,
+            RevisionOf(instances));
     }
 
     /// <summary>
@@ -113,14 +116,21 @@ public sealed class AsonBridgeRuntime : IAsonBridgeEndpoint, IAsyncDisposable {
     /// <summary>
     /// The whole-script interface. The script is validated, the generated proxy layer is prepended (including
     /// declarations for the live instances) and the executor evaluates it.
+    ///
+    /// <paramref name="includeInstanceDeclarations"/> is the body-only mode: the caller sends nothing but the
+    /// statements it wants to run, and the application supplies the proxy layer *and* the declarations for the
+    /// instances that are alive right now. It is what a caller uses when its own manifest snapshot may be
+    /// stale - the declarations have to sit inside the generated layer, so the application is the only side
+    /// that can rebuild them. It therefore implies the preamble, whatever <paramref name="includeProxyPreamble"/>
+    /// says; without it, behaviour is exactly what it was before.
     /// </summary>
-    public async Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) {
+    public async Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) {
         await StartAsync(cancellationToken).ConfigureAwait(false);
         if (!Options.Capabilities.ExecuteScript) return Disabled("executeScript");
         if (string.IsNullOrWhiteSpace(script)) return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.ScriptRejected, "Empty script");
         if (_validator?.Validate(script) is { } rejection) return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.ScriptRejected, rejection);
 
-        var code = includeProxyPreamble ? BuildProxyPreamble() + "\n" + script : script;
+        var code = includeProxyPreamble || includeInstanceDeclarations ? BuildProxyPreamble() + "\n" + script : script;
         try {
             return await Executor.ExecuteScriptAsync(code, cancellationToken).ConfigureAwait(false);
         }
@@ -180,6 +190,14 @@ public sealed class AsonBridgeRuntime : IAsonBridgeEndpoint, IAsyncDisposable {
             return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.InvalidArguments, "Both 'server' and 'tool' are required.");
         }
 
+        // The capability being on is not the same as the application having something to pass through to: it
+        // can be enabled in configuration while no MCP client was ever registered. Saying so here keeps the
+        // failure where a caller can act on it, instead of surfacing as an execution error from the runner.
+        if (Executor.McpServers.Count == 0) {
+            return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
+                "This bridge exposes MCP tool pass-through, but no MCP server is registered with its executor. Register one with RunnerClient.RegisterMcpClient, or turn the invokeMcpTool capability off.");
+        }
+
         try {
             return await Executor.InvokeMcpToolAsync(server, tool, arguments ?? new Dictionary<string, System.Text.Json.JsonElement>(), cancellationToken).ConfigureAwait(false);
         }
@@ -204,6 +222,15 @@ public sealed class AsonBridgeRuntime : IAsonBridgeEndpoint, IAsyncDisposable {
 
     string BuildInstanceDeclarations() =>
         OperatorVariableDeclarations.Build(Options.OperatorInstances, Options.SingletonOperators);
+
+    /// <summary>
+    /// A digest of the instances a caller can address right now. It is what tells a caller whether the
+    /// declarations inside the manifest it kept are still current; the value itself has no meaning.
+    /// </summary>
+    static string RevisionOf(IReadOnlyList<AsonBridgeInstance> instances) {
+        var payload = string.Join("\n", instances.Select(i => $"{i.Handle}\t{i.TypeName}\t{i.Initialized}"));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))[..16].ToLowerInvariant();
+    }
 
     List<string> LiveHandlesOf(string typeName) {
         var handles = new List<string>();

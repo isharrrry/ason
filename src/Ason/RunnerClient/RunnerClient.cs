@@ -109,6 +109,12 @@ public sealed class RunnerClient {
         RaiseLogEvent(LogLevel.Information, $"MCP client registered: {name}", source: nameof(RunnerClient));
     }
 
+    /// <summary>
+    /// Names of the MCP servers currently registered with this runtime, so a host can report what it can pass
+    /// through to before it attempts a call.
+    /// </summary>
+    public IReadOnlyCollection<string> McpServerNames => new List<string>(_mcpClients.Keys);
+
     public Task StartProcessAsync() => EnsureTransportReadyAsync(CancellationToken.None);
 
     /// <summary>

@@ -65,10 +65,14 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
         return reply.Instances.Select(i => new AsonBridgeInstance(i.Handle, i.TypeName, i.Initialized)).ToList();
     }
 
-    /// <summary>The whole-script interface.</summary>
-    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) =>
+    /// <summary>
+    /// The whole-script interface. <paramref name="includeInstanceDeclarations"/> asks the application to
+    /// supply its own proxy layer and current instance declarations, which is what a caller does when it
+    /// cannot be sure its manifest snapshot is still current.
+    /// </summary>
+    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) =>
         Translate(() => _client.ExecuteScriptAsync(
-            new ExecuteScriptRequest { Code = code, IncludeProxyPreamble = includeProxyPreamble },
+            new ExecuteScriptRequest { Code = code, IncludeProxyPreamble = includeProxyPreamble, IncludeInstanceDeclarations = includeInstanceDeclarations },
             cancellationToken: cancellationToken));
 
     /// <summary>The single-function interface.</summary>
@@ -85,10 +89,20 @@ public sealed class GrpcAsonBridgeClient : IAsyncDisposable {
             cancellationToken: cancellationToken));
     }
 
+    /// <summary>Pass-through to a tool on an MCP server the application consumes.</summary>
+    public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement>? arguments = null, CancellationToken cancellationToken = default) {
+        var payload = arguments is { Count: > 0 }
+            ? JsonSerializer.Serialize(arguments.ToDictionary(a => a.Key, a => a.Value), Json)
+            : string.Empty;
+        return Translate(() => _client.InvokeMcpToolAsync(
+            new InvokeMcpToolRequest { Server = server, Tool = tool, ArgumentsJson = payload },
+            cancellationToken: cancellationToken));
+    }
+
     /// <summary>Executes a script and streams the application's logs while it runs.</summary>
-    public async IAsyncEnumerable<ExecutionEvent> StreamExecutionAsync(string code, bool includeProxyPreamble = true, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+    public async IAsyncEnumerable<ExecutionEvent> StreamExecutionAsync(string code, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
         using var streaming = _client.StreamExecution(
-            new ExecuteScriptRequest { Code = code, IncludeProxyPreamble = includeProxyPreamble },
+            new ExecuteScriptRequest { Code = code, IncludeProxyPreamble = includeProxyPreamble, IncludeInstanceDeclarations = includeInstanceDeclarations },
             cancellationToken: cancellationToken);
         while (await streaming.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false)) {
             yield return streaming.ResponseStream.Current;

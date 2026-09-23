@@ -65,7 +65,7 @@ public static class AsonBridgeOpenApiExtensions {
                 return Results.BadRequest(new { success = false, errorCode = AsonBridgeErrorCodes.InvalidArguments, error = "A 'code' string is required." });
             }
 
-            var result = await endpoint.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble ?? true, context.RequestAborted).ConfigureAwait(false);
+            var result = await endpoint.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble ?? true, request.IncludeInstanceDeclarations ?? false, context.RequestAborted).ConfigureAwait(false);
             return Result(result);
         });
 
@@ -125,6 +125,8 @@ public static class AsonBridgeOpenApiExtensions {
 public sealed class AsonOpenApiScriptRequest {
     public string? Code { get; set; }
     public bool? IncludeProxyPreamble { get; set; }
+    /// <summary>Body-only mode: the application supplies its own proxy layer and current instance declarations.</summary>
+    public bool? IncludeInstanceDeclarations { get; set; }
 }
 
 /// <summary>Body of <c>POST /ason/functions/invoke</c>.</summary>

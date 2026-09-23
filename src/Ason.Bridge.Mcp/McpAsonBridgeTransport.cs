@@ -19,6 +19,15 @@ public sealed class McpAsonBridgeTransport : IRunnerTransport {
 
     public McpAsonBridgeTransport(McpAsonBridgeClient client) => _client = client ?? throw new ArgumentNullException(nameof(client));
 
+    /// <summary>
+    /// The proxy layer the caller prepends to every script - normally <c>manifest.Proxies</c> as it was when
+    /// the caller read the manifest. When set, it is stripped back off before sending and the application is
+    /// asked for its own current proxy layer and instance declarations, which is what keeps a script that
+    /// references a live view working after that view was closed and reopened. Unset means the code travels
+    /// exactly as the caller composed it.
+    /// </summary>
+    public string? Proxies { get; init; }
+
     public bool IsStarted { get; private set; }
 
     public event Action<string>? LineReceived;
@@ -43,7 +52,8 @@ public sealed class McpAsonBridgeTransport : IRunnerTransport {
         switch (type) {
             case "exec": {
                 var code = root.TryGetProperty("code", out var codeElement) ? codeElement.GetString() ?? string.Empty : string.Empty;
-                var result = await _client.ExecuteScriptAsync(code, includeProxyPreamble: false).ConfigureAwait(false);
+                var body = StripSnapshotLayer(code, out var freshInstances);
+                var result = await _client.ExecuteScriptAsync(body, includeProxyPreamble: false, includeInstanceDeclarations: freshInstances).ConfigureAwait(false);
                 LineReceived?.Invoke(Serialize(new { id, type = "execResult", result = result.Result, error = result.Success ? null : result.Error }));
                 break;
             }
@@ -60,6 +70,18 @@ public sealed class McpAsonBridgeTransport : IRunnerTransport {
     static string InvokeNotExpected() =>
         "The application answered an 'invoke' request, but operators are resolved inside the application process. " +
         "This means the bridge is pointed at an executor that is not the application itself.";
+
+    /// <summary>
+    /// Removes the caller's snapshot proxy layer from the composed script so the application rebuilds it with
+    /// today's instance declarations. The comparison is against the exact text the caller prepended; anything
+    /// else travels untouched.
+    /// </summary>
+    string StripSnapshotLayer(string code, out bool freshInstances) {
+        freshInstances = false;
+        if (Proxies is not { Length: > 0 } proxies || !code.StartsWith(proxies, StringComparison.Ordinal)) return code;
+        freshInstances = true;
+        return code[proxies.Length..];
+    }
 
     static string Serialize(object payload) => JsonSerializer.Serialize(payload, Json);
 

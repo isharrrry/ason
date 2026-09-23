@@ -37,16 +37,18 @@ public sealed class GrpcAsonBridgeEndpoint : IAsonBridgeEndpoint {
     public Task<IReadOnlyList<AsonBridgeInstance>> ListInstancesAsync(CancellationToken cancellationToken = default) =>
         _client.ListInstancesAsync(cancellationToken);
 
-    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) =>
-        _client.ExecuteScriptAsync(script, includeProxyPreamble, cancellationToken);
+    public Task<AsonBridgeCallResult> ExecuteScriptAsync(string script, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) =>
+        _client.ExecuteScriptAsync(script, includeProxyPreamble, includeInstanceDeclarations, cancellationToken);
 
     public Task<AsonBridgeCallResult> InvokeFunctionAsync(AsonBridgeFunctionCall call, CancellationToken cancellationToken = default) =>
         _client.InvokeFunctionAsync(call, cancellationToken);
 
-    /// <summary>MCP pass-through is not part of the gRPC contract; the relay reports it as unsupported.</summary>
+    /// <summary>
+    /// Relays the pass-through to the application that owns the MCP clients. What the application itself
+    /// answers travels back unchanged, so a relay reports "not-supported" only when the application did.
+    /// </summary>
     public Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, System.Text.Json.JsonElement> arguments, CancellationToken cancellationToken = default) =>
-        Task.FromResult(AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
-            "The gRPC bridge contract does not carry MCP tool pass-through; enable it on a bridge that owns the MCP clients."));
+        _client.InvokeMcpToolAsync(server, tool, arguments, cancellationToken);
 
     static AsonBridgeExecution ParseExecution(string execution) => execution switch {
         "in-process" => AsonBridgeExecution.InProcess,

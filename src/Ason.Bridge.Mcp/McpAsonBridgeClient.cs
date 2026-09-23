@@ -59,14 +59,19 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
     public async Task<AsonBridgeScriptApi> GetScriptApiAsync(CancellationToken cancellationToken = default) =>
         Deserialize<AsonBridgeScriptApi>(await CallAsync(AsonBridgeMcpTools.GetScriptApi, null, cancellationToken).ConfigureAwait(false));
 
-    /// <summary>The whole-script interface.</summary>
-    public async Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, bool includeProxyPreamble = true, CancellationToken cancellationToken = default) {
+    /// <summary>
+    /// The whole-script interface. <paramref name="includeInstanceDeclarations"/> asks the application to
+    /// supply its own proxy layer and current instance declarations - the body-only mode a caller uses when its
+    /// manifest snapshot may be stale.
+    /// </summary>
+    public async Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, bool includeProxyPreamble = true, bool includeInstanceDeclarations = false, CancellationToken cancellationToken = default) {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) {
             ["code"] = code
         };
         // Optional values are omitted rather than sent as null: that is what the tool schema advertises and
         // what an external MCP client does.
         if (!includeProxyPreamble) arguments["includeProxyPreamble"] = false;
+        if (includeInstanceDeclarations) arguments["includeInstanceDeclarations"] = true;
         return Deserialize<AsonBridgeCallResult>(await CallAsync(AsonBridgeMcpTools.ExecuteScript, arguments, cancellationToken).ConfigureAwait(false));
     }
 
@@ -82,6 +87,38 @@ public sealed class McpAsonBridgeClient : IAsyncDisposable {
             arguments["argumentsJson"] = "[" + string.Join(",", call.EffectiveArguments.Select(a => a.GetRawText())) + "]";
         }
         return Deserialize<AsonBridgeCallResult>(await CallAsync(AsonBridgeMcpTools.InvokeFunction, arguments, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>Pass-through to a tool on an MCP server the application itself consumes.</summary>
+    public async Task<AsonBridgeCallResult> InvokeMcpToolAsync(string server, string tool, IReadOnlyDictionary<string, JsonElement>? arguments = null, CancellationToken cancellationToken = default) {
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal) {
+            ["server"] = server,
+            ["tool"] = tool
+        };
+        if (arguments is { Count: > 0 }) payload["argumentsJson"] = JsonSerializer.Serialize(arguments, Json);
+        try {
+            return Deserialize<AsonBridgeCallResult>(await CallAsync(AsonBridgeMcpTools.InvokeMcpTool, payload, cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) {
+            // An application with the capability off does not publish the tool at all, so the call fails
+            // before it reaches anyone. Which of the two it was is answered by the tool list, not by the
+            // message - a tool that ran and failed is a different thing entirely.
+            if (!await ExposesPassThroughAsync(cancellationToken).ConfigureAwait(false)) {
+                return AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported,
+                    "The application on the other side of this MCP bridge does not expose MCP tool pass-through (its invokeMcpTool capability is off).");
+            }
+            throw;
+        }
+    }
+
+    async Task<bool> ExposesPassThroughAsync(CancellationToken cancellationToken) {
+        try {
+            var tools = await ListToolsAsync(cancellationToken).ConfigureAwait(false);
+            return tools.Any(t => string.Equals(t.Name, AsonBridgeMcpTools.InvokeMcpTool, StringComparison.Ordinal));
+        }
+        catch (Exception) {
+            return false;
+        }
     }
 
     public ValueTask DisposeAsync() => _client.DisposeAsync();

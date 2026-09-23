@@ -3,9 +3,15 @@ namespace Ason.Bridge;
 /// <summary>
 /// The contract version an application and an agent agree on. It travels in the manifest so a client that
 /// speaks a different revision fails fast instead of mis-decoding a payload.
+///
+/// 1.1 is a purely additive revision: the MCP pass-through call (gRPC <c>InvokeMcpTool</c>, the MCP tool
+/// <c>ason_invoke_mcp_tool</c>) and the fresh-instance script mode (<c>includeInstanceDeclarations</c>,
+/// <c>instancesRevision</c>). A 1.0 client keeps working against a 1.1 bridge - every message it sends is
+/// still understood and every field it reads is still there - so the version only needs checking when a
+/// client relies on one of the additions.
 /// </summary>
 public static class AsonBridgeProtocol {
-    public const string Version = "1.0";
+    public const string Version = "1.1";
 }
 
 /// <summary>

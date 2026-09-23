@@ -33,7 +33,8 @@ public sealed class GrpcAsonBridgeService : AsonBridge.AsonBridgeBase {
                 InvokeFunction = manifest.Capabilities.InvokeFunction,
                 InvokeMcpTool = manifest.Capabilities.InvokeMcpTool,
                 LogStream = manifest.Capabilities.LogStream
-            }
+            },
+            InstancesRevision = manifest.InstancesRevision
         };
         reply.Operators.AddRange(manifest.Api.Operators.Select(o => new OperatorSummary {
             TypeName = o.TypeName,
@@ -53,7 +54,13 @@ public sealed class GrpcAsonBridgeService : AsonBridge.AsonBridgeBase {
 
     public override async Task<ExecuteResult> ExecuteScript(ExecuteScriptRequest request, ServerCallContext context) {
         Require(_runtime.Options.Capabilities.ExecuteScript, "executeScript");
-        var result = await _runtime.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble, context.CancellationToken).ConfigureAwait(false);
+        var result = await _runtime.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble, request.IncludeInstanceDeclarations, context.CancellationToken).ConfigureAwait(false);
+        return ToProto(result);
+    }
+
+    public override async Task<ExecuteResult> InvokeMcpTool(InvokeMcpToolRequest request, ServerCallContext context) {
+        Require(_runtime.Options.Capabilities.InvokeMcpTool, "invokeMcpTool");
+        var result = await _runtime.InvokeMcpToolAsync(request.Server, request.Tool, ParseArgumentObject(request.ArgumentsJson), context.CancellationToken).ConfigureAwait(false);
         return ToProto(result);
     }
 
@@ -80,7 +87,7 @@ public sealed class GrpcAsonBridgeService : AsonBridge.AsonBridgeBase {
         _runtime.Log += OnLog;
         var execution = Task.Run(async () => {
             try {
-                var result = await _runtime.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble, context.CancellationToken).ConfigureAwait(false);
+                var result = await _runtime.ExecuteScriptAsync(request.Code, request.IncludeProxyPreamble, request.IncludeInstanceDeclarations, context.CancellationToken).ConfigureAwait(false);
                 channel.Writer.TryWrite(new ExecutionEvent { Type = result.Success ? "result" : "error", Result = ToProto(result) });
             }
             finally {
@@ -119,6 +126,24 @@ public sealed class GrpcAsonBridgeService : AsonBridge.AsonBridgeBase {
                 throw new RpcException(new Status(StatusCode.InvalidArgument, "arguments_json must be a JSON array, for example [2, 3]."));
             }
             return document.RootElement.EnumerateArray().Select(e => e.Clone()).ToArray();
+        }
+    }
+
+    /// <summary>MCP tool arguments are a JSON object - named tool parameters - rather than a positional array.</summary>
+    static IReadOnlyDictionary<string, JsonElement> ParseArgumentObject(string argumentsJson) {
+        if (string.IsNullOrWhiteSpace(argumentsJson)) return new Dictionary<string, JsonElement>();
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(argumentsJson);
+        }
+        catch (JsonException ex) {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, $"arguments_json is not valid JSON: {ex.Message}"));
+        }
+        using (document) {
+            if (document.RootElement.ValueKind != JsonValueKind.Object) {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "arguments_json must be a JSON object of the tool's parameters, for example {\"path\":\"/tmp\"}."));
+            }
+            return document.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.Ordinal);
         }
     }
 
