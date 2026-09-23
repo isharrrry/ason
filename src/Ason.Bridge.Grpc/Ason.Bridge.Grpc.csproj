@@ -29,10 +29,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Ason.Bridge\Ason.Bridge.csproj" />
-    <None Include="icon.png" Pack="true" PackagePath="\" />
+    <None Include="icon.png" Pack="true" PackagePath="/" />
     <!-- A non-.NET caller needs the contract itself, so it ships with the package: unpack it, or locate it
-         with GeneratePathProperty ($(PkgAson_Bridge_Grpc))\protos\ason_bridge.proto. -->
-    <None Include="Protos\ason_bridge.proto" Pack="true" PackagePath="protos\" />
+         with GeneratePathProperty ($(PkgAson_Bridge_Grpc))\protos\ason_bridge.proto. Paths are written with
+         forward slashes because a backslash is not a directory separator outside Windows; the sibling
+         project that ships buildTransitive/Ason.ExternalExecutor.targets already does it this way. -->
+    <None Include="Protos/ason_bridge.proto" Pack="true" PackagePath="protos/" />
   </ItemGroup>
 
 </Project>
