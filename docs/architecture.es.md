@@ -124,11 +124,18 @@ Caso 1 - un agente .NET que conserva la orquestación de ASON
 
 [1] Host del agente   modelo, prompts, orquestación; AsonClient, sin ningún operador
       |
-      |  frontera D: gRPC / MCP / HTTP-OpenAPI con el manifiesto, "exec" y llamadas a funciones
+      |  frontera D: gRPC / MCP / HTTP-OpenAPI
+      |    --> manifiesto (qué se puede llamar), "exec" (el texto del script), argumentos JSON
+      |    <-- resultados y logs
       |
       +--> [2] Host de la aplicación   operadores, datos, UI; runtime de Ason.Bridge + un adaptador por transporte
                 |
                 |  frontera A': el mismo protocolo stdio que la frontera A, iniciado por la aplicación
+                |    1. exec          el texto del script            [2] --> [3]
+                |    2. invoke        target, método, argumentos     [3] --> [2]   la llamada vuelve
+                |    3. invokeResult  el método real corrió en [2]   [2] --> [3]
+                |    4. execResult    lo que devolvió el script      [3] --> [2]
+                |    5. por D: el resultado (y los logs) vuelve a [1]
                 |
                 +--> [3] Ejecutor del lado de la aplicación   ExternalProcess / Docker
                          proceso hijo Ason.ExternalExecutor de la aplicación
@@ -176,10 +183,25 @@ manifiesto para descubrir qué se puede llamar, invocar un método de operador o
 mismo — y conserva todo el determinismo que quiere una automatización. Consulta la sección de la guía sobre
 [usar el puente sin un agente](app-agent-separation.es.md#usar-el-puente-sin-un-agente).
 
-En todos los casos lo único que cruza la frontera es el texto del script generado, y las llamadas a operadores
-no: se resuelven dentro de [2], donde están los métodos reales y los datos. Dónde se evalúa el script (en el
-proceso de la aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner remoto) lo decide
-la aplicación.
+Caso 6 - la misma aplicación, con el host de scripts en remoto (el manifiesto informa remote-runner)
+
+[2] Host de la aplicación   operadores, datos, UI; runtime de Ason.Bridge + un adaptador por transporte
+      |
+      |  frontera B: SignalR hacia el host del runner, con las mismas líneas JSON que la frontera A
+      v
+[R] Host del runner remoto   ASP.NET Core /scriptRunnerHub  (Ason.RemoteBridge; samples/RemoteRunnerService)
+      |
+      |  frontera C: el protocolo stdio idéntico al de la frontera A, iniciado por el servidor
+      |
+      +--> [R'] Ejecutor del lado del servidor      ExternalProcess / Docker en el host del runner
+               (o el servidor evalúa el script en su propio proceso, InProcess allí)
+
+Las llamadas a operadores vuelven todo el camino ([R'] -> B -> [2]), donde corre el método real. Nada más cambia:
+los mismos adaptadores, el mismo manifiesto — solo cambia el valor de `execution`.
+
+Por la frontera D, la del llamador, solo cruzan el texto del script y su resultado; las llamadas a operadores
+nunca salen de [2], donde están los métodos reales y los datos. Dónde se evalúa el script (en el proceso de la
+aplicación, en su propio Ason.ExternalExecutor, en un contenedor o en un runner remoto) lo decide la aplicación.
 ```
 
 | Frontera | Protocolo | Dirección | Quién la posee |

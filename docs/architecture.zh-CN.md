@@ -92,11 +92,18 @@ operator 调用始终回到 [1]：脚本调用某个 operator，该调用跨越�
 
 [1] Agent 主机     模型、提示词、编排；AsonClient，一个 operator 都没有
       |
-      |  边界 D：gRPC / MCP / HTTP-OpenAPI，承载清单、"exec" 与函数调用
+      |  边界 D：gRPC / MCP / HTTP-OpenAPI
+      |    --> 清单（能调用什么）、"exec"（脚本文本）、JSON 参数
+      |    <-- 结果与日志
       |
       +--> [2] 应用主机   operator、数据、UI；Ason.Bridge 运行时 + 每种传输一个适配器
                 |
                 |  边界 A'：与边界 A 完全相同的 stdio 协议，由应用发起
+                |    1. exec          脚本文本                  [2] --> [3]
+                |    2. invoke        target、method、参数       [3] --> [2]   调用回到应用
+                |    3. invokeResult  真实方法在 [2] 执行完毕    [2] --> [3]
+                |    4. execResult    脚本的返回值              [3] --> [2]
+                |    5. 经 D：结果（与日志）回到 [1]
                 |
                 +--> [3] 应用侧执行器       ExternalProcess / Docker
                          应用的 Ason.ExternalExecutor 子进程
@@ -143,8 +150,24 @@ operator 调用始终回到 [1]：脚本调用某个 operator，该调用跨越�
 或运行它自己写的一段脚本 —— 而自动化想要的确定性它一点都没失去。参见指南中的
 [不用 Agent：外部程序直接驱动应用](app-agent-separation.zh-CN.md#不用-agent外部程序直接驱动应用)。
 
-无论哪种情形，**跨越边界的都只有生成的脚本文本**，operator 调用不外传：它们在 [2] 内部解析，真实方法与数据都在那里。
-而脚本本身在哪里求值（应用进程内、应用自带的 Ason.ExternalExecutor、容器，或远程运行器）由应用决定。
+情形 6 —— 同一个应用，但脚本宿主在远端（清单报告 `remote-runner`）
+
+[2] 应用主机   operator、数据、UI；Ason.Bridge 运行时 + 每种传输一个适配器
+      |
+      |  边界 B：SignalR，承载与边界 A 相同的 JSON 行
+      v
+[R] 远程运行器宿主   ASP.NET Core /scriptRunnerHub（Ason.RemoteBridge；samples/RemoteRunnerService）
+      |
+      |  边界 C：与边界 A 完全相同的 stdio 协议，由服务器发起
+      |
+      +--> [R'] 服务器侧执行器      ExternalProcess / Docker，位于运行器宿主上
+               （或者服务器在自己的进程内求值，即那里的 InProcess）
+
+operator 调用要原路回到 [2]（[R'] → B → [2]），真实方法在那里执行。其余一切不变：同样的适配器、同样的清单，
+只是 `execution` 的取值不同。
+
+跨越**调用方边界 D** 的只有脚本文本与其结果；operator 调用从不离开 [2] —— 真实方法与数据都在那里。
+至于脚本本身在哪里求值（应用进程内、应用自带的 Ason.ExternalExecutor、容器，或远程运行器），由应用决定。
 ```
 
 | 边界 | 协议 | 方向 | 由谁掌控 |

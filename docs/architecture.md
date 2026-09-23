@@ -103,11 +103,18 @@ Case 1 - a .NET agent that keeps ASON's own orchestration
 
 [1] Agent host      model, prompts, orchestration; AsonClient, no operators at all
       |
-      |  boundary D: gRPC / MCP / HTTP-OpenAPI carrying the manifest, "exec" and function calls
+      |  boundary D: gRPC / MCP / HTTP-OpenAPI
+      |    --> manifest (what can be called), "exec" (the script text), JSON arguments
+      |    <-- results and logs
       |
       +--> [2] Application host   operators, data, UI; Ason.Bridge runtime + one adapter per transport
                 |
                 |  boundary A': the identical stdio protocol, initiated by the application
+                |    1. exec          the script text              [2] --> [3]
+                |    2. invoke        target, method, arguments    [3] --> [2]   the call comes back
+                |    3. invokeResult  the real method ran in [2]   [2] --> [3]
+                |    4. execResult    what the script returned     [3] --> [2]
+                |    5. over D: the result (and the logs) travels back to [1]
                 |
                 +--> [3] Application-side executor       ExternalProcess / Docker
                          Ason.ExternalExecutor child process of the application
@@ -155,9 +162,25 @@ manifest to discover what is callable, call one operator method, or run a script
 all of the determinism an automation wants. See the guide's section on
 [using the bridge without an agent](app-agent-separation.md#using-the-bridge-without-an-agent).
 
-In every case the generated script text crosses the boundary, and operator calls do not: they are resolved
-inside [2], where the real methods and the data are. Where the script itself is evaluated (in the application
-process, in its own Ason.ExternalExecutor, in a container or on a remote runner) is the application's decision.
+Case 6 - the same application, with a remote script host (the manifest reports remote-runner)
+
+[2] Application host   operators, data, UI; Ason.Bridge runtime + one adapter per transport
+      |
+      |  boundary B: SignalR to the runner host, carrying the same JSON lines as boundary A
+      v
+[R] Remote runner host   ASP.NET Core /scriptRunnerHub  (Ason.RemoteBridge; samples/RemoteRunnerService)
+      |
+      |  boundary C: the identical stdio protocol, initiated by the server
+      |
+      +--> [R'] Server-side executor      ExternalProcess / Docker on the runner host
+               (or the server evaluates the script in its own process, InProcess there)
+
+Operator calls travel the whole way back ([R'] -> B -> [2]), where the real method runs. Nothing else changes:
+the same adapters, the same manifest - only the value of `execution` differs.
+
+Only the script text and its result cross boundary D, the caller-facing one; operator calls never leave [2],
+where the real methods and the data are. Where the script itself is evaluated (in the application process, in
+its own Ason.ExternalExecutor, in a container or on a remote runner) is the application's decision.
 ```
 
 | Boundary | Protocol | Direction | Owned by |
