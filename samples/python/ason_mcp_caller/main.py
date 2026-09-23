@@ -29,7 +29,26 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_RELAY = HERE.parent.parent.parent / "src" / "Ason.Bridge.McpHost" / "bin" / "Release" / "net9.0" / "Ason.Bridge.McpHost.dll"
+REPO = HERE.parent.parent.parent
+
+
+def find_relay() -> Path:
+    """The relay's built assembly, wherever this repository puts it.
+
+    The projects share one output root (`src/bin/<configuration>/<tfm>/`), while a plain `dotnet build` of a
+    single project can also leave it next to that project; both are checked so the sample works either way.
+    """
+    for configuration in ("Release", "Debug"):
+        for candidate in (
+            REPO / "src" / "bin" / configuration / "net9.0" / "Ason.Bridge.McpHost.dll",
+            REPO / "src" / "Ason.Bridge.McpHost" / "bin" / configuration / "net9.0" / "Ason.Bridge.McpHost.dll",
+        ):
+            if candidate.exists():
+                return candidate
+    return REPO / "src" / "bin" / "Release" / "net9.0" / "Ason.Bridge.McpHost.dll"
+
+
+DEFAULT_RELAY = find_relay()
 PROTOCOL_VERSION = "2024-11-05"
 
 
@@ -120,6 +139,23 @@ class HttpServer:
         return json.loads(body)
 
 
+def load_json(value: str, what: str):
+    """Reads inline JSON, or a file when the value starts with '@'.
+
+    A shell rewrites nested quotes before the program sees them: `--args "[2, 3]"` survives PowerShell, but
+    `--args '{"path": "/tmp"}'` loses its quotes. `--args @args.json` always arrives intact.
+    """
+    if value.startswith("@"):
+        path = Path(value[1:]).resolve()
+        if not path.exists():
+            sys.exit(f"{what}: file not found: {path}")
+        value = path.read_text(encoding="utf-8-sig")
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as error:
+        sys.exit(f"{what} is not valid JSON ({error}); use --args @file.json if your shell rewrites quotes")
+
+
 def connect_tools(transport: str, url: str, http_url: str, relay: str, key: str | None, headers: list[str]) -> object:
     """Builds a transport without argparse, so the agent in ../ason_mcp_agent uses the very same ones."""
     if transport == "stdio":
@@ -172,7 +208,7 @@ def main() -> int:
     parser.add_argument("--header", action="append", default=[], metavar="NAME=VALUE", help="extra header (repeatable)")
     parser.add_argument("--list", action="store_true", help="print the tools the application publishes")
     parser.add_argument("--call", metavar="TOOL", help="call one tool")
-    parser.add_argument("--args", default="{}", help="JSON object of the tool's arguments")
+    parser.add_argument("--args", default="{}", help="JSON object of the tool's arguments, or @file.json")
     args = parser.parse_args()
 
     server = connect(args)
@@ -192,7 +228,7 @@ def main() -> int:
                 print(f"- {tool['name']}: {description[0] if description else ''}")
             return 0
 
-        ok, text = unwrap(server.request("tools/call", {"name": args.call, "arguments": json.loads(args.args)}))
+        ok, text = unwrap(server.request("tools/call", {"name": args.call, "arguments": load_json(args.args, "--args")}))
         print(text)
         return 0 if ok else 1
     finally:

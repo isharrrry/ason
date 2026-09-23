@@ -1,12 +1,20 @@
 # Calling an ASON bridge from Python
 
 The bridge is a gRPC contract before it is a .NET library: `ason_bridge.proto` is the whole interface, and any
-language that can compile it can drive an ASON application. This directory holds a runnable example.
+language that can compile it can drive an ASON application. This directory holds a runnable example — plus two
+programs that need no gRPC at all (see the table at the end).
 
 ## Setup
 
 ```bash
 python -m pip install -r samples/python/requirements.txt
+```
+
+On Windows, add `--user` if pip cannot write to the system Python (`pip install --user -r …`). Behind a slow or
+blocked PyPI, any mirror works — for example Tsinghua:
+
+```bash
+python -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r samples/python/requirements.txt
 ```
 
 `grpcio-tools` supplies `protoc`; the script compiles the contract into `samples/python/.gen/` on first run, so
@@ -22,11 +30,15 @@ Start an application side first — `samples/ConsoleBridgeAppSample` listens on 
 python samples/python/ason_bridge_client.py --url http://localhost:5222 manifest
 
 # one precise call, no script text
-python samples/python/ason_bridge_client.py --url http://localhost:5222 call LibDemoOperator.Add --args "[40, 2]"
+python samples/python/ason_bridge_client.py --url http://localhost:5222 call LibDemoStaticOperator.Add --args "[40, 2]"
 
 # a whole script, with the application's logs streamed back
-python samples/python/ason_bridge_client.py --url http://localhost:5222 script "return LibDemoOperator.Add(40, 2);" --stream
+python samples/python/ason_bridge_client.py --url http://localhost:5222 script "return LibDemoStaticOperator.Add(40, 2);" --stream
 ```
+
+`call` accepts both `Operator.Method` and `Operator Method`, and `--args` accepts `@file.json` instead of inline
+JSON — worth knowing on Windows PowerShell, which rewrites the quotes inside an argument before Python ever sees
+it: `--args @args.json` always arrives intact.
 
 Other useful subcommands: `instances` (live operator instances and their handles), `mcp <server> <tool>` (a tool
 on an MCP server the application itself consumes), `script --fresh-instances` (body-only mode: the application
@@ -54,11 +66,21 @@ that requires authorization.
 python -m pip install -r samples/python/requirements-mcp.txt
 
 # see what an application publishes over MCP, without any desktop client
-python samples/python/ason_mcp_caller/main.py --transport stdio --list
+#   stdio starts the relay process itself; http talks to the application's own /mcp endpoint
+python samples/python/ason_mcp_caller/main.py --transport stdio --url http://localhost:5222 --list
+python samples/python/ason_mcp_caller/main.py --transport http --http-url http://localhost:5223/mcp --list
+
+# call one operator through MCP (--args @file.json avoids shell quoting problems)
+python samples/python/ason_mcp_caller/main.py --transport http --http-url http://localhost:5223/mcp \
+  --call ason_invoke_function --args '{"operator":"LibDemoStaticOperator","method":"Add","argumentsJson":"[40,2]"}'
 
 # let a model use it: the tool call has to really happen, or --expect fails the run
 MY_OPEN_AI_KEY=… python samples/python/ason_mcp_agent/main.py \
   --instruction "Add 40 and 2 with the application's operator and tell me the result." --expect 42
 ```
+
+Only the first program needs gRPC. The MCP caller uses nothing but the standard library (JSON-RPC over the relay's
+stdio, or Streamable HTTP over `urllib`), and the agent adds just the `openai` client — the MCP tools it hands to
+the model are the application's own, so a deployment can be driven from Python without a `.proto` file at all.
 
 The copy-pasteable client configurations these programs mirror live in [`samples/mcp`](../mcp/README.md).

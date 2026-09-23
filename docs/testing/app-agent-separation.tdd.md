@@ -503,12 +503,26 @@ argument errors, and missing/optional tool arguments.
 
 ### Honest limits of this round
 
-- **The Python programs were not executed end to end here.** `pip install grpcio grpcio-tools` failed twice with
-  a read timeout against `files.pythonhosted.org`, and the machine has no local wheels or mirror, so
-  `samples/python/ason_bridge_client.py`, `ason_mcp_caller/main.py` and `ason_mcp_agent/main.py` were verified
-  statically instead: `py_compile` on each, the CLI surfaces (`--help`), the "no key → exit 2" contract, and — for
-  the MCP configurations they mirror — the .NET-side `McpClientConfigTests`. Running them is a copy-paste away
-  on a machine with PyPI access; nothing else in this repository depends on them.
+- **The Python programs were run end to end after the fact, from a mirror.** The first attempts failed against
+  `files.pythonhosted.org` (read timeout, no local wheels), so the round was reported with static verification
+  only; installing through the Tsinghua mirror (`pip install --user -i https://pypi.tuna.tsinghua.edu.cn/simple
+  grpcio grpcio-tools`, which is also the note now in `samples/python/README.md`) closed that gap, and running
+  them found three real defects that static checks could not:
+  1. `ason_bridge_client.py` declared `call Operator Method` as two positionals while every example used the
+     dotted `Operator.Method` form — argparse rejected the documented invocation. It now accepts both.
+  2. `ensure_stubs()` returned early when `.gen/` was already up to date **without** putting it on `sys.path`, so
+     every run after the first died with `ModuleNotFoundError: ason_bridge_pb2`. The path is now added on both
+     branches.
+  3. The relay path in `samples/mcp/claude_desktop_config.json` (and the READMEs) pointed at
+     `src/Ason.Bridge.McpHost/bin/Release/net9.0/`, but this repository's projects share one output root, so the
+     assembly is really at `src/bin/Release/net9.0/`. Both the file and the sample now use the real location, and
+     `McpClientConfigTests` pins it.
+  Verified afterwards, against a running `ConsoleBridgeAppSample`: gRPC `manifest` (protocol `1.1`), `call
+  LibDemoStaticOperator.Add` → `42`, `script … --stream` → logs + `42`; MCP over HTTP `--list` → 6 tools and
+  `--call ason_invoke_function` → `42`; MCP over stdio through the real relay process → 6 tools and `42`.
+  `--args` now also accepts `@file.json`, because PowerShell rewrites nested quotes before Python sees them.
+  The OpenAI-driven agent still needs a key: without one it exits 2 with an explicit message, which is the
+  contract it was written to keep.
 - **Real Docker execution is still excluded** from the default test filter, as it was before this round: those
   cases need a daemon. What is asserted is the reporting path (an injected executor whose name is `docker`
   reaches every adapter's manifest) and the documentation states the requirement.

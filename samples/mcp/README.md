@@ -20,14 +20,18 @@ your checkout, merge the `mcpServers` block into the client's own config, and re
   "mcpServers": {
     "ason-application": {
       "command": "dotnet",
-      "args": ["exec", "<repo>/src/Ason.Bridge.McpHost/bin/Release/net9.0/Ason.Bridge.McpHost.dll",
+      "args": ["exec", "<repo>/src/bin/Release/net9.0/Ason.Bridge.McpHost.dll",
                "--url", "http://localhost:5222"]
     }
   }
 }
 ```
 
-Build the relay once, so the path exists: `dotnet build src/Ason.Bridge.McpHost -c Release`.
+Build the relay once, so the path exists: `dotnet build src/Ason.Bridge.McpHost -c Release`. Note where the file
+lands: the projects in this repository share one output root, so it is `src/bin/Release/net9.0/` — not
+`src/Ason.Bridge.McpHost/bin/...`. If your build puts it elsewhere, `find . -name Ason.Bridge.McpHost.dll` tells
+you, and `samples/python/ason_mcp_caller` accepts `--relay <path>` to check the result before you touch a desktop
+client.
 
 Why a relay at all: stdio MCP means *the client starts the server*, and a running desktop application cannot be
 that child process. The relay is the child; it connects to the application over gRPC (or over MCP, with

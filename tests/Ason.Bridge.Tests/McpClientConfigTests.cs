@@ -33,8 +33,10 @@ public class McpClientConfigTests {
         Assert.EndsWith("Ason.Bridge.McpHost.dll", args[1]);
 
         // The path is a placeholder on purpose: an absolute path cannot be committed for every checkout, so the
-        // file says so and the README repeats the replacement step.
+        // file says so and the README repeats the replacement step. It also has to point where the build actually
+        // puts the relay - the projects share src/bin, so a path under the project's own bin/ would be wrong.
         Assert.Contains("<repo>", args[1]);
+        Assert.Contains("src/bin/", args[1].Replace('\\', '/'));
         Assert.Equal("--url", args[^2]);
         Assert.StartsWith("http://", args[^1]);
     }

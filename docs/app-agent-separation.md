@@ -257,6 +257,7 @@ exactly one `result` or `error`).
 
 ```bash
 # Python: build stubs, then call. samples/python/ason_bridge_client.py does this for you.
+python -m pip install -r samples/python/requirements.txt      # add -i <mirror>/simple behind a slow PyPI
 python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
 
 # Go / Java / anything else protoc supports

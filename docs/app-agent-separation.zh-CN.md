@@ -212,6 +212,7 @@ unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
 
 ```bash
 # Python：先生成 stub 再调用；samples/python/ason_bridge_client.py 已经把这些封好了
+python -m pip install -r samples/python/requirements.txt      # PyPI 慢时可加 -i <国内镜像>/simple
 python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
 
 # Go / Java / protoc 支持的任何语言

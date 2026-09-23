@@ -44,9 +44,14 @@ DEFAULT_PROTO = HERE.parent.parent / "src" / "Ason.Bridge.Grpc" / "Protos" / "as
 
 
 def ensure_stubs(proto: Path) -> None:
-    """Compiles the contract into .gen/ when it is missing or older than the .proto file."""
+    """Compiles the contract into .gen/ when it is missing or older than the .proto file.
+
+    The directory goes on sys.path either way: a run that reuses an up-to-date .gen/ would otherwise generate
+    nothing and then fail to import what is already there.
+    """
     generated = GEN / "ason_bridge_pb2.py"
     if generated.exists() and generated.stat().st_mtime >= proto.stat().st_mtime:
+        sys.path.insert(0, str(GEN))
         return
     GEN.mkdir(exist_ok=True)
     try:
@@ -64,6 +69,23 @@ def ensure_stubs(proto: Path) -> None:
     if result.returncode != 0:
         sys.exit(f"protoc failed:\n{result.stderr}")
     sys.path.insert(0, str(GEN))
+
+
+def load_json(value: str, what: str):
+    """Reads inline JSON, or a file when the value starts with '@'.
+
+    The file form exists because shells rewrite nested quotes: `--args "[40, 2]"` survives PowerShell, but
+    `--args '{"path": "/tmp"}'` does not - the quotes never reach Python. `--args @args.json` always does.
+    """
+    if value.startswith("@"):
+        path = Path(value[1:]).resolve()
+        if not path.exists():
+            sys.exit(f"{what}: file not found: {path}")
+        value = path.read_text(encoding="utf-8-sig")
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as error:
+        sys.exit(f"{what} is not valid JSON ({error}); use --args @file.json if your shell rewrites quotes")
 
 
 def open_channel(target: str, headers: dict[str, str]):
@@ -88,6 +110,26 @@ def show_result(result) -> int:
     return 1
 
 
+def split_target(operator: str, method: str | None) -> tuple[str, str]:
+    """Accepts both `call Operator Method` and the dotted `call Operator.Method` the README shows."""
+    if method:
+        return operator, method
+    name, _, last = operator.rpartition(".")
+    if not name:
+        sys.exit(f"'{operator}' is not an operator method: write 'Operator.Method' (or pass the method separately)")
+    return name, last
+
+
+def read_code(value: str) -> str:
+    """The script body, or the contents of a file when it starts with '@' - a long script does not fit an argv."""
+    if not value.startswith("@"):
+        return value
+    path = Path(value[1:]).resolve()
+    if not path.exists():
+        sys.exit(f"script file not found: {path}")
+    return path.read_text(encoding="utf-8-sig")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Call an ASON bridge over gRPC.")
     parser.add_argument("--url", default="http://localhost:5222", help="gRPC address of the bridge")
@@ -100,13 +142,13 @@ def main() -> int:
     sub.add_parser("instances", help="print the live operator instances")
 
     call = sub.add_parser("call", help="call one operator method (single-function interface)")
-    call.add_argument("operator")
-    call.add_argument("method")
-    call.add_argument("--args", default="[]", help="JSON array of arguments, in parameter order")
+    call.add_argument("operator", help="'Operator' or 'Operator.Method' (the .NET caller sample uses the dotted form)")
+    call.add_argument("method", nargs="?", default=None, help="the method, when the operator was given on its own")
+    call.add_argument("--args", default="[]", help="JSON array of arguments in parameter order, or @file.json")
     call.add_argument("--handle", default=None, help="handle, when several instances of the operator exist")
 
     script = sub.add_parser("script", help="run a complete script (whole-script interface)")
-    script.add_argument("code")
+    script.add_argument("code", help="the script body, or @file.txt to read it from a file")
     script.add_argument("--no-preamble", action="store_true",
                         help="send the code as it is instead of letting the application prepend its proxy layer")
     script.add_argument("--fresh-instances", action="store_true",
@@ -116,7 +158,7 @@ def main() -> int:
     mcp = sub.add_parser("mcp", help="pass through to a tool on an MCP server the application consumes")
     mcp.add_argument("server")
     mcp.add_argument("tool")
-    mcp.add_argument("--args", default="{}", help="JSON object of the tool's parameters")
+    mcp.add_argument("--args", default="{}", help="JSON object of the tool's parameters, or @file.json")
 
     args = parser.parse_args()
 
@@ -155,17 +197,19 @@ def main() -> int:
             return 0
 
         if args.command == "call":
+            operator, method = split_target(args.operator, args.method)
             request = pb.InvokeFunctionRequest(
-                operator=args.operator,
-                method=args.method,
-                arguments_json=args.args,
+                operator=operator,
+                method=method,
+                arguments_json=json.dumps(load_json(args.args, "--args")),
                 handle=args.handle or "",
             )
             return show_result(stub.InvokeFunction(request, metadata=metadata))
 
         if args.command == "script":
+            code = read_code(args.code)
             request = pb.ExecuteScriptRequest(
-                code=args.code,
+                code=code,
                 include_proxy_preamble=not args.no_preamble,
                 include_instance_declarations=args.fresh_instances,
             )
@@ -184,7 +228,11 @@ def main() -> int:
             return show_result(result)
 
         if args.command == "mcp":
-            request = pb.InvokeMcpToolRequest(server=args.server, tool=args.tool, arguments_json=args.args)
+            request = pb.InvokeMcpToolRequest(
+                server=args.server,
+                tool=args.tool,
+                arguments_json=json.dumps(load_json(args.args, "--args")),
+            )
             return show_result(stub.InvokeMcpTool(request, metadata=metadata))
 
         parser.error(f"unknown command {args.command}")

@@ -176,6 +176,7 @@ exactamente un `result` o `error` al final).
 
 ```bash
 # Python: generar los stubs y llamar; samples/python/ason_bridge_client.py ya lo encapsula
+python -m pip install -r samples/python/requirements.txt      # añade -i <mirror>/simple si PyPI va lento
 python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
 
 # Go / Java / cualquier lenguaje que soporte protoc
