@@ -4,7 +4,7 @@
 **Mode**: conversational `/plan`（eccplan → `references/commands/plan.md`）
 **Branch**: `feat/agent-app-separation-bridge`
 **Baseline**: `fb00b0f`（撰写本文件时的 HEAD，工作树干净）
-**Complexity**: Large（Wave 1 已落地 5 个新项目 + 5 个样例 + 91 个桥测试；Wave 2 约 11.0 人日）
+**Complexity**: Large（Wave 1 已落地 5 个新项目 + 6 个样例 + 91 个桥测试；Wave 2 约 13.5 人日）
 **Status**: Wave 1 **已完成并提交**；Wave 2 **待确认** —— 规划阶段不写实现代码，等人工检测本文件后开工
 **Evidence**: `docs/testing/app-agent-separation.tdd.md`（Wave 1 的逐任务 RED/GREEN 证据、覆盖率与缺口清单）
 **Provenance**: Wave 1 的原始计划是内联给出的（未落盘）。本文件是**唯一计划产物**：§5 的 Wave 1 部分按当时确认的范围 + 真实提交记录重建，Wave 2 部分为本轮待执行计划。根目录曾短暂存在的 `plan.md` 已删除（见 §10.1）。
@@ -91,6 +91,9 @@
 | **H** | **非 .NET 调用 gRPC：`Ason.Bridge.Grpc` 的 nupkg 内只有 `lib/net9.0/Ason.Bridge.Grpc.dll` + `icon.png` + nuspec，没有 `ason_bridge.proto`；非 .NET 调用方无法从包生成客户端（只能回仓库取），且无反射可用** | ✅ **T10（本轮指定纳入，未执行）** |
 | **I** | **示例命名可读性：`ConsoleGrpcBridgeHost` 其实是应用侧（服务端）、`ConsoleGrpcBridgeDemo` 其实是调用方（客户端），名字易反读；指南形态表也缺一行"角色图例"** | ✅ **T11（本轮指定纳入，未执行）** |
 | **J** | **调用方配置语义未成表：各形态下调用方需要准备什么（URL／客户端／启动命令）、应用侧配置什么、能否"零配置接入"，以及"无注册中心/无自动发现、handle 是运行期状态、`proxies` 是快照"这些前提，散落在正文里** | ✅ **T12（本轮指定纳入，未执行）** |
+| **K** | **分离部署执行位置收尾：`external` 已由 `fb00b0f` 交付（`ConsoleGrpcBridgeHost --execution inprocess\|external`，`ConsoleSamplesEndToEndTests` 断言 `external-process`，且 `external` 下 operator 调用仍回到应用侧）；仍缺 —— ① `WpfAppOnlyDemo` 应用侧写死 `InProcess`（`Bridge/BridgeHost.cs:49`），而"桌面应用不想在自己进程里跑生成代码"正是该形态的核心诉求；② `AsonBridgeExecution.RemoteRunner` 在**分离部署**下没有任何样例或 E2E（Wave 1 只在单进程 `Ason.Tests` 覆盖）；③ `Docker` 取值无样例（按既有策略不启动守护进程，只断言上报）** | ✅ **T13（本轮指定纳入，未执行）** |
+| **L** | **MCP 消费端接入不可落地：MCP 服务端三形态齐备且中继有进程级 E2E，但全仓库无任何可复制粘贴的 MCP 客户端配置（无 `mcp.json` / `claude_desktop_config.json`，文档仅一行命令行）→ stdio-only Agent（Claude Desktop/Code）这条唯一入口无法照做** | ✅ **T14（本轮指定纳入，未执行）** |
+| **M** | **桥缺 `.http` 调用示例：仓库已有 `.http` 惯例（`samples/RemoteRunnerService/*.http`、`tests/TestRemoteExecutorServer/*.http`），但桥没有任何 `.http` 文件；文档里的 HTTP 调用只有零散 `curl`，无法"一键逐条试"** | ✅ **T15（本轮指定纳入，未执行）** |
 | — | 决定不动的：Agent 聊天需模型 key、`--verify`/`--bridge-only` 为样例级钩子、集成测试单项目、gRPC 命名空间遮蔽 `Grpc`（已在文档给出写法） | ❌ 仅记录 |
 
 ---
@@ -137,6 +140,13 @@
 | `Directory.Build.props` | UPDATE | T6 版本递增 |
 | `docs/app-agent-separation.*`、`docs/configuration.*`、`docs/contributing.*`、`docs/architecture.*`、`README.*` | UPDATE | T0 图 + T1/T2/T4 的能力与安全说明（三语） |
 | `docs/testing/app-agent-separation.tdd.md` | UPDATE | T8 增补 "Wave 2" 章节 + 覆盖率表 + 缺口更新 |
+| `samples/WpfAppOnlyDemo/**`（`App.xaml.cs`、`Bridge/BridgeHost.cs`） | UPDATE | **T13** 应用侧 `--execution inprocess\|external`（与 console 宿主同名同语义），并在 READY/端点面板显示实际执行位置 |
+| `samples/RemoteRunnerService/RunnerServiceSample.csproj`、`samples/ConsoleGrpcBridgeHost/**` | UPDATE | **T13** 样例侧补 `--remote-url`／`ASON_BRIDGE_REMOTE_URL`（`AsonBridgeOptions.RemoteRunnerBaseUrl` 已存在），供 `remote-runner` 端口级 E2E 使用 |
+| `tests/Ason.Bridge.Tests/RemoteRunnerBridgeEndToEndTests.cs`、`TestSupport/{ConsoleBridgeHost,TestPorts}.cs` | CREATE/UPDATE | **T13** `remote-runner` 分离部署的进程级 E2E（起 `RunnerServiceSample` + 应用侧 `--execution remote`） |
+| `samples/mcp/claude_desktop_config.json`、`samples/mcp/README.md` | CREATE | **T14** stdio 中继与 HTTP MCP 两种接入的可复制配置；无 key 与 keyed 两种写法 |
+| `samples/ConsoleMcpCallerSample/**` | CREATE | **T14** 最小 MCP 消费端（`McpAsonBridgeClient`，`--list`/`--call`）；命名与既有 `ConsoleMcpSample`（方向相反：ASON 调用 MCP 服务）显式区分 |
+| `samples/bridge-examples.http`（或与 T11 命名协调后落在应用侧样例目录） | CREATE | **T15** 按形态的 HTTP 请求集合：manifest/instances/openapi、script、functions（两种粒度）、错误码与 401 |
+| `docs/app-agent-separation.*`、`docs/contributing.*`、`README.*` | UPDATE | **T13/T14/T15** 运行矩阵补"WPF 侧 `--execution external`""接到真实 MCP 客户端""用 `.http` 逐条试"三行与对应命令块（三语）；layout 表补 `samples/mcp` |
 
 ---
 
@@ -330,6 +340,42 @@
 - **Risk**: 低（纯文档）；唯一风险是三语漂移 → 由 T9 的跨文档命名核对兜住。
 - **顺序**: 与 T11 同批（都在 T9 之前），避免文档被重复编辑两次。
 
+#### Task 13（T13 / 缺口 K）—— 分离部署的执行位置收尾（样例 + 测试）· 1.0 天
+- **现状核实（避免重复劳动）**: `external` 已在 `fb00b0f` 交付 —— `samples/ConsoleGrpcBridgeHost` 支持 `--execution inprocess|external`（`ASON_BRIDGE_EXECUTION` 等价），`tests/Ason.Bridge.Tests/ConsoleSamplesEndToEndTests.cs` 已断言 `manifest.Execution == "external-process"` 且 operator 调用仍回到应用侧。**本任务只收尾三件剩下的事**。
+- **Action**:
+  ① **WPF 应用侧补同一个开关**：`WpfAppOnlyDemo --bridge-only --execution inprocess|external`（`App.xaml.cs` 解析、`Bridge/BridgeHost.cs:49` 由写死 `InProcess` 改为读参数），端点面板/READY 行显示实际 `execution`；理由写进注释：桌面应用最需要"生成代码不在自己进程里跑"，而 operator 调用仍经捕获的 `SynchronizationContext` 回到 UI 线程。
+  ② **`remote-runner` 的分离部署 E2E**：新增 `tests/Ason.Bridge.Tests/RemoteRunnerBridgeEndToEndTests.cs` —— 用 `TestPorts` 预留端口 → 起 `samples/RemoteRunnerService/RunnerServiceSample.csproj`（`ASON_REMOTE_RUNNER_URL` 同款就绪探测）→ 起应用侧 `ConsoleGrpcBridgeHost --execution remote --remote-url <url>`（样例补该参数，`AsonBridgeOptions.RemoteRunnerBaseUrl` 已存在）→ 断言 manifest `execution=remote-runner`、脚本经 SignalR 宿主求值、**函数调用与 operator 回环仍在应用侧**。
+  ③ **`docker` 取值的如实上报**：按既有策略**不启动守护进程**（与 `Ason.Tests` 的 Docker 用例同一排除口径），补一条单元/集成用例断言 manifest 上报 `docker`，并在三语文档写明该取值需要 Docker。
+- **Mirror**: `ConsoleGrpcBridgeHost` 的 `--execution` 解析与 `ASON_BRIDGE_READY` 行；`ConsoleSamplesEndToEndTests` + `TestSupport/{ConsoleBridgeHost,TestPorts}`；`Ason.Tests` 的 Docker 排除口径（`--filter "DisplayName!~Docker…"`）。
+- **Validate**: `dotnet test tests/Ason.Bridge.Tests -c Release`（新增 remote E2E 不需要桌面，Linux/Windows 均可跑）；`dotnet test tests/Ason.Tests -c Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"`；`dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj -c Release`；手工 `WpfAppOnlyDemo --bridge-only --execution external` 后 `--func EmployeesOperator.GetDiagnostics` 仍返回 `onUiThread=true`（证明执行位置不影响 operator 回环）。
+- **Risk**: 中（remote E2E 引入"两个真实进程 + 一条 SignalR 连接"；若出现端口/时序抖动，落到与 WPF E2E 相同的串行 collection 并复用 `TestPorts`）。
+- **顺序**: 与 T2/T5/T6 无依赖；**必须在 T11 之后**（T11 会重命名 console 样例，否则命令块与 CI 清单要改两遍），并在 T9 之前。
+
+#### Task 14（T14 / 缺口 L）—— MCP 消费端接入配置与最小客户端（样例 + 文档）· 1.0 天
+- **现状核实**: MCP 服务端（HTTP 直连 / stdio 中继）齐备且有进程级 E2E（`McpRelayHostTests`），但**全仓库没有任何可复制粘贴的 MCP 客户端配置**（`mcp.json`、`claude_desktop_config.json` 均无匹配），文档只有一行 `Ason.Bridge.McpHost --url …` —— stdio-only Agent 这条唯一入口无法照做。
+- **Action**:
+  ① `samples/mcp/claude_desktop_config.json`：`mcpServers` 一条指向中继（`command=dotnet`、`args=[exec, <Ason.Bridge.McpHost.dll 路径占位>, --url, http://localhost:5222]`），另附 **HTTP MCP** 等价片段（`url: http://localhost:5223/mcp`，供 Claude Code / IDE 类客户端）。
+  ② `samples/mcp/README.md`：三步（先起应用侧样例 → 再让 Agent 启动中继 → 用工具名 `ason_get_manifest` / `ason_list_instances` / `ason_execute_script` / `ason_invoke_function`），无 key 与 keyed（待 T1）两种写法。
+  ③ **最小消费端** `samples/ConsoleMcpCallerSample`（.NET + `McpAsonBridgeClient`，`--url` / `--list` / `--call Operator.Method --args`），README 里**显式说明与 `ConsoleMcpSample` 方向相反**（后者是 ASON 去调用外部 MCP 服务）。
+  ④ 三语文档：`docs/app-agent-separation.*` 的 Samples 矩阵新增"接到真实 MCP 客户端"一行 + 配置路径与命令写进命令块；`docs/contributing.*` layout 表补 `samples/mcp`。
+- **Mirror**: `samples/ConsoleMcpSample`（MCP 用法风格，方向相反）；`McpAsonBridgeClient` / `AsonBridgeMcpTools` / `AsonBridgeMcpExtensions`（既有 API，不新增库代码）；`samples/templates` 的 README 风格。
+- **Validate**: 配置用 `ConvertFrom-Json` 解析并断言字段与 `Ason.Bridge.McpHost.dll` 指向；最小消费端的冒烟测试走 `RequiresRelayHostFact` 同一条件跳过口径（未构建则跳过）；手工链路：`ConsoleGrpcBridgeHost` → 中继 → `--list`/`--call` 跑通；三语结构一致。
+- **Risk**: 低（配置 + 一个薄客户端）。**唯一决策点**：最小消费端用 .NET（CI 友好、无外部依赖）还是 Python（更贴合"非 .NET 消费端"叙事但需额外环境）—— 见 §9 待裁决 6。
+- **顺序**: 与 T10（非 .NET 调用 gRPC 的契约投递）互补、可并行；都在 T9 之前。
+
+#### Task 15（T15 / 缺口 M）—— 桥的 `.http` 调用示例（样例 + 文档）· 0.5 天
+- **现状核实**: 仓库已有 `.http` 惯例（`samples/RemoteRunnerService/*.http`、`tests/TestRemoteExecutorServer/*.http`），桥**没有**任何 `.http`；文档只有零散 `curl`，无法"一键逐条试"。
+- **Action**: 新增 `samples/bridge-examples.http`（若 T11 已把 console 样例改名，则落在应用侧样例目录下），内容按四组组织，文件头写明"先起应用侧样例"：
+  ① **发现**：`GET {{base}}/manifest`、`GET {{base}}/instances`、`GET {{base}}/openapi.json`；
+  ② **执行**：`POST {{base}}/script`（含/不含 `includeProxyPreamble`）、`POST {{base}}/functions/invoke`（静态模块免 handle / 实例 operator 带 handle 两种）、`POST {{base}}/functions/{operator}/{method}`；
+  ③ **错误面**：未知 operator（400 + `operator-not-found`）、缺 handle（`handle-required`）、能力关闭（404）；
+  ④ **鉴权**：配 key 时缺头（401）与带头（200）—— 与 T1 落地后同步。
+  变量：`@base = http://localhost:5223`、`@key =`（留空＝未开鉴权）。三语文档的 HTTP 片段改为指向该文件。
+- **Mirror**: `samples/RemoteRunnerService/RunnerServiceSample.http` 的 `@变量` 与分节注释写法；`docs/app-agent-separation.*` 现有 `curl` 片段（替换为引用）。
+- **Validate**: 用 REST Client / `curl` 逐条执行并记录 3–5 条真实响应码（写进证据报告）；三语命令块同步；`git ls-files` 含该文件。
+- **Risk**: 低（纯样例文件）。需与 T1（鉴权）、T3（MCP 透传）、T5（日志流）的契约变化保持同步：那三项落地后本文件要补"带 key 的头""透传请求""SSE 流"三条。
+- **顺序**: 无硬依赖；排在 **T1/T3/T5 之后**（否则要补两次），并在 T9 之前。
+
 ---
 
 ## 6. Validation
@@ -367,12 +413,30 @@ dotnet build samples/ConsoleBridgeCaller/ConsoleBridgeCaller.csproj -c Release
 
 # T12：三语文档结构一致性（Case/边界/表格列数）
 git diff --stat -- docs/README.*      # 期望：仅文档
+
+# T13：执行位置收尾（WPF 侧开关 + remote-runner 分离部署 E2E + docker 如实上报）
+dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj -c Release
+#   手工（external 下 operator 仍回 UI 线程）：
+#   WpfAppOnlyDemo --bridge-only --execution external --port 5222
+#   ConsoleBridgeCaller --url http://localhost:5222 --func EmployeesOperator.GetDiagnostics   # onUiThread=true
+#   remote-runner E2E 由套件内的 RemoteRunnerBridgeEndToEndTests 覆盖（起 RunnerServiceSample + 应用侧 --execution remote）
+dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release
+
+# T14：MCP 消费端接入
+#   配置可机读性断言：
+#   Get-Content samples/mcp/claude_desktop_config.json -Raw | ConvertFrom-Json   # 必须解析成功且指向 Ason.Bridge.McpHost.dll
+#   手工链路：起应用侧样例 → 起中继 → 最小消费端 --list / --call
+dotnet build samples/ConsoleMcpCallerSample/ConsoleMcpCallerSample.csproj -c Release
+
+# T15：.http 示例（逐条执行并记录响应码）
+#   REST Client：samples/bridge-examples.http（先起应用侧样例；401 用例需应用侧配 key）
+git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 ```
 
 **Wave 2 依赖顺序**：Task 1（T0）独立 → Task 2（T1）→ Task 3 + Task 4 合并为一次契约变更（proto 1.1）→
 **Task 10（T10，必须落在 T3/T4 之后：它交付的就是那份 proto）** → **Task 11 + Task 12（T11/T12，重命名与调用方对照表；都在 T8/T9 之前，避免 CI 与文档被改两遍）** →
-Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5、10–12 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
-合计约 **11.0 人日**（Wave 2；含本轮新增的 T10 0.5 + T11 0.5 + T12 0.5）。
+**Task 13（T13，执行位置收尾；必须在 T11 之后——它会改样例命令行与 CI 清单）** → Task 5（T2，SSE 必须受 T1 约束）与 **Task 15（T15，`.http` 示例；必须在 T1/T3/T5 之后，否则要补两次）** → Task 14（T14，MCP 消费端接入；与 T10 互补、可并行）→ Task 6（T5，覆盖 1–5、10–15 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
+合计约 **13.5 人日**（Wave 2；含本轮新增的 T10 0.5 + T11 0.5 + T12 0.5 + T13 1.0 + T14 1.0 + T15 0.5）。
 
 ---
 
@@ -413,6 +477,9 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5、10–12
 - [ ] Task 10：`Ason.Bridge.Grpc` 包内含 `protos/ason_bridge.proto`（有解包断言，必要时并入 CI）；三语"非 .NET 调用方"小节含两条 proto 获取路径与最小示例；反射若开启则默认关闭且与 T1 鉴权语义一致
 - [ ] Task 11：`ConsoleBridgeApp` / `ConsoleBridgeCaller` 重命名到位、`git ls-files` 无残留引用、sln/CI/三语文档/E2E 助手同步、形态矩阵含角色图例（或按备选记录"仅图例"决定）
 - [ ] Task 12：三语新增"调用方接入：需要知道什么、需要配置什么"节，含形态对照表 + 三条前提（无自动发现／handle 运行期／proxies 快照）+ 交叉链接
+- [ ] Task 13：`WpfAppOnlyDemo --execution external` 可用且 operator 回环仍 `onUiThread=true`；`remote-runner` 分离部署有进程级 E2E（断言 manifest `execution=remote-runner`）；`docker` 取值的上报有断言且文档写明需要 Docker；`external` 既有交付不被重复实现
+- [ ] Task 14：`samples/mcp/claude_desktop_config.json` 可被 JSON 解析且指向中继；HTTP MCP 片段与 stdio 片段都在；最小消费端 `--list`/`--call` 跑通；三语 Samples 矩阵含"接到真实 MCP 客户端"一行
+- [ ] Task 15：`samples/bridge-examples.http` 覆盖发现/执行/错误面/鉴权四组，逐条执行有记录；三语 HTTP 片段改为引用该文件
 
 ---
 
@@ -433,6 +500,9 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5、10–12
    若开启，需与 T1 的鉴权一起评估（反射会把可调用面再对外广播一次）。
 5. **Task 11 的重命名目标名**：建议 `ConsoleBridgeApp` / `ConsoleBridgeCaller`（角色即名字）；
    是否接受这套名字、或退化为"仅加角色图例、不改目录"（备选路径已写入 T11）。
+6. **Task 14 的最小消费端语言**：.NET（`McpAsonBridgeClient`，CI 友好、零外部依赖、可直接进套件）还是 Python（更贴合"非 .NET 消费端"叙事，但需额外环境、只能手工验证）。**建议 .NET 主线 + 文档附 Python 片段**。
+7. **Task 13 的 WPF 侧开关**：给 `WpfAppOnlyDemo` 加 `--execution inprocess|external`（与 console 宿主一致），还是明确"WPF 侧固定 `InProcess`"并在文档写理由？**建议加开关** —— 桌面应用恰是最需要"生成代码不在自己进程里跑"的形态，而 operator 回环由 `SynchronizationContext` 保证，不受执行位置影响。
+8. **Task 15 的 `.http` 落点**：仓库根 `samples/bridge-examples.http`（醒目、跨形态通用）还是应用侧样例目录内（与 T11 改名后的目录同处）？**建议后者**（命令与文件同处，避免"文件在别处"的困惑）。
 
 ---
 
@@ -476,3 +546,15 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5、10–12
 | 复杂度/合计 9.5 → **10.0 人日**；依赖顺序把 T10 排在 **T3/T4 之后** | T3/T4 会改动 proto（`InvokeMcpTool`、`include_instance_declarations`），打包与文档必须跟随**最终契约**，否则要做两次 |
 | 本轮**未**纳入计划：示例改名（`ConsoleGrpcBridgeHost`＝应用侧 / `ConsoleGrpcBridgeDemo`＝调用方，名字易反读）与"调用方需要知道/配置什么"对照表 | 首次修订只纳入"非 .NET 调用 gRPC"缺口；**随后你回复"纳入"，这两项已作为 T11 / T12 写入本文件** |
 | 后续纳入（同一轮内追加）：缺口 **I / J** → **Task 11**（示例重命名 `ConsoleBridgeApp` / `ConsoleBridgeCaller` + 形态矩阵角色图例）、**Task 12**（三语新增"调用方接入：需要知道什么、需要配置什么"节）；复杂度合计 10.0 → **11.0 人日** | 你指示"纳入"；两项都是可用性/文档缺口，**无新增功能代码**（T11 纯重命名，T12 纯文档），因此不改动 §4 的功能面 |
+
+### 10.4 本轮计划修订（示例覆盖度盘点 → 新增 T13/T14/T15；只改本文件，未执行任何实现）
+
+| 变更 | 原因（含核实结论） |
+|---|---|
+| **先核实再纳入**：`fb00b0f` 已交付"分离部署 + `external` 执行位置" —— `ConsoleGrpcBridgeHost --execution inprocess\|external` + `ConsoleSamplesEndToEndTests` 断言 `external-process`；`ConsoleAgentSample` 也已存在 | 避免把已完成的工作重复写成任务；因此**不新增**"external 样例与 E2E"这一项 |
+| 新增缺口 **K** → **Task 13**：执行位置收尾 —— ① WPF 应用侧 `--execution`（现写死 `InProcess`，`Bridge/BridgeHost.cs:49`）；② `remote-runner` 的**分离部署**进程级 E2E（现只有单进程覆盖）；③ `docker` 取值的如实上报与文档说明 | 盘点结论：文档承诺四种执行位置，但分离部署下只有 `inprocess`/`external` 有可跑形态；"应用决定隔离"这一半主张缺 `remote`/`docker` 的验证 |
+| 新增缺口 **L** → **Task 14**：MCP 消费端接入 —— `samples/mcp/claude_desktop_config.json` + HTTP MCP 片段 + 最小消费端 + 三语文档 | 核实：全仓库无任何 MCP 客户端配置（`mcp.json`/`claude_desktop_config.json` 零匹配），文档仅一行命令行；对 stdio-only Agent 这是**唯一入口** |
+| 新增缺口 **M** → **Task 15**：`samples/bridge-examples.http`（发现/执行/错误面/鉴权四组） | 核实：仓库已有 `.http` 惯例（`samples/RemoteRunnerService/*.http`、`tests/TestRemoteExecutorServer/*.http`），但桥没有任何 `.http`；文档只有零散 `curl` |
+| 复杂度合计 11.0 → **13.5 人日** | T13 1.0 + T14 1.0 + T15 0.5 |
+| 顺序约束写入 §5/§6：**T11 先于 T13**（否则样例命令行与 CI 清单改两遍）；**T1/T3/T5 先于 T15**（否则 `.http` 要补两次）；**T14 与 T10 互补可并行**；三者都在 **T9 之前** | 与前序任务的文件/契约重叠 |
+| 决定**不动**（仅记录）：单进程四件套与模板已足够；分离的应用侧/调用方已各有 console + WPF 两种形态；跨平台已由 console 样例 + 中继在 Linux CI 覆盖；`Ason.Bridge.McpHost` 留在 `src/`（随包交付的可执行件，不再做成 sample）；无界面 console Agent 侧（`ConsoleAgentSample`）已交付 | 判据是"文档承诺了但用户无法一眼跑起来"，不是"哪条分支没覆盖" |
