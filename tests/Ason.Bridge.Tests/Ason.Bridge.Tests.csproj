@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
@@ -21,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ason.Bridge\Ason.Bridge.csproj" />
+    <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
     <ProjectReference Include="..\..\src\Ason.Runner.Core\Ason.Runner.Core.csproj" />
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
   </ItemGroup>

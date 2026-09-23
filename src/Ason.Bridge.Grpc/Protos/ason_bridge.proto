@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+option csharp_namespace = "Ason.Bridge.Grpc";
+package ason.bridge.v1;
+
+// The gRPC face of an ASON bridge. It carries the two independent execution interfaces - a complete script and
+// a single operator function - plus the manifest that describes what the application exposes.
+//
+// Payloads stay JSON where the data is dynamic (script results, operator arguments), so this contract does not
+// become a second, drifting copy of the manifest schema; the fields that a client needs in order to decide
+// what to do next are typed.
+service AsonBridge {
+  // The manifest: protocol version, application name, execution location, enabled capabilities, the operator
+  // API and the live instances.
+  rpc GetManifest (GetManifestRequest) returns (ManifestReply);
+
+  // The live operator instances, re-read on every call because views open and close while a client is running.
+  rpc ListInstances (ListInstancesRequest) returns (InstancesReply);
+
+  // Whole-script interface: send generated code, get the script's result.
+  rpc ExecuteScript (ExecuteScriptRequest) returns (ExecuteResult);
+
+  // Single-function interface: call one operator method precisely, without generating script text.
+  rpc InvokeFunction (InvokeFunctionRequest) returns (ExecuteResult);
+
+  // Same as ExecuteScript, but the server also streams the execution logs while the script runs.
+  rpc StreamExecution (ExecuteScriptRequest) returns (stream ExecutionEvent);
+}
+
+message GetManifestRequest {}
+
+message ManifestReply {
+  string protocol_version = 1;
+  string app_name = 2;
+  // Where scripts run: "in-process", "external-process", "docker" or "remote-runner".
+  string execution = 3;
+  // The complete manifest as JSON, the same payload every other adapter publishes.
+  string manifest_json = 4;
+  // A typed index of the same data, so a client can explore without parsing the JSON.
+  repeated OperatorSummary operators = 5;
+  repeated Instance instances = 6;
+  Capabilities capabilities = 7;
+}
+
+message Capabilities {
+  bool list_apis = 1;
+  bool execute_script = 2;
+  bool invoke_function = 3;
+  bool invoke_mcp_tool = 4;
+  bool log_stream = 5;
+}
+
+message OperatorSummary {
+  string type_name = 1;
+  bool is_static = 2;
+  int32 method_count = 3;
+}
+
+message Instance {
+  string handle = 1;
+  string type_name = 2;
+  bool initialized = 3;
+}
+
+message ListInstancesRequest {}
+
+message InstancesReply {
+  repeated Instance instances = 1;
+}
+
+message ExecuteScriptRequest {
+  // The script body. Unless include_proxy_preamble is false, the bridge prepends the generated proxy layer.
+  string code = 1;
+  bool include_proxy_preamble = 2;
+}
+
+message InvokeFunctionRequest {
+  // Operator type name as listed in the manifest.
+  string operator = 1;
+  string method = 2;
+  // Optional: only needed when several live instances of the operator exist.
+  string handle = 3;
+  // The arguments as a JSON array, for example "[2, 3]". Empty means no arguments.
+  string arguments_json = 4;
+}
+
+message ExecuteResult {
+  bool success = 1;
+  // The result as JSON, exactly as the script or operator produced it.
+  string json = 2;
+  string error = 3;
+  // One of the Ason.Bridge error codes ("operator-not-found", "handle-required", ...).
+  string error_code = 4;
+}
+
+message ExecutionEvent {
+  // "log" while the script runs, then exactly one "result" or "error".
+  string type = 1;
+  string level = 2;
+  string message = 3;
+  // For "result"/"error": the same payload ExecuteResult carries.
+  ExecuteResult result = 4;
+}
