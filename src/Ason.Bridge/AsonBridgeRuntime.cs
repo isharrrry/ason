@@ -13,7 +13,7 @@ namespace Ason.Bridge;
 /// Build it on the thread that owns the operators (in WPF: the dispatcher thread) so operator calls are
 /// marshalled to the same place the application itself runs them.
 /// </summary>
-public sealed class AsonBridgeRuntime : IAsyncDisposable {
+public sealed class AsonBridgeRuntime : IAsonBridgeEndpoint, IAsyncDisposable {
 
     readonly SemaphoreSlim _startGate = new(1, 1);
     readonly IScriptValidator? _validator;
@@ -192,7 +192,6 @@ public sealed class AsonBridgeRuntime : IAsyncDisposable {
         await Executor.DisposeAsync().ConfigureAwait(false);
         _startGate.Dispose();
     }
-
     AsonBridgeCallResult Disabled(string capability) =>
         AsonBridgeCallResult.Fail(AsonBridgeErrorCodes.NotSupported, $"The '{capability}' capability is disabled on this bridge.");
 
