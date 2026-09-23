@@ -321,6 +321,13 @@
 - **Validate**: `Select-String -Pattern 'ConsoleGrpcBridgeHost|ConsoleGrpcBridgeDemo'` 在 `git ls-files` 范围内**无残留**（历史提交与 §10 记录除外）；
   `dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release` 仍 **91/91**；
   `dotnet build samples/ConsoleBridgeApp -c Release` 与 `samples/ConsoleBridgeCaller -c Release` 通过；CI YAML 清单同步。
+- **实测爆炸半径（本轮核实，供 T11 定范围）**: 旧名在 **8 个文件、46 行**中出现 —— `docs/app-agent-separation.{md,zh-CN,es}`（各 2 行形态表 + 6–8 行命令块）、`docs/contributing.{md,zh-CN,es}`（layout 表各 1 行）、
+  `docs/testing/app-agent-separation.tdd.md`（6 行）、样例工程目录与 `Ason.sln`、CI 清单、`tests/Ason.Bridge.Tests` 的路径定位助手、本计划文件。
+- **豁免口径（必须显式写进 T11 的验收，否则 grep 断言永远红）**:
+  ① `docs/testing/app-agent-separation.tdd.md` 的**历史记录段落不重写**（那是"当时发生了什么"的事实记录），改为在文件顶部加一行命名沿革注记（`ConsoleGrpcBridgeHost → ConsoleBridgeApp`、`ConsoleGrpcBridgeDemo → ConsoleBridgeCaller`）；
+  ② 本计划文件 §10 的历史行、以及 git 历史提交不参与 grep；
+  ③ 可执行的断言范围收窄为：`samples/**`、`Ason.sln`、`.github/workflows/**`、`tests/**` 与 `docs/app-agent-separation.*`、`docs/contributing.*` 的**正文命令块**。
+- **命名一致性（需与 §9-5 一并裁决）**: T11 提议的两个新名 `ConsoleBridgeApp` / `ConsoleBridgeCaller` **不带 `Sample` 后缀**，而仓库既有样例是 `ConsoleMcpSample` / `ConsoleExtractorSample` / `ConsoleAgentSample`（T14 拟新增的 `ConsoleMcpCallerSample` 也带后缀）。二者必居其一：**(i)** 统一保留后缀 → `ConsoleBridgeAppSample` / `ConsoleBridgeCallerSample`（建议，churn 最小、与多数样例一致）；**(ii)** 统一去掉后缀并顺带改既有新样例（churn 大，收益低）。
 - **Risk**: 低-中（机械但面广：漏一处会让 CI 构建失败或文档命令失效 → 用 grep 断言收口）。
 - **顺序**: 排在 **T8/T9 之前**（否则 CI 与文档要被改两遍）；与 T2/T5/T6 无依赖，可并行。
 - **备选（零 churn）**: 若维护者不愿改目录名，退化为"仅加 ③ 角色图例 + 在表头标注旧名"，并在 §10.3 记录该决定；**默认按 ①–④ 执行**。
@@ -345,7 +352,11 @@
 - **Action**:
   ① **WPF 应用侧补同一个开关**：`WpfAppOnlyDemo --bridge-only --execution inprocess|external`（`App.xaml.cs` 解析、`Bridge/BridgeHost.cs:49` 由写死 `InProcess` 改为读参数），端点面板/READY 行显示实际 `execution`；理由写进注释：桌面应用最需要"生成代码不在自己进程里跑"，而 operator 调用仍经捕获的 `SynchronizationContext` 回到 UI 线程。
   ② **`remote-runner` 的分离部署 E2E**：新增 `tests/Ason.Bridge.Tests/RemoteRunnerBridgeEndToEndTests.cs` —— 用 `TestPorts` 预留端口 → 起 `samples/RemoteRunnerService/RunnerServiceSample.csproj`（`ASON_REMOTE_RUNNER_URL` 同款就绪探测）→ 起应用侧 `ConsoleGrpcBridgeHost --execution remote --remote-url <url>`（样例补该参数，`AsonBridgeOptions.RemoteRunnerBaseUrl` 已存在）→ 断言 manifest `execution=remote-runner`、脚本经 SignalR 宿主求值、**函数调用与 operator 回环仍在应用侧**。
-  ③ **`docker` 取值的如实上报**：按既有策略**不启动守护进程**（与 `Ason.Tests` 的 Docker 用例同一排除口径），补一条单元/集成用例断言 manifest 上报 `docker`，并在三语文档写明该取值需要 Docker。
+     **进程策略（本轮核实后补充）**：测试必须启动**已构建产物**（`TestSupport` 里同款"定位 dll → `dotnet exec`"助手），**不要用 `dotnet run`**（会触发构建、放大时序抖动）；同时把 `samples/RemoteRunnerService/RunnerServiceSample.csproj` **加入 Linux CI 的构建清单**（现清单只含桥项目与 console 样例，缺它这条 E2E 会因找不到产物而跳过）。
+  ③ **`docker` 取值**：**计划原文"不启动守护进程、只断言上报"在实现上不成立** —— `AsonBridgeRuntime.GetManifestAsync()` 会 `await Executor.StartAsync()`，而 `ScriptRunnerProcessHost.StartAsync()`（`src/Ason.Runner.Core/ScriptRunnerProcessHost.cs:31`）**当场 spawn** 子进程（Docker 模式下即 `docker run`）。因此改为两件事：
+     1. **上报口径用注入执行器验证**：`AsonBridgeOptions.Executor` 已是公开扩展点，测试注入一个 `Name = "docker"` 的桩执行器，断言 manifest/适配器一致地上报 `docker` —— 验证的是"执行位置来自执行器名字"这条插头，不依赖守护进程；
+     2. **真实 Docker E2E 与既有策略一致**：需要守护进程的用例沿用 `Ason.Tests` 的排除口径（`--filter "DisplayName!~Docker…"`），并在三语文档写明该取值需要 Docker。
+     3. **不做**"延迟启动执行器以免 manifest 失败"的行为改动（那会改变 `external` 的既有语义，属另一件事；如确需，另开任务）。
 - **Mirror**: `ConsoleGrpcBridgeHost` 的 `--execution` 解析与 `ASON_BRIDGE_READY` 行；`ConsoleSamplesEndToEndTests` + `TestSupport/{ConsoleBridgeHost,TestPorts}`；`Ason.Tests` 的 Docker 排除口径（`--filter "DisplayName!~Docker…"`）。
 - **Validate**: `dotnet test tests/Ason.Bridge.Tests -c Release`（新增 remote E2E 不需要桌面，Linux/Windows 均可跑）；`dotnet test tests/Ason.Tests -c Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"`；`dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj -c Release`；手工 `WpfAppOnlyDemo --bridge-only --execution external` 后 `--func EmployeesOperator.GetDiagnostics` 仍返回 `onUiThread=true`（证明执行位置不影响 operator 回环）。
 - **Risk**: 中（remote E2E 引入"两个真实进程 + 一条 SignalR 连接"；若出现端口/时序抖动，落到与 WPF E2E 相同的串行 collection 并复用 `TestPorts`）。
@@ -503,6 +514,10 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 6. **Task 14 的最小消费端语言**：.NET（`McpAsonBridgeClient`，CI 友好、零外部依赖、可直接进套件）还是 Python（更贴合"非 .NET 消费端"叙事，但需额外环境、只能手工验证）。**建议 .NET 主线 + 文档附 Python 片段**。
 7. **Task 13 的 WPF 侧开关**：给 `WpfAppOnlyDemo` 加 `--execution inprocess|external`（与 console 宿主一致），还是明确"WPF 侧固定 `InProcess`"并在文档写理由？**建议加开关** —— 桌面应用恰是最需要"生成代码不在自己进程里跑"的形态，而 operator 回环由 `SynchronizationContext` 保证，不受执行位置影响。
 8. **Task 15 的 `.http` 落点**：仓库根 `samples/bridge-examples.http`（醒目、跨形态通用）还是应用侧样例目录内（与 T11 改名后的目录同处）？**建议后者**（命令与文件同处，避免"文件在别处"的困惑）。
+9. **Task 5 的 `logStream` 口径机制（本轮核实后新增，实现前必须裁决）**：`AsonBridgeManifest.Capabilities` 由 `AsonBridgeRuntime` 从宿主配置产出，**运行时并不知道挂了哪些适配器**，所以"各适配器如实上报"没有现成承载点。两条路：
+   **(a) 字段保持"运行时支持日志流"，真话由各适配器自己的表面承担** —— gRPC 有 `StreamExecution`、MCP 有无 `ason_stream_script` 工具、HTTP 有无 SSE 路由、OpenAPI 文档有无该 path（这些本来就是各协议的原生表达），文档写明"看你的传输提供了什么"。**建议 (a)**：不新增机制、无版本膨胀、每适配器各自可测。
+   **(b) 适配器级能力覆盖层** —— 适配器在取 manifest 时传入覆盖集（新 API + 每适配器各渲染一份 manifest）。更"字面如实"，但新增契约面与版本同步成本，且同一应用对不同调用方给出不同 manifest，解释成本高。
+10. **Task 11 的改名目标后缀（与 §9-5 同一议题）**：`ConsoleBridgeApp(Sample)` / `ConsoleBridgeCaller(Sample)` —— 建议保留 `Sample` 后缀以对齐 `ConsoleMcpSample` / `ConsoleExtractorSample` / `ConsoleAgentSample`（T14 的 `ConsoleMcpCallerSample` 同口径）。
 
 ---
 
@@ -558,3 +573,26 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | 复杂度合计 11.0 → **13.5 人日** | T13 1.0 + T14 1.0 + T15 0.5 |
 | 顺序约束写入 §5/§6：**T11 先于 T13**（否则样例命令行与 CI 清单改两遍）；**T1/T3/T5 先于 T15**（否则 `.http` 要补两次）；**T14 与 T10 互补可并行**；三者都在 **T9 之前** | 与前序任务的文件/契约重叠 |
 | 决定**不动**（仅记录）：单进程四件套与模板已足够；分离的应用侧/调用方已各有 console + WPF 两种形态；跨平台已由 console 样例 + 中继在 Linux CI 覆盖；`Ason.Bridge.McpHost` 留在 `src/`（随包交付的可执行件，不再做成 sample）；无界面 console Agent 侧（`ConsoleAgentSample`）已交付 | 判据是"文档承诺了但用户无法一眼跑起来"，不是"哪条分支没覆盖" |
+
+### 10.5 开工前的 Wave 2 冲突审计（本轮；只改本文件，未执行任何实现）
+
+
+
+| 发现 | 性质 | 处理 |
+|---|---|---|
+| **T13③ 原写法不可实现**：`GetManifestAsync()` → `Executor.StartAsync()` → `ScriptRunnerProcessHost.StartAsync()` **当场 spawn**（Docker 模式即 `docker run`），所以"不启守护进程却断言上报 docker"做不到 | **计划缺陷（必须在实现前修正）** | 已改写 T13③：注入 `Name="docker"` 的桩执行器验证上报 + 真实 Docker 用例沿用 `DisplayName!~Docker` 排除口径 + 明确**不做**延迟启动的行为改动 |
+| **T11 的 grep 验收会永远红**：旧名在 8 个文件 46 行里出现，其中 `docs/testing/app-agent-separation.tdd.md` 的 6 行是**历史事实记录**，重写即篡改证据 | 计划遗漏（缺豁免口径） | 已写入 T11：历史段落不重写 → 顶部加命名沿革注记；断言范围收窄到 `samples/**`、`sln`、`workflows`、`tests/**` 与两篇三语文档的正文命令块 |
+| **命名口径不一**：T11 拟 `ConsoleBridgeApp`/`ConsoleBridgeCaller`（无 `Sample` 后缀）vs 既有 `ConsoleMcpSample`/`ConsoleExtractorSample`/`ConsoleAgentSample` 与 T14 拟新增的 `ConsoleMcpCallerSample` | 需裁决（§9-5/§9-10） | 建议统一保留 `Sample` 后缀（churn 最小） |
+| **T13 的 remote E2E 无法直接用 `dotnet run`**：会触发构建且 CI Linux 清单里**没有** `RunnerServiceSample`，会导致该 E2E 在 CI 里因找不到产物而跳过 | 计划遗漏 | 已写入 T13②：测试启动**已构建产物**（定位 dll → `dotnet exec`）+ CI 构建清单补 `samples/RemoteRunnerService/RunnerServiceSample.csproj` |
+| **T5 缺承载点**：manifest 的能力集由运行时产出，运行时不知道挂了哪些适配器，"各适配器如实上报 logStream"没有现成机制 | 需裁决（§9-9） | 已给出 (a)/(b) 两条路并建议 (a)：字段保留"运行时支持"，真话由各适配器的原生表面承担（gRPC rpc / MCP 工具 / HTTP 路由 / OpenAPI path） |
+| 依赖顺序复核：T0 独立 ✓；T1 先于 T5/T15 ✓；T3+T4 合并为一次 proto 1.1 ✓；T10 在 T3/T4 后 ✓；T11 在 T13/T15 前 ✓；T14 与 T10 可并行 ✓；三者都在 T9 前 ✓ | 无冲突 | 保持现状 |
+| 未纳入且**有意不做**：并发/多调用方压力场景（两个 Agent 同时打一个应用、实例 handle 抖动）没有任何任务覆盖；当前设计为"应用侧单实例目录 + `ConcurrentDictionary`" | 已知未测区域 | 记录为"风险知情不做"，若维护者要覆盖则另开任务 |
+| 前置条件复核：T1 需要的 API 已核实 —— `HttpClientTransportOptions.AdditionalHeaders` 是 `IDictionary<string,string>`；`MapMcp(...)` 返回 `IEndpointConventionBuilder`（可 `.RequireAuthorization()`）；gRPC 侧用 `GrpcChannel.CreateCallInvoker().Intercept(...)` 注入 metadata | 无阻塞 | T1 可直接开工 |
+
+### 10.6 Wave 2 执行记录（滚动更新）
+
+| 任务 | 状态 | 证据（命令 + 结果） |
+|---|---|---|
+| T0 —— ASCII 流程图收尾 | ✅ DONE | 三语 `Case`/`情形`/`Caso` 计数一致（各 6 个）+ `git diff --name-only` 仅文档；`Case 1` 补 boundary A′ 全双向流（exec→invoke→invokeResult→execResult→经 D 回调用方）；新增 `Case 6`（remote runner，复用边界 B/C）；"operator 调用不跨越"已限定到调用方边界 D。`Case 7`（日志流）按计划留待 T5 |
+| T1 —— 鉴权可达性 | ✅ DONE（待 T8 汇总） | RED：`CS1501`（`AddAsonGrpcBridge`/`AddAsonMcpBridge`/`GrpcAsonBridgeClient.Connect` 无二参重载）、`CS1503`（`McpAsonBridgeClient.ConnectAsync(endpoint, headers)`）→ GREEN：`tests/Ason.Bridge.Tests` **100/100**（91 + 9）；`Ason.Tests` 105/105；`samples/ConsoleGrpcBridgeHost` 仍构建（新参数可选，样例零改动）。实现要点：`AddAsonGrpcBridge(runtime, policy)` + `MapAsonGrpcBridge()` 读注册期选项；`AddAsonMcpBridge(endpoint, requireAuthorization)` + `MapAsonMcpBridge()`；客户端 `Connect(url, headers)`；中继 `--key`/`--header Name=Value`；**鉴权失败按状态抛出**（gRPC `Unauthenticated` 不被折叠成失败结果）。三语安全文档已补"要求调用方通过鉴权"小节 |
+| 下一步（按 §5 顺序） | ⏳ 待开工 | T3 + T4 合并为一次 proto 1.1 契约变更（`InvokeMcpTool` + `include_instance_declarations`），随后 T10 打包 proto |
