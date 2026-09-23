@@ -36,7 +36,7 @@ internal sealed class BridgeHost : IDisposable {
 
     public string McpUrl { get; }
 
-    public static BridgeHost Start(MainWindow window, int grpcPort, int mcpPort) {
+    public static BridgeHost Start(MainWindow window, int grpcPort, int mcpPort, AsonBridgeExecution execution = AsonBridgeExecution.InProcess) {
         // The application's own assembly carries the view operators; LibDemo proves that a class library which
         // only uses the markers participates in the same API.
         var assemblies = new[] { typeof(EmployeesOperator).Assembly, typeof(LibDemoOperator).Assembly };
@@ -44,9 +44,11 @@ internal sealed class BridgeHost : IDisposable {
         var runtime = new AsonBridgeRuntime(new AsonBridgeOptions {
             AppName = "WpfAppOnlyDemo",
             Assemblies = assemblies,
-            // In-process is the only sensible choice for view operators: they touch UI-bound state, which the
-            // runtime marshals to the captured synchronization context - the dispatcher, captured right here.
-            Execution = AsonBridgeExecution.InProcess,
+            // In-process is the default because these operators touch UI-bound state, which the runtime marshals
+            // to the captured synchronization context - the dispatcher, captured right here. ExternalProcess is
+            // offered too: a desktop application is exactly the case where generated code should not run inside
+            // its own process, and operator calls still come back here, so UI affinity is unaffected.
+            Execution = execution,
             CaptureSynchronizationContext = true,
             OperatorInstances = window.Operator.OperatorInstances,
             SingletonOperators = AsonBridgeOperators.MaterializeMarkerOnly(assemblies),
@@ -77,10 +79,16 @@ internal sealed class BridgeHost : IDisposable {
         app.MapAsonOpenApiBridge();
         app.Start();
 
-        return new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", $"http://localhost:{mcpPort}/mcp", $"http://localhost:{mcpPort}/ason/openapi.json");
+        var host = new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", $"http://localhost:{mcpPort}/mcp", $"http://localhost:{mcpPort}/ason/openapi.json") {
+            Execution = execution
+        };
+        return host;
     }
 
     public string OpenApiUrl { get; }
+
+    /// <summary>Where scripts are evaluated; the manifest reports it, so a caller reads it there.</summary>
+    public AsonBridgeExecution Execution { get; private set; }
 
     public void Dispose() {
         try { _app.StopAsync().GetAwaiter().GetResult(); } catch { }

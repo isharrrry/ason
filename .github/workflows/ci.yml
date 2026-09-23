@@ -53,6 +53,9 @@ jobs:
           dotnet build samples/ConsoleBridgeAppSample/ConsoleBridgeAppSample.csproj --configuration Release
           dotnet build samples/ConsoleAgentSample/ConsoleAgentSample.csproj --configuration Release
           dotnet build samples/ConsoleBridgeCallerSample/ConsoleBridgeCallerSample.csproj --configuration Release
+          # The remote script host of a split deployment: the remote-runner end-to-end test starts this sample
+          # as a second process, so it has to be built here as well.
+          dotnet build samples/RemoteRunnerService/RunnerServiceSample.csproj --configuration Release
 
       # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test
       # project is exercised on Windows (see the comment above).

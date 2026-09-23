@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -12,6 +12,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ason.RemoteBridge\Ason.RemoteBridge.csproj" />
+    <!-- The runner host spawns the script executor on its own side, so the executor has to be able to find its
+         host files here too. A published package brings them through buildTransitive targets; a project
+         reference does not, hence the copy target below. -->
+    <ProjectReference Include="..\..\src\Ason.ExternalExecutor\Ason.ExternalExecutor.csproj" />
   </ItemGroup>
+
+  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build">
+    <ItemGroup>
+      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AsonExecutorHostFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(AsonExecutorHostFiles)' != ''" />
+  </Target>
 
 </Project>

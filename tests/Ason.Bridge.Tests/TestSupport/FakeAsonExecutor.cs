@@ -7,7 +7,8 @@ namespace Ason.Bridge.Tests.TestSupport;
 /// </summary>
 internal sealed class FakeAsonExecutor : IAsonExecutor {
 
-    public string Name => "fake";
+    /// <summary>What the manifest publishes as the execution location; settable so a test can stand in for one.</summary>
+    public string Name { get; set; } = "fake";
     public int StartCalls { get; private set; }
     public List<string> ExecutedScripts { get; } = new();
     public List<AsonBridgeFunctionCall> InvokedFunctions { get; } = new();

@@ -40,12 +40,12 @@ internal sealed class ConsoleBridgeHost : IDisposable {
     }
 
     /// <summary>Starts the host and waits until it answers, so a test never races the startup.</summary>
-    public static async Task<ConsoleBridgeHost> StartAsync(string execution = "inprocess", TimeSpan? startupTimeout = null) {
+    public static async Task<ConsoleBridgeHost> StartAsync(string execution = "inprocess", string? remoteUrl = null, TimeSpan? startupTimeout = null) {
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < 3; attempt++) {
             var (port, _) = TestPorts.Pair();
             try {
-                return await StartOnceAsync(port, execution, startupTimeout).ConfigureAwait(false);
+                return await StartOnceAsync(port, execution, remoteUrl, startupTimeout).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex) when (TestPorts.IsPortRace(ex)) {
                 lastFailure = ex;
@@ -54,7 +54,7 @@ internal sealed class ConsoleBridgeHost : IDisposable {
         throw lastFailure ?? new InvalidOperationException("Could not start the console bridge host.");
     }
 
-    static async Task<ConsoleBridgeHost> StartOnceAsync(int port, string execution, TimeSpan? startupTimeout) {
+    static async Task<ConsoleBridgeHost> StartOnceAsync(int port, string execution, string? remoteUrl, TimeSpan? startupTimeout) {
         var assembly = LocateAssembly() ?? throw new InvalidOperationException("samples/ConsoleBridgeAppSample has not been built.");
         var info = new ProcessStartInfo("dotnet") {
             RedirectStandardOutput = true,
@@ -63,6 +63,10 @@ internal sealed class ConsoleBridgeHost : IDisposable {
             CreateNoWindow = true
         };
         foreach (var argument in new[] { "exec", assembly, "--port", port.ToString(), "--execution", execution }) info.ArgumentList.Add(argument);
+        if (!string.IsNullOrWhiteSpace(remoteUrl)) {
+            info.ArgumentList.Add("--remote-url");
+            info.ArgumentList.Add(remoteUrl);
+        }
 
         var process = Process.Start(info) ?? throw new InvalidOperationException("Could not start the console bridge host.");
         var host = new ConsoleBridgeHost(process, $"http://localhost:{port}", $"http://localhost:{port + 1}/mcp", port);

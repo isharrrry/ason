@@ -18,12 +18,14 @@ using Microsoft.Extensions.Logging;
 //   gRPC  -> http://localhost:<port>       (ConsoleBridgeCallerSample, or any gRPC client)
 //   MCP   -> http://localhost:<port+1>/mcp (an MCP-speaking agent, or the stdio relay host)
 //
-// Usage: ConsoleBridgeAppSample [--port 5222] [--execution inprocess|external] [--reflection]
+// Usage: ConsoleBridgeAppSample [--port 5222] [--execution inprocess|external|remote] [--remote-url <url>] [--reflection]
 //
 //   inprocess (default) - scripts are evaluated in this process, so they can touch the operators directly
 //   external            - scripts are evaluated in an Ason.ExternalExecutor child process, which calls back
 //                         here for every operator invocation; use it when generated code must not run inside
 //                         the application process. The manifest reports which one is in use.
+//   remote              - that child process runs on a runner host instead of next to the application
+//                         (--remote-url / ASON_BRIDGE_REMOTE_URL; see samples/RemoteRunnerService)
 //   --reflection        - publish the gRPC reflection service, so grpcurl and generated stubs work with no
 //                         local .proto file. Off by default: reflection republishes the callable surface.
 
@@ -31,15 +33,26 @@ var port = ParsePort() ?? 5222;
 var mcpPort = port + 1;
 
 var execution = (Value("--execution") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_EXECUTION") ?? "inprocess").ToLowerInvariant();
-if (execution is not ("inprocess" or "external")) {
-    Console.Error.WriteLine($"unknown execution '{execution}'; expected 'inprocess' or 'external'");
+if (execution is not ("inprocess" or "external" or "remote")) {
+    Console.Error.WriteLine($"unknown execution '{execution}'; expected 'inprocess', 'external' or 'remote'");
+    return 2;
+}
+
+var remoteUrl = Value("--remote-url") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_REMOTE_URL");
+if (execution == "remote" && string.IsNullOrWhiteSpace(remoteUrl)) {
+    Console.Error.WriteLine("--execution remote needs --remote-url <runner url> (or ASON_BRIDGE_REMOTE_URL)");
     return 2;
 }
 
 var runtime = new AsonBridgeRuntime(new AsonBridgeOptions {
     AppName = "LibDemo application",
     Assemblies = new[] { typeof(LibDemoOperator).Assembly },
-    Execution = execution == "external" ? AsonBridgeExecution.ExternalProcess : AsonBridgeExecution.InProcess,
+    Execution = execution switch {
+        "external" => AsonBridgeExecution.ExternalProcess,
+        "remote" => AsonBridgeExecution.RemoteRunner,
+        _ => AsonBridgeExecution.InProcess
+    },
+    RemoteRunnerBaseUrl = remoteUrl,
     // LibDemoOperator is a marker-only operator: it has no view to attach to, so the host materialises it
     // once and the bridge addresses it by type name.
     SingletonOperators = AsonBridgeOperators.MaterializeMarkerOnly(typeof(LibDemoOperator).Assembly),

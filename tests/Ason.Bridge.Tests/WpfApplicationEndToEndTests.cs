@@ -61,6 +61,27 @@ public class WpfApplicationEndToEndTests {
     }
 
     [RequiresWpfApplicationFact]
+    public async Task The_wpf_application_can_evaluate_scripts_in_a_child_process_and_still_keep_ui_affinity() {
+        using var application = await WpfApplication.StartAsync(WpfApplication.LocateExecutable()!, execution: "external");
+        await using var client = GrpcAsonBridgeClient.Connect(application.GrpcUrl);
+
+        // 1. The application says where it evaluates, so a caller never has to guess.
+        var manifest = await client.GetManifestAsync();
+        Assert.Equal("external-process", manifest.Execution);
+
+        // 2. A script runs - in the child process - and its operator call still comes back here.
+        var count = await client.ExecuteScriptAsync("return employeesOperator.GetEmployees().Count;");
+        Assert.True(count.Success, count.Error);
+        Assert.Equal(3, count.Result!.Value.GetInt32());
+
+        // 3. That round trip (child -> application -> child) ran the method on the dispatcher thread, exactly as
+        //    it does in-process: moving where the script is isolated does not move where the operators live.
+        var diagnostics = await client.InvokeFunctionAsync(BridgeCalls.Call("EmployeesOperator", "GetDiagnostics"));
+        Assert.True(diagnostics.Success, diagnostics.Error);
+        Assert.True(diagnostics.Result!.Value.GetProperty("onUiThread").GetBoolean());
+    }
+
+    [RequiresWpfApplicationFact]
     public async Task The_same_application_is_reachable_over_mcp_with_the_same_contract() {
         using var application = await WpfApplication.StartAsync(WpfApplication.LocateExecutable()!);
         var mcpEndpoint = application.GrpcUrl.Replace(":" + new Uri(application.GrpcUrl).Port, ":" + (new Uri(application.GrpcUrl).Port + 1)) + "/mcp";

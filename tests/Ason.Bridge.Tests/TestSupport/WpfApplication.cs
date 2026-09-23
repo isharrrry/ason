@@ -40,12 +40,12 @@ internal sealed class WpfApplication : IDisposable {
     /// call rather than on a log line means the application is not considered ready before it can serve
     /// requests; a port race (the pair is claimed between the check and the bind) is retried.
     /// </summary>
-    public static async Task<WpfApplication> StartAsync(string executable, TimeSpan? startupTimeout = null) {
+    public static async Task<WpfApplication> StartAsync(string executable, TimeSpan? startupTimeout = null, string execution = "inprocess") {
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < 3; attempt++) {
             var (grpcPort, _) = TestPorts.Pair();
             try {
-                return await StartOnceAsync(executable, grpcPort, startupTimeout).ConfigureAwait(false);
+                return await StartOnceAsync(executable, grpcPort, startupTimeout, execution).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex) when (TestPorts.IsPortRace(ex)) {
                 lastFailure = ex;
@@ -54,7 +54,7 @@ internal sealed class WpfApplication : IDisposable {
         throw lastFailure ?? new InvalidOperationException("Could not start the WPF application sample.");
     }
 
-    static async Task<WpfApplication> StartOnceAsync(string executable, int port, TimeSpan? startupTimeout) {
+    static async Task<WpfApplication> StartOnceAsync(string executable, int port, TimeSpan? startupTimeout, string execution) {
         var info = new ProcessStartInfo(executable) {
             RedirectStandardInput = false,
             RedirectStandardOutput = true,
@@ -65,6 +65,8 @@ internal sealed class WpfApplication : IDisposable {
         info.ArgumentList.Add("--bridge-only");
         info.ArgumentList.Add("--port");
         info.ArgumentList.Add(port.ToString());
+        info.ArgumentList.Add("--execution");
+        info.ArgumentList.Add(execution);
 
         var process = Process.Start(info) ?? throw new InvalidOperationException($"Could not start {executable}.");
         var application = new WpfApplication(process, $"http://localhost:{port}");
