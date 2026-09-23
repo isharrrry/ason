@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | non-.NET callers: a gRPC client, a stdlib-only MCP client, and an OpenAI-driven MCP tool-calling test |
 | `samples/bridge-examples.http` | every HTTP bridge route, grouped, ready to send one at a time |
 | `samples/templates` | the `dotnet new` templates |
-| `scripts` | repository checks that CI runs (the coverage floor) |
+| `scripts` | repository checks that CI runs (the coverage floor, the failure annotations) |
 | `tests/*` | test suites, see below |
 | `.agents/plans` | implementation plans, kept in the repository on purpose so decisions can be reviewed next to the code |
 | `CHANGELOG.md` | released changes, one section per version |
@@ -106,3 +106,8 @@ the adapter floors, and unpacks the `Ason.Bridge.Grpc` package to prove the ship
 `tests/Ason.Bridge.Tests` plus the library suite on Windows, which is what makes those end-to-end tests actually
 execute; it also runs the FlaUI UI tests with `continue-on-error`, because UI Automation needs an interactive
 desktop session a hosted runner provides only inconsistently. The net10.0 leg stays out until that SDK is GA.
+
+Every test step writes a TRX file, and one last step (`scripts/emit-test-failures.ps1`, guarded by
+`if: failure()`) turns them into check-run annotations. That is deliberate: the job log of a failed run can only
+be downloaded by someone with admin rights, while the annotation carrying the test name and the assertion can be
+read anonymously — including by the contributors and tools that have to explain the failure.

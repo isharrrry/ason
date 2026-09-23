@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | llamadores que no son .NET: cliente gRPC, cliente MCP de biblioteca estándar y una prueba de tool calling MCP dirigida por OpenAI |
 | `samples/bridge-examples.http` | todas las rutas HTTP del puente, agrupadas y listas para enviar de una en una |
 | `samples/templates` | las plantillas de `dotnet new` |
-| `scripts` | comprobaciones del repositorio que ejecuta CI (el suelo de cobertura) |
+| `scripts` | comprobaciones del repositorio que ejecuta CI (el suelo de cobertura, las anotaciones de fallo) |
 | `tests/*` | suites de pruebas, ver más abajo |
 | `.agents/plans` | planes de implementación, guardados en el repositorio a propósito para revisar las decisiones junto al código |
 | `CHANGELOG.md` | cambios publicados, una sección por versión |
@@ -106,3 +106,9 @@ suite de la biblioteca en Windows, que es lo que hace que esas pruebas se ejecut
 pruebas de UI de FlaUI con `continue-on-error`, porque UI Automation necesita una sesión de escritorio
 interactiva que un runner alojado solo ofrece de forma inconsistente. La variante net10.0 queda fuera hasta que
 ese SDK sea GA.
+
+Cada paso de pruebas escribe un archivo TRX, y un último paso (`scripts/emit-test-failures.ps1`, protegido con
+`if: failure()`) los convierte en anotaciones del check run. Es intencionado: el log del job de una ejecución
+fallida solo lo puede descargar quien tenga permisos de administrador, mientras que la anotación que lleva el
+nombre de la prueba y la aserción se puede leer de forma anónima, incluso por las personas y las herramientas que
+tienen que explicar el fallo.

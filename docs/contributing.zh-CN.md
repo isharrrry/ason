@@ -41,7 +41,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `samples/python` | 非 .NET 调用方：gRPC 客户端、纯标准库 MCP 客户端、OpenAI 驱动的 MCP 工具调用测试 |
 | `samples/bridge-examples.http` | 桥的全部 HTTP 路由，按组整理，可逐条发送 |
 | `samples/templates` | `dotnet new` 模板 |
-| `scripts` | CI 执行的仓库级检查（覆盖率下限） |
+| `scripts` | CI 执行的仓库级检查（覆盖率下限、失败注解） |
 | `tests/*` | 测试套件，见下文 |
 | `.agents/plans` | 实现计划；**故意**留在仓库里，便于把决策与代码一起评审 |
 | `CHANGELOG.md` | 已发布变更，每个版本一节 |
@@ -98,3 +98,7 @@ dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Rel
 （`windows-samples`）构建 WPF 示例，并在 Windows 上重新运行 `tests/Ason.Bridge.Tests` 与库测试套件，这才让那些端到端测试真正执行；
 它同时以 `continue-on-error` 运行 FlaUI UI 测试 —— 因为 UI Automation 需要交互式桌面会话，而托管运行器只能不稳定地提供。
 net10.0 分支在该 SDK 正式发布前不纳入。
+
+每个测试步骤都会写出 TRX 文件，最后一个步骤（`scripts/emit-test-failures.ps1`，以 `if: failure()` 守护）把它们转成
+check-run 注解。这是有意的：失败运行的作业日志只有管理员权限才能下载，而携带测试名与断言内容的注解可以匿名读取 ——
+包括需要解释这次失败的人与工具。

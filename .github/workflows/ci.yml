@@ -59,10 +59,14 @@ jobs:
 
       # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test
       # project is exercised on Windows (see the comment above).
+      # TRX files are what makes a failure readable: `scripts/emit-test-failures.ps1` turns them into check-run
+      # annotations, which - unlike the job log - can be read without authentication.
       - name: Smoke tests (net6.0 / net9.0)
         run: |
-          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net6.0
-          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net9.0
+          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net6.0 \
+            --logger "trx;LogFileName=libdemo-net6.trx" --results-directory TestResults
+          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net9.0 \
+            --logger "trx;LogFileName=libdemo-net9.trx" --results-directory TestResults
 
       # Excluded here:
       #   * Docker      - those theory cases need a Docker daemon,
@@ -70,9 +74,12 @@ jobs:
       # Everything else in Ason.Tests runs in-process or via the external executor and is hermetic.
       - name: Unit tests
         run: |
-          dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release
-          dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release
-          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
+          dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release \
+            --logger "trx;LogFileName=ason-runner-tests.trx" --results-directory TestResults
+          dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release \
+            --logger "trx;LogFileName=ason-remoterunner-tests.trx" --results-directory TestResults
+          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" \
+            --logger "trx;LogFileName=ason-tests.trx" --results-directory TestResults
 
       # The bridge suite hosts gRPC and MCP in process and drives them over the wire; no Docker, desktop
       # session or network access is needed. Coverage is collected here because this is the job that always
@@ -80,7 +87,8 @@ jobs:
       - name: Bridge tests (with coverage)
         run: |
           dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release \
-            --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory artifacts/coverage
+            --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory artifacts/coverage \
+            --logger "trx;LogFileName=ason-bridge-tests.trx"
 
       # Floors, not targets: a change that drops a whole area fails, ordinary refactoring does not. Sample
       # assemblies are excluded on purpose - each sample is a separate process, so its own assembly cannot be
@@ -95,6 +103,15 @@ jobs:
         run: |
           dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release -o ./artifacts/pack
           unzip -l ./artifacts/pack/Ason.Bridge.Grpc.*.nupkg | grep -q 'protos/ason_bridge.proto'
+
+      # The step above may have stopped the job before the later ones ran, so this is last and runs on failure.
+      # It never fails the job itself; it only makes the failure legible: the failing test's name and assertion
+      # end up in the run's annotations, which anyone (or an agent, or a contributor on another network) can
+      # read anonymously. Without it a red run only says "Process completed with exit code 1".
+      - name: Test failures as annotations
+        if: failure()
+        shell: pwsh
+        run: ./scripts/emit-test-failures.ps1
 
   # The WPF samples are Windows-only, so their end-to-end tests (which start the real application and drive it
   # over gRPC and MCP) run here. Building the samples first is what makes those tests execute instead of skip.
@@ -123,13 +140,15 @@ jobs:
 
       - name: Bridge tests (includes the WPF application and agent end-to-end tests)
         run: |
-          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release \
+            --logger "trx;LogFileName=ason-bridge-tests-windows.trx" --results-directory TestResults
 
       # The library's own hermetic suite also runs here, so a Windows-only failure (file paths, the external
       # executor's process handling, a culture-dependent format) is caught on the platform most users are on.
       - name: Library unit tests (Windows)
         run: |
-          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
+          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" \
+            --logger "trx;LogFileName=ason-tests-windows.trx" --results-directory TestResults
 
       # The net10.0 leg of the smoke tests stays out until that SDK is GA: the project targets it, but a
       # preview SDK on CI would make unrelated pull requests red for reasons that are not this repository's.
@@ -143,3 +162,10 @@ jobs:
         continue-on-error: true
         run: |
           dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release
+
+      # Same purpose as in the other job: a red run must say *which* test broke, in a place that can be read
+      # without an authenticated session.
+      - name: Test failures as annotations
+        if: failure()
+        shell: pwsh
+        run: ./scripts/emit-test-failures.ps1
