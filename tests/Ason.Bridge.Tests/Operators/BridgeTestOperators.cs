@@ -4,14 +4,11 @@ namespace Ason.Bridge.Tests.Operators;
 
 /// <summary>
 /// Instance operator: callable through an ASON handle, exactly like a view operator in a real application.
-/// The handle is passed to the constructor because <see cref="OperatorBase.Handle"/> is protected.
+/// It has no constructor of its own, because a host registers it through
+/// <see cref="RootOperator.AttachChildOperator{TOperator}"/>, which is what assigns the handle.
 /// </summary>
 [AsonOperator("Bridge test instance operator")]
 public sealed class BridgeCalculatorOperator : OperatorBase {
-
-    public BridgeCalculatorOperator(string handle = "BridgeCalculatorOperator") {
-        Handle = handle;
-    }
 
     [AsonMethod("Adds two integers")]
     public int Add(int left, int right) => left + right;
@@ -39,13 +36,20 @@ public static class BridgeStaticOperator {
     public static void AlwaysFails() => throw new InvalidOperationException("operator failed on purpose");
 }
 
+/// <summary>
+/// Marker-only operator: marked, but not an <see cref="OperatorBase"/>. A host materialises one of these and
+/// addresses it by type name, which is the second shape of live instance the bridge has to report.
+/// </summary>
+[AsonOperator("Bridge test marker-only operator")]
+public sealed class BridgeMarkerOperator {
+
+    [AsonMethod("Returns a fixed marker")]
+    public string Marker() => "marker";
+}
+
 /// <summary>Records which thread an invocation ran on, so UI-thread affinity can be asserted.</summary>
 [AsonOperator("Bridge test thread probe")]
 public sealed class ThreadProbeOperator : OperatorBase {
-
-    public ThreadProbeOperator(string handle = "ThreadProbeOperator") {
-        Handle = handle;
-    }
 
     public int LastThreadId { get; private set; }
 

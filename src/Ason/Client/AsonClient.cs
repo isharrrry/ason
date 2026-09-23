@@ -189,36 +189,10 @@ public class AsonClient : IChatClient {
         };
     }
 
-    string BuildExistingOperatorVariableDeclarations() {
-        var sb = new StringBuilder();
-        sb.AppendLine();
-        var typeInstanceCount = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        var instances = new List<(Type Type, string Handle)>();
-        foreach (var instance in _rootOperator.OperatorInstances.Values) {
-            var type = instance.GetType();
-            if (type == typeof(RootOperator)) continue;
-            instances.Add((type, instance.Handle));
-        }
-        // Marker-only operators are singletons addressed by their type name.
-        foreach (var singleton in _singletonOperators) {
-            instances.Add((singleton.Value.GetType(), singleton.Key));
-        }
-
-        foreach (var (type, handle) in instances) {
-            var typeName = type.Name;
-            if (!typeInstanceCount.TryGetValue(typeName, out var count)) count = 0;
-            string baseVar = char.ToLowerInvariant(typeName[0]) + typeName.Substring(1);
-            string varName = count == 0 ? baseVar : baseVar + count.ToString();
-            typeInstanceCount[typeName] = count + 1;
-            string proxyName = typeName;
-            bool isRootDerived = typeof(RootOperator).IsAssignableFrom(type) && type != typeof(RootOperator);
-            string ctor = isRootDerived ? $"new {proxyName}()" : $"new {proxyName}(\"{handle}\")";
-            sb.AppendLine($"{proxyName} {varName} = {ctor};");
-        }
-        sb.AppendLine();
-        return sb.ToString();
-    }
+    // The declaration rules live in OperatorVariableDeclarations because the bridge appends the very same
+    // text to the scripts it accepts over gRPC/MCP; two copies would drift apart.
+    string BuildExistingOperatorVariableDeclarations() =>
+        OperatorVariableDeclarations.Build(_rootOperator.OperatorInstances, _singletonOperators);
 
     /// <summary>
     /// Marker-only operators ([AsonOperator] without OperatorBase) have no view lifecycle to attach to,

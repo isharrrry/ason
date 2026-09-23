@@ -22,8 +22,9 @@ public class ScriptExecutionTests {
 
     [Fact]
     public async Task ExecuteScript_can_call_a_live_instance_through_its_declared_variable() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.ExecuteScriptAsync("return bridgeCalculatorOperator.Add(4, 5);");
 
@@ -47,7 +48,8 @@ public class ScriptExecutionTests {
     public async Task ExecuteScript_reports_an_operator_failure_as_a_failed_result() {
         await using var runtime = new AsonBridgeRuntime(BridgeTestApp.Options());
 
-        var result = await runtime.ExecuteScriptAsync("return BridgeStaticOperator.AlwaysFails();");
+        // AlwaysFails returns void, so the script calls it as a statement.
+        var result = await runtime.ExecuteScriptAsync("BridgeStaticOperator.AlwaysFails();");
 
         Assert.False(result.Success);
         Assert.Equal(AsonBridgeErrorCodes.ExecutionFailed, result.ErrorCode);

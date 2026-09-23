@@ -8,7 +8,12 @@ public interface IScriptValidator {
     string? Validate(string script);
 }
 
-internal sealed class KeywordScriptValidator : IScriptValidator {
+/// <summary>
+/// Rejects a script that mentions a forbidden API. It is a keyword filter, not a sandbox, and it is public so
+/// hosts that accept scripts from elsewhere - the bridge, for one - apply exactly the same rule set as a
+/// local <see cref="AsonClient"/> instead of maintaining a second list.
+/// </summary>
+public sealed class KeywordScriptValidator : IScriptValidator {
     readonly string[] _forbidden;
     public KeywordScriptValidator(IEnumerable<string> forbidden) { _forbidden = forbidden.ToArray(); }
     public string? Validate(string script) {

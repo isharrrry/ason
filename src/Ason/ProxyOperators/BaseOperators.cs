@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 
 namespace Ason;
 
@@ -58,6 +58,13 @@ public class OperatorBase {
 
     internal bool IsInitialized = false;
 
+    /// <summary>
+    /// Whether this operator is currently attached to a live object (in a WPF app: whether its view is loaded).
+    /// Exposed for hosts that describe their operator API to an external agent - the bridge reports it so a
+    /// caller knows an invocation may have to open the view first.
+    /// </summary>
+    public bool IsAttached => IsInitialized;
+
     protected async Task<TOperator> GetViewOperator<TOperator>(Action? openViewAction = null, string? id = null) where TOperator : OperatorBase, new() {
         string handle = CreateHandle(id, typeof(TOperator));
 
@@ -107,7 +114,9 @@ public class OperatorBase<TAttached> : OperatorBase {
 public class RootOperator : OperatorBase {
     internal readonly ConcurrentDictionary<string, TaskCompletionSource> OperatorTaskCompletions = new();
 
-    internal readonly ConcurrentDictionary<string, OperatorBase> OperatorInstances = new();
+    // Publicly readable so a host (and the bridge built on top of it) can enumerate the operators it can
+    // address, which is what the single-function interface needs in order to resolve an operator to a handle.
+    public readonly ConcurrentDictionary<string, OperatorBase> OperatorInstances = new();
 
     public RootOperator(object attachedObject) {
         Attach(attachedObject);

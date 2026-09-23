@@ -1,3 +1,4 @@
+using Ason.Bridge.Tests.Operators;
 using Ason.Bridge.Tests.TestSupport;
 
 namespace Ason.Bridge.Tests;
@@ -53,8 +54,9 @@ public class CapabilityTests {
 
     [Fact]
     public async Task Both_interfaces_can_be_enabled_together_without_conflicting() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var scriptResult = await runtime.ExecuteScriptAsync("return bridgeCalculatorOperator.Add(1, 1);");
         var functionResult = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "Add", 1, 1));

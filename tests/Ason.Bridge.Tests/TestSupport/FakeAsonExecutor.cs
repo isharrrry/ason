@@ -15,6 +15,9 @@ internal sealed class FakeAsonExecutor : IAsonExecutor {
     public AsonBridgeCallResult ScriptResult { get; set; } = AsonBridgeCallResult.Ok(JsonSerializer.SerializeToElement("script-ok"));
     public AsonBridgeCallResult FunctionResult { get; set; } = AsonBridgeCallResult.Ok(JsonSerializer.SerializeToElement("function-ok"));
 
+    // A fake never produces logs; declared explicitly so no unused-event warning is raised.
+    public event EventHandler<AsonBridgeLogEventArgs>? Log { add { } remove { } }
+
     public Task StartAsync(CancellationToken cancellationToken = default) {
         StartCalls++;
         return Task.CompletedTask;

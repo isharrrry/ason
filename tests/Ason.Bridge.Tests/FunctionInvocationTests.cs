@@ -22,8 +22,9 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_calls_an_instance_operator_through_the_live_instance_directory() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "Add", 2, 3));
 
@@ -33,8 +34,9 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_accepts_an_explicit_handle() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.CallHandled("BridgeCalculatorOperator", "Concat", "BridgeCalculatorOperator", "a", "b"));
 
@@ -44,8 +46,9 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_maps_json_arguments_onto_model_parameters_and_serializes_the_result() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "Echo", new { a = 7, name = "seven" }));
 
@@ -66,7 +69,7 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_reports_that_an_instance_operator_needs_a_handle_when_none_is_live() {
-        await using var runtime = new AsonBridgeRuntime(BridgeTestApp.Options());
+        await using var runtime = BridgeTestApp.CreateRuntime(BridgeTestApp.NewRoot());
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "Add", 1, 2));
 
@@ -77,9 +80,10 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_reports_an_ambiguous_handle_when_two_instances_share_a_type() {
-        using var first = new BridgeCalculatorOperator("BridgeCalculatorOperator");
-        using var second = new BridgeCalculatorOperator("BridgeCalculatorOperator2");
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, first, second);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root, "2");
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "Add", 1, 2));
 
@@ -90,8 +94,9 @@ public class FunctionInvocationTests {
 
     [Fact]
     public async Task InvokeFunction_reports_a_missing_method() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var result = await runtime.InvokeFunctionAsync(BridgeCalls.Call("BridgeCalculatorOperator", "NoSuchMethod"));
 

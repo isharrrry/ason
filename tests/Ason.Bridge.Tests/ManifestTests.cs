@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Ason.Bridge.Tests.Operators;
 using Ason.Bridge.Tests.TestSupport;
@@ -28,8 +29,10 @@ public class ManifestTests {
         var instanceOperator = manifest.Api.Operators.Single(o => o.TypeName == "BridgeCalculatorOperator");
         Assert.False(instanceOperator.IsStatic);
         var add = instanceOperator.Methods.Single(m => m.Name == "Add");
-        Assert.Equal("int", add.ReturnType);
-        Assert.Equal(new[] { "int", "int" }, add.Parameters.Select(p => p.Type));
+        // Type names are CLR names ("Int32"), because the listing reuses the very helper that renders the
+        // script prompt - see OperatorApiCatalogTests, which pins the same convention.
+        Assert.Equal("Int32", add.ReturnType);
+        Assert.Equal(new[] { "Int32", "Int32" }, add.Parameters.Select(p => p.Type));
         Assert.Equal(new[] { "left", "right" }, add.Parameters.Select(p => p.Name));
 
         Assert.Contains(manifest.Api.Models, m => m.Name == "BridgeTestModel");
@@ -69,8 +72,9 @@ public class ManifestTests {
 
     [Fact]
     public async Task Manifest_lists_live_instances_and_declares_them_to_scripts() {
-        using var calculator = new BridgeCalculatorOperator();
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, calculator);
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
 
         var manifest = await runtime.GetManifestAsync();
 
@@ -85,8 +89,38 @@ public class ManifestTests {
     }
 
     [Fact]
+    public async Task Manifest_reports_marker_only_operators_as_live_instances() {
+        var singletons = new ConcurrentDictionary<string, object>(StringComparer.Ordinal) {
+            ["BridgeMarkerOperator"] = new BridgeMarkerOperator()
+        };
+        var options = BridgeTestApp.Options();
+        options.SingletonOperators = singletons;
+        await using var runtime = new AsonBridgeRuntime(options);
+
+        var manifest = await runtime.GetManifestAsync();
+
+        var instance = Assert.Single(manifest.Instances);
+        Assert.Equal("BridgeMarkerOperator", instance.Handle);
+        Assert.True(instance.Initialized);
+        Assert.Contains("bridgeMarkerOperator", manifest.Proxies);
+    }
+
+    [Fact]
+    public async Task Manifest_does_not_advertise_the_root_operator_as_a_call_target() {
+        var root = BridgeTestApp.NewRoot();
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
+
+        var manifest = await runtime.GetManifestAsync();
+
+        Assert.Empty(manifest.Instances);
+        Assert.DoesNotContain(manifest.Api.Operators, o => o.TypeName == "RootOperator");
+    }
+
+    [Fact]
     public async Task Manifest_round_trips_through_json_because_it_crosses_a_process_boundary() {
-        await using var runtime = BridgeTestApp.CreateRuntime(out _, new BridgeCalculatorOperator());
+        var root = BridgeTestApp.NewRoot();
+        BridgeTestApp.Attach<BridgeCalculatorOperator>(root);
+        await using var runtime = BridgeTestApp.CreateRuntime(root);
         var manifest = await runtime.GetManifestAsync();
         var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
