@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
@@ -22,7 +22,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+		<!-- Matches Ason.Runner.Core and what the MCP preview package requires: see the note there. A lower pin
+		     makes this project copy an older assembly into the shared output folder over the newer one. -->
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
 	</ItemGroup>
 
 	<!-- Package host manifest files (runtimeconfig/deps) into buildTransitive so they are not added to the consumer project tree, but available for our targets to copy next to the consuming output -->

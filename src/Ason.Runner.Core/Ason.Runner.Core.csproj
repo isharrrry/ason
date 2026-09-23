@@ -18,9 +18,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <!-- The same version the MCP preview package already requires on net9.0 (ModelContextProtocol.Core 0.4.0
+         pulls 9.0.10), instead of a lower 8.0.0 floor. Two versions of one assembly in the output folder every
+         project shares (BaseOutputPath=..\bin) is not a floor, it is a race: this project copied 8.0.0 over the
+         9.0.10 next to the stdio relay, and the relay child process then died on Linux with exit 134. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
   </ItemGroup>
-  
+
   <ItemGroup>
     <None Include="icon.png" Pack="true" PackagePath="\"/>
   </ItemGroup>
