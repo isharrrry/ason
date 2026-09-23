@@ -18,7 +18,9 @@ internal sealed class RunnerTransportManager : IRunnerTransportManager {
     public event Action<string>? LineReceived;
     public event Action<string>? TransportClosed;
 
-    public bool RequiresTransport => _settings.UseRemote || _settings.Mode != ExecutionMode.InProcess;
+    // A host-supplied transport means "the runner is elsewhere", so it is what decides whether a transport is
+    // needed at all - otherwise supplying one together with ExecutionMode.InProcess would silently ignore it.
+    public bool RequiresTransport => _settings.TransportFactory is not null || _settings.UseRemote || _settings.Mode != ExecutionMode.InProcess;
 
     public async Task EnsureStartedAsync(CancellationToken cancellationToken = default) {
         if (!RequiresTransport) return;
@@ -66,6 +68,7 @@ internal sealed class RunnerTransportManager : IRunnerTransportManager {
     }
 
     IRunnerTransport CreateTransport() {
+        if (_settings.TransportFactory is { } factory) return factory();
         if (_settings.UseRemote) {
             var baseUrl = _settings.RemoteUrl?.TrimEnd('/') ?? throw new InvalidOperationException("RemoteUrl must be configured for remote runner mode.");
             return new SignalRTransport(baseUrl, _settings.Mode, _settings.DockerImage, _settings.LogCallback);

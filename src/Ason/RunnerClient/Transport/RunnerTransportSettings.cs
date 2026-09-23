@@ -10,6 +10,13 @@ internal sealed class RunnerTransportSettings {
     public string? RemoteUrl { get; set; }
     public string DockerImage { get; set; } = DockerInfo.DockerImageString;
     public string? RunnerExecutablePath { get; set; }
+
+    /// <summary>
+    /// A transport supplied by the host (see <see cref="RunnerClient.UseTransport"/>). When set it replaces the
+    /// transport the mode/remote switches would build, so a host can point the runner at a service of its own.
+    /// </summary>
+    public Func<IRunnerTransport>? TransportFactory { get; set; }
+
     public Action<LogLevel, string, string?, string?> LogCallback { get; }
 
     public RunnerTransportSettings(Action<LogLevel, string, string?, string?> logCallback) {

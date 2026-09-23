@@ -111,6 +111,21 @@ public sealed class RunnerClient {
 
     public Task StartProcessAsync() => EnsureTransportReadyAsync(CancellationToken.None);
 
+    /// <summary>
+    /// Sends the runner protocol over a transport of the host's own instead of the two the runtime builds.
+    ///
+    /// This is the seam a bridge uses: the agent side keeps the whole ASON pipeline (generated proxies,
+    /// operator invocation bookkeeping, result handling) while the script itself is evaluated by a remote
+    /// application reached over gRPC or MCP. The factory is called each time the transport has to be started,
+    /// so a reconnect gets a fresh one.
+    /// </summary>
+    public void UseTransport(Func<Ason.Transport.IRunnerTransport>? transportFactory) {
+        _transportSettings.TransportFactory = transportFactory;
+    }
+
+    /// <summary>The host-supplied transport factory, if any.</summary>
+    public Func<Ason.Transport.IRunnerTransport>? TransportFactory => _transportSettings.TransportFactory;
+
     public async Task StopAsync() {
         await _lifecycleGate.WaitAsync().ConfigureAwait(false);
         try {
