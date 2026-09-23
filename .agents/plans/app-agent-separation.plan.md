@@ -494,8 +494,8 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 **Wave 2（待执行）**
 - [ ] Task 1：三语 `architecture.*` 含 `Case 1–6`（+可选 7），应用侧执行器的 `invoke` 回环已画出，表述不再自相矛盾
 - [ ] Task 2：gRPC/MCP 授权开关可用且语义正确（Unauthenticated / 401）；类型化 MCP 客户端与中继可携带 key；默认路径不回归
-- [ ] Task 3：`invokeMcpTool` 在 gRPC 与 MCP 可用；未配置 MCP 客户端时返回 `not-supported`
-- [ ] Task 4：`includeInstanceDeclarations` 与 `instancesRevision` 有测试；默认行为与 Wave 1 完全一致
+- [x] Task 3：`invokeMcpTool` 在 gRPC 与 MCP 可用；未配置 MCP 客户端时返回 `not-supported`
+- [x] Task 4：`includeInstanceDeclarations` 与 `instancesRevision` 有测试；默认行为与 Wave 1 完全一致
 - [ ] Task 5：manifest 的 `logStream` 与各适配器实际能力一致；HTTP SSE 与 MCP 日志流有测试
 - [ ] Task 6：适配器行覆盖 ≥87%、分支 ≥70%（有命令与数字记录）；UI 自动化决策已落地并写明理由
 - [ ] Task 7：版本号与 release notes 就绪；4 个包可打包且顺序正确
@@ -612,7 +612,11 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | T1 —— 鉴权可达性 | ✅ DONE（待 T8 汇总） | RED：`CS1501`（`AddAsonGrpcBridge`/`AddAsonMcpBridge`/`GrpcAsonBridgeClient.Connect` 无二参重载）、`CS1503`（`McpAsonBridgeClient.ConnectAsync(endpoint, headers)`）→ GREEN：`tests/Ason.Bridge.Tests` **100/100**（91 + 9）；`Ason.Tests` 105/105；`samples/ConsoleGrpcBridgeHost` 仍构建（新参数可选，样例零改动）。实现要点：`AddAsonGrpcBridge(runtime, policy)` + `MapAsonGrpcBridge()` 读注册期选项；`AddAsonMcpBridge(endpoint, requireAuthorization)` + `MapAsonMcpBridge()`；客户端 `Connect(url, headers)`；中继 `--key`/`--header Name=Value`；**鉴权失败按状态抛出**（gRPC `Unauthenticated` 不被折叠成失败结果）。三语安全文档已补"要求调用方通过鉴权"小节 |
 | 决策裁决（§10.7） | ✅ 已记录 | 1A / 2A（保留 `Sample` 后缀）/ 3B（+ Python gRPC 示例）/ 4B（Python + OpenAI 驱动自动调用测试）/ 5 = `0.9.0` + 更新仓库版本号；T5/T10/T14/T7 已按裁决改写 |
 | T7（部分）—— 版本号更新 | ✅ DONE（release notes 留到 T7 完整执行） | `Directory.Build.props` `0.8.2` → **`0.9.0`**；文档里写死的镜像 tag 一并更新（`README.{md,zh-CN,es}` + `docs/execution-modes.{md,zh-CN,es}` 的 `ghcr.io/alexgoon/ason:0.8.1` → `:0.9.0`，与 `publish-docker.yml` 按 tag 出镜像的口径一致）。验证：`dotnet build src/Ason.Bridge -c Release` → 产出 `Ason.Bridge.0.9.0.nupkg`；全仓库剩余 `0.8.x` 仅存在于历史记录（本计划 §10 与另一份 Wave 1 计划） |
-| 下一步（按 §5 顺序） | ⏳ 待开工 | T3 + T4 合并为一次 proto 1.1 契约变更（`InvokeMcpTool` + `include_instance_declarations`），随后 T10（打包 proto + 反射开关 + **Python gRPC 示例**）与 T14（**Python + OpenAI 驱动的 MCP 自动调用测试**） |
+| T3 + T4 —— MCP 透传进入 gRPC/MCP + 实例声明鲜度（合并为一次 proto 1.1 契约变更） | ✅ DONE | RED：`CS0246 InvokeMcpToolRequest`、`CS1061`（`AsonBridgeClient.InvokeMcpToolAsync`／`GrpcAsonBridgeClient`／`McpAsonBridgeClient`／`AsonBridgeManifest.InstancesRevision`／`GrpcAsonBridgeTransport.Proxies` 不存在）→ GREEN：`tests/Ason.Bridge.Tests` **115/115**（100 + 9 `McpPassthroughTests` + 6 `InstanceFreshnessTests`）；`Ason.Tests` 105/105；smoke 11/11；`dotnet build Ason.sln -c Release` 全绿（顺带修掉 T1 遗留：`samples/WpfAgentDemo/Bridge/AgentBridge.cs:53` 把 `cancellationToken` 传给了 `ConnectAsync` 的 `headers` 形参——**样例未在测试项目里编译，所以之前没暴露**，已改为具名实参） |
+| T3 实现要点 | ✅ | ① proto 增 `rpc InvokeMcpTool` + `InvokeMcpToolRequest{server,tool,arguments_json}`（工具参数是 JSON**对象**，与服务端 `ParseArgumentObject` 对应；`invokeFunction` 仍是 JSON 数组，两者不冲突）。② `AsonBridgeRuntime.InvokeMcpToolAsync`：能力关闭 → `not-supported`（各适配器映射为 `Unimplemented`／不注册工具）；**能力开启但 `IAsonExecutor.McpServers` 为空 → `not-supported` 并点名 MCP**（新增 `IAsonExecutor.McpServers` 默认成员 + `RunnerClientAsonExecutor.McpServers` 读 `RunnerClient.McpServerNames`，`Ason` 侧只加了一个只读属性）。③ MCP 工具 `ason_invoke_mcp_tool` 仅在能力开启时注册；客户端 `InvokeMcpToolAsync` 在工具不存在时回 `not-supported`（判据是 `tools/list` 里没有该工具，而不是解析错误文本——工具自身执行失败仍照常抛出）。④ `GrpcAsonBridgeEndpoint`／`McpAsonBridgeEndpoint` 由本地拒绝改为**转发**，中继因此自动继承远端能力 |
+| T4 实现要点 | ✅ | ① `AsonBridgeManifest.InstancesRevision`（实例集合的 SHA256 前 16 位；同集合稳定、增删即变）+ proto `ManifestReply.instances_revision`。② `includeInstanceDeclarations`（runtime/gRPC proto/MCP 工具/HTTP body/四适配器与类型化客户端全通）：**只发 body** 模式，由应用拼上“代理层 + 当前实例声明”，因此调用方快照过期也能跑；默认 `false`，Wave 1 行为逐字不变。③ `GrpcAsonBridgeTransport`／`McpAsonBridgeTransport` 新增 `Proxies`（= `manifest.Proxies`）：设置后把调用方快照层**精确剥离**再请求应用重建，零额外往返（`InstanceFreshnessTests.The_runner_transport_hands_the_callers_snapshot_layer_back_to_the_application` 同时断言“不设置=旧行为失败／设置=成功”）。④ 协议版本 `1.0` → **`1.1`**（纯追加，1.0 客户端仍可用，已写进三语文档与 `AsonBridgeProtocol` 注释） |
+| T3/T4 文档 | ✅ | 三语 `docs/app-agent-separation.*`：manifest 表补 `instancesRevision` 与 1.1 兼容说明；能力表 `invokeMcpTool` 补 gRPC/MCP 表面；“两种拒绝”清单（能力关闭 vs 未注册 MCP 服务）；新增“实例鲜度与清单过期／Live instances and manifest freshness”整节；gRPC 小节补 proto 契约字段；已知限制改写（删除“gRPC 契约不含 MCP 透传”，新增“透传不镜像工具列表”这一真实限制）；安全小节补透传承载应用凭据的说明 |
+| 下一步（按 §5 顺序） | ⏳ 待开工 | T10（打包 proto + 反射 opt-in 开关 + **Python gRPC 示例**），随后 T5（`logStream` 口径落地：HTTP SSE + MCP `ason_stream_script` + 三语能力表 + `Case 7`） |
 
 ### 10.7 决策裁决记录（你已拍板；T0/T1 已按此开工）
 

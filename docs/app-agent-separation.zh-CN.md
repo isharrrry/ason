@@ -30,7 +30,7 @@ ASON 最初假设一个进程包办一切：应用程序、它的 operator、模
 
 | 字段 | 含义 |
 |---|---|
-| `protocolVersion` | 契约版本；不一致时应当立即失败 |
+| `protocolVersion` | 契约版本；不一致时应当立即失败。`1.1` 是纯追加：`1.0` 客户端仍可用 |
 | `appName` | 应答的是哪个应用 |
 | `execution` | 脚本在哪里求值：`in-process`、`external-process`、`docker`、`remote-runner` |
 | `capabilities` | 启用了哪些接口（见下） |
@@ -38,6 +38,7 @@ ASON 最初假设一个进程包办一切：应用程序、它的 operator、模
 | `markdown` | 同一份列表的文档形态，便于人读或交给模型 |
 | `proxies` / `signatures` | 脚本所需的代理层与签名列表 |
 | `instances` | 当前存活 operator 实例，以及每个实例的 handle |
+| `instancesRevision` | `instances` 的摘要；与你留存的清单对比即可判断那份快照是否过期 |
 
 API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反射规则，因此**列表不可能与脚本能调用到的东西漂移**。
 
@@ -48,7 +49,7 @@ API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反�
 | `listApis` | 清单 | Agent 需要知道能调用什么 |
 | `executeScript` | `ExecuteScriptAsync(script)` | Agent 要组合多次调用、分支或循环 |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | 只调用一次、要精准 —— 不必生成脚本文本 |
-| `invokeMcpTool` | 透传到应用自身消费的 MCP 客户端 | 应用本身是别的 MCP 服务的客户端 |
+| `invokeMcpTool` | 透传到应用自身消费的 MCP 客户端：gRPC `InvokeMcpTool`、MCP 工具 `ason_invoke_mcp_tool` | 应用本身是别的 MCP 服务的客户端 |
 | `logStream` | `StreamExecutionAsync(script)` | 调用方想看着应用干活 |
 
 它们各自独立、且可组合：同时开启两个执行接口不会互相影响。由 `AsonBridgeCapabilities` 决定“存在什么”，
@@ -57,10 +58,38 @@ API 列表来自 `OperatorApiCatalog`，它与脚本提示词使用同一套反�
 - gRPC：被关闭的能力返回 `StatusCode.Unimplemented`。
 - MCP：被关闭的能力对应的工具**根本不注册**。
 
+`invokeMcpTool` 还有第二种拒绝，二者含义完全不同：
+
+- **能力关闭** —— 调用压根不存在（`Unimplemented`，或没有该工具），与其他被关闭能力给出的信号一致。
+- **能力开启但未注册 MCP 服务** —— 调用存在，但返回 `not-supported`：应用打开了透传，却从未用
+  `RunnerClient.RegisterMcpClient` 注册任何客户端。桥查的就是 `IAsonExecutor.McpServers`，因此自带执行器的宿主
+  报告的是它真实拥有的服务。
+
 静态 operator 模块无需 handle（`BridgeStaticOperator.Add(2, 3)`）；实例 operator 在其类型只有一个存活实例时按
 实例目录自动解析，否则需要清单里报告的 `handle`。失败以稳定错误码返回 —— `operator-not-found`、
 `handle-required`、`handle-ambiguous`、`handle-not-found`、`method-not-found`、`script-rejected`、
 `not-supported`、`execution-failed`，客户端据此分支，而不必解析文本。
+
+## 实例鲜度与清单过期
+
+`manifest.proxies` 末尾为每个存活实例声明了变量
+（`EmployeesOperator employeesOperator = new("EmployeesOperator");`），脚本因此可以直接写
+`employeesOperator.GetEmployees()`。但这些声明只在读取清单的那一刻成立：此后新开或关闭的视图，要么不在声明里
+（变量不存在），要么声明的是已经消失的 handle。
+
+桥给调用方三种由弱到强的正确路径：
+
+1. **比对 `instancesRevision`。** 它是存活实例列表的摘要，留过旧清单的调用方据此判断快照已过期，并重新读取
+   （`ason_get_manifest`）。
+2. **只发脚本体。** `includeInstanceDeclarations: true`（gRPC `include_instance_declarations`、MCP
+   `includeInstanceDeclarations`、HTTP `includeInstanceDeclarations`）让应用提供代理层**与**当天的实例声明，
+   调用方只发想执行的语句。声明必须位于生成层内部，因此只有应用侧能重建它；这个开关正是“我只发 body，层由你负责”
+   的显式写法。
+3. **把你的快照层告诉传输层。** `GrpcAsonBridgeTransport` / `McpAsonBridgeTransport` 接受
+   `Proxies = manifest.Proxies`：设置后，传输层会把这段精确文本从拼好的脚本里剥掉，改为每次调用都请应用给出
+   当前层 —— 不增加任何往返。Agent 侧 runner 协议用的就是这个开关，因为它启动时就会预置读到的层。
+
+单函数接口不需要以上任何一条：它每次调用都解析存活 handle。
 
 ## 传输
 
@@ -98,6 +127,11 @@ app.MapAsonGrpcBridge();
 
 除非走 TLS，gRPC 端点必须放在一个单独的 HTTP/2-only（h2c）监听上。
 
+`Protos/ason_bridge.proto` 就是契约本身：`GetManifest`、`ListInstances`、`ExecuteScript`、`InvokeFunction`、
+`InvokeMcpTool` 与流式 `StreamExecution`。`ExecuteScriptRequest` 带 `include_proxy_preamble` 与
+`include_instance_declarations`，`ManifestReply` 带 `instances_revision`，`InvokeMcpToolRequest` 以 JSON 对象
+携带工具参数。协议 `1.1` 的新增全部是追加式的：`1.0` 客户端对着 `1.1` 的桥仍然可用。
+
 ### MCP
 
 ```csharp
@@ -122,6 +156,51 @@ Ason.Bridge.McpHost --url http://localhost:5223/mcp --transport mcp
 会出现两跳的原因。它不是设计的前提：会说 HTTP MCP 的 Agent 直连应用；而生命周期本身就是“被 Agent 拉起”的应用，可以
 用 `AddAsonMcpStdioBridge`（中继内部用的正是这个调用）自己提供 stdio MCP。
 
+## 不用 .NET 也能调用这座桥
+
+gRPC 契约本身就是接口：Python、Go、Java、Rust 或 `grpcurl` 调用方只需要那个 `.proto` 文件。拿到“应用此刻正在
+服务的同一份契约”有两条路径：
+
+```xml
+<!-- 1. 从包里取：该文件随 Ason.Bridge.Grpc 一起发布 -->
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<!-- 契约位于 $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
+```
+
+```bash
+# 2. 从仓库取，或从解包后的 nupkg 取
+unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+# src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
+```
+
+服务全名是 `ason.bridge.v1.AsonBridge`，方法为 `GetManifest`、`ListInstances`、`ExecuteScript`、`InvokeFunction`、
+`InvokeMcpTool`，以及服务端流式的 `StreamExecution`（先逐条 `log` 事件，最后恰好一个 `result` 或 `error`）。
+
+```bash
+# Python：先生成 stub 再调用；samples/python/ason_bridge_client.py 已经把这些封好了
+python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
+
+# Go / Java / protoc 支持的任何语言
+protoc -I./ason-contract --go_out=. --go-grpc_out=. ason_bridge.proto
+protoc -I./ason-contract --java_out=. ason_bridge.proto
+
+# grpcurl：带着磁盘上的契约……
+grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
+  -d '{"code":"return 1;"}' localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
+
+# ……或在应用开启了反射时，连契约都不用带（--reflection，默认关闭）
+grpcurl -plaintext -d '{"operator":"LibDemoOperator","method":"Add","arguments_json":"[40,2]"}' \
+  localhost:5222 ason.bridge.v1.AsonBridge/InvokeFunction
+```
+
+`samples/python/` 就是第一个示例的可运行版本：首次运行时自动编译契约，并暴露 `manifest`、`instances`、
+`call`、`script [--stream]`、`mcp <server> <tool>` 等子命令。
+
+反射是 **opt-in 且默认关闭**的（`AddAsonGrpcBridge(runtime, enableReflection: true)`，或样例的 `--reflection`）：
+一旦发布，等于把可调用面再次广播给任何能连上该端口的人 —— 在 loopback 上没问题，放到别处就应当与
+[安全](#安全)一节的鉴权并用。无论走哪条路，**能调什么仍然以 manifest 为准**：反射只省去你手工同步 `.proto` 的
+功夫，能力开关、关键字过滤与 operator API 一样都不会绕过。
+
 ## 把编排交给 Agent
 
 若 Agent 想保留 ASON 自身的编排，它可以**零 operator**地使用应用的 operator：从清单构建自己的 operator 库，
@@ -137,7 +216,9 @@ var library = manifest.ToOperatorsLibrary();
 var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
     // 隔离由应用侧决定；这一侧只负责怎么连上它
     ExecutionMode = ExecutionMode.ExternalProcess,
-    TransportFactory = () => new GrpcAsonBridgeTransport(client)
+    // Proxies：本客户端从清单里读到的代理层。设置后应用会在每次执行前重建实例声明，
+    // 因此“读清单之后才打开的视图”依然可用。
+    TransportFactory = () => new GrpcAsonBridgeTransport(client) { Proxies = manifest.Proxies }
 });
 ```
 
@@ -214,7 +295,8 @@ operator 调用会经构造运行时那一刻捕获的 `SynchronizationContext` 
 - `ForbiddenScriptKeywords` 请设置为你给本地 `AsonClient` 的同一份列表；留 `null` 只会拒绝空脚本。
   它是关键字过滤而非沙箱 —— 面对不可信输入请选择 `ExternalProcess` 或 `Docker`。
 - 只开启部署需要的能力；清单会如实告诉每个客户端哪些是开着的。
-- `invokeMcpTool` 默认关闭：它转发到**应用**所消费的 MCP 服务。
+- `invokeMcpTool` 默认关闭：它转发到**应用**所消费的 MCP 服务，用的是应用自己持有的凭据。一旦开启，桥接受的
+  每个调用方都能碰到这些工具，因此桥不只是 loopback 时请配合下面的鉴权一起使用。
 - 每个请求都会被校验、按能力放行并返回错误码，但这一切都**不能替代网络层访问控制**。
 
 ### 要求调用方通过鉴权
@@ -328,9 +410,11 @@ dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration R
 
 ## 已知限制
 
-- `manifest.proxies` 是调用方读取那一刻的快照。若此后视图开关过，使用实例变量的脚本可能过期；**单函数接口每次
-  都会解析存活 handle**，是操作实例 operator 的稳妥路径。
+- `manifest.proxies` 是调用方读取那一刻的快照，其中的实例声明会随时间过期。请比对 `instancesRevision`、用
+  `includeInstanceDeclarations` 只发脚本体，或在 runner 传输层设置 `Proxies`（见“实例鲜度与清单过期”）。
+  **单函数接口每次都会解析存活 handle**，是操作实例 operator 的稳妥路径。
 - 调用一个视图尚未加载的 operator 会触发运行时既有的 reload 语义，可能打开或导航视图。不想有副作用时请使用已附着实例。
 - 引入 `Ason.Bridge.Grpc` 的文件中，该命名空间会遮蔽 `Grpc` 根命名空间：请写 `using Grpc.Net.Client;` 后使用
   `GrpcChannel.ForAddress(...)`，或完整限定类型名。
-- gRPC 契约不包含 MCP 透传（`invokeMcpTool`）；中继会将其报告为 `not-supported`。
+- 透传只能指定服务名与工具名；桥不会镜像应用所消费 MCP 服务的工具列表，调用方需要从应用（或 Agent 自身配置）得知，
+  而不是从清单得知。

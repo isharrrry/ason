@@ -23,7 +23,7 @@ en ambos lados.
 
 | Campo | Significado |
 |---|---|
-| `protocolVersion` | Revisión del contrato; fallar rápido si no coincide |
+| `protocolVersion` | Revisión del contrato; fallar rápido si no coincide. `1.1` es aditiva: un cliente `1.0` sigue funcionando |
 | `appName` | Qué aplicación respondió |
 | `execution` | Dónde se evalúan los scripts: `in-process`, `external-process`, `docker`, `remote-runner` |
 | `capabilities` | Qué interfaces están habilitadas |
@@ -31,6 +31,7 @@ en ambos lados.
 | `markdown` | La misma lista como documento |
 | `proxies` / `signatures` | La capa de proxies generada que necesita un script |
 | `instances` | Las instancias vivas y el handle que direcciona cada una |
+| `instancesRevision` | Resumen de `instances`; compáralo con un manifiesto guardado para saber si esa instantánea quedó obsoleta |
 
 La lista proviene de `OperatorApiCatalog`, que aplica las mismas reglas de reflexión con las que se construye
 el prompt del script: una lista no puede divergir de lo que los scripts pueden llamar realmente.
@@ -42,14 +43,47 @@ el prompt del script: una lista no puede divergir de lo que los scripts pueden l
 | `listApis` | manifiesto | El agente necesita saber qué puede llamar |
 | `executeScript` | `ExecuteScriptAsync(script)` | El agente compone varias llamadas, ramas o bucles |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | Una llamada precisa, sin generar texto de script |
-| `invokeMcpTool` | paso directo a los clientes MCP de la aplicación | La aplicación consume otros servidores MCP |
+| `invokeMcpTool` | paso directo a los clientes MCP de la aplicación: RPC gRPC `InvokeMcpTool`, herramienta MCP `ason_invoke_mcp_tool` | La aplicación consume otros servidores MCP |
 | `logStream` | `StreamExecutionAsync(script)` | El llamador quiere seguir la ejecución |
 
-Son interruptores independientes y se combinan entre sí. Un módulo de operador estático no necesita handle; un
+Son interruptores independientes y se combinan entre sí: gRPC responde `StatusCode.Unimplemented` a una
+capacidad deshabilitada y MCP simplemente no registra la herramienta.
+
+`invokeMcpTool` tiene además un segundo rechazo, con un significado distinto:
+
+- **Capacidad desactivada**: la llamada no existe (`Unimplemented`, o no hay tal herramienta).
+- **Capacidad activada pero sin servidor MCP registrado**: la llamada existe y responde `not-supported`,
+  porque la aplicación habilitó el paso directo pero nunca registró un cliente con
+  `RunnerClient.RegisterMcpClient`. El puente consulta `IAsonExecutor.McpServers`, así que un host con su
+  propio ejecutor informa de los servidores que realmente tiene.
+
+Un módulo de operador estático no necesita handle; un
 operador de instancia se resuelve por el directorio de instancias vivas cuando solo existe una, y en caso
 contrario requiere el `handle` del manifiesto. Los fallos llegan como códigos estables (`operator-not-found`,
 `handle-required`, `handle-ambiguous`, `handle-not-found`, `method-not-found`, `script-rejected`,
 `not-supported`, `execution-failed`).
+
+## Instancias vivas y frescura del manifiesto
+
+`manifest.proxies` termina con una declaración por cada instancia viva
+(`EmployeesOperator employeesOperator = new("EmployeesOperator");`), que es lo que permite escribir
+`employeesOperator.GetEmployees()`. Esas declaraciones solo son válidas en el momento de leer el manifiesto:
+una vista abierta o cerrada después falta en ellas (o declara un handle que ya no existe).
+
+El puente ofrece tres caminos, de menor a mayor robustez:
+
+1. **Comparar `instancesRevision`**, un resumen de la lista de instancias, para detectar que la instantánea
+   guardada quedó obsoleta y volver a leer el manifiesto (`ason_get_manifest`).
+2. **Enviar solo el cuerpo.** `includeInstanceDeclarations: true` (gRPC `include_instance_declarations`, MCP
+   `includeInstanceDeclarations`, HTTP `includeInstanceDeclarations`) hace que la aplicación aporte la capa de
+   proxies *y* las declaraciones de hoy, de modo que el llamador solo manda las sentencias. Las declaraciones
+   deben vivir dentro de la capa generada, así que solo la aplicación puede reconstruirlas.
+3. **Nombrar tu capa de instantánea.** `GrpcAsonBridgeTransport` y `McpAsonBridgeTransport` aceptan
+   `Proxies = manifest.Proxies`: cuando está definido, el transporte recorta esa capa exacta del script
+   compuesto y pide a la aplicación la suya actual en cada llamada, sin ninguna ida y vuelta extra. Es el
+   interruptor que usa el protocolo del runner en el lado del agente.
+
+La interfaz de función única no necesita nada de esto: resuelve el handle vivo en cada llamada.
 
 ## Transportes
 
@@ -68,6 +102,12 @@ ASP.NET. Añadir un transporte es añadir un proyecto que referencia `Ason.Bridg
 Una capacidad deshabilitada se responde como `StatusCode.Unimplemented` en gRPC y simplemente no se registra
 como herramienta en MCP.
 
+`Protos/ason_bridge.proto` es el contrato: `GetManifest`, `ListInstances`, `ExecuteScript`, `InvokeFunction`,
+`InvokeMcpTool` y el streaming `StreamExecution`. `ExecuteScriptRequest` lleva `include_proxy_preamble` e
+`include_instance_declarations`, `ManifestReply` lleva `instances_revision`, e `InvokeMcpToolRequest` lleva los
+argumentos de la herramienta como objeto JSON. Todo lo añadido en el protocolo `1.1` es aditivo: un cliente
+`1.0` sigue funcionando contra un puente `1.1`.
+
 ## Ubicación de la ejecución
 
 | Valor | Los scripts se evalúan | Las llamadas a operadores se resuelven |
@@ -81,14 +121,62 @@ En todos los casos los operadores, los datos y las credenciales permanecen en la
 serializan a través del `SynchronizationContext` capturado al construir el runtime; en WPF eso es el hilo del
 dispatcher.
 
+## Llamar al puente sin .NET
+
+El contrato gRPC *es* la interfaz: un llamador en Python, Go, Java, Rust o `grpcurl` solo necesita el fichero
+`.proto`. Dos caminos para obtener la misma copia que sirve la aplicación:
+
+```xml
+<!-- 1. Desde el paquete: el fichero viaja dentro de Ason.Bridge.Grpc -->
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<!-- el contrato queda en $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
+```
+
+```bash
+# 2. Desde el repositorio, o desde el paquete descomprimido
+unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+# src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
+```
+
+El servicio es `ason.bridge.v1.AsonBridge`, con `GetManifest`, `ListInstances`, `ExecuteScript`,
+`InvokeFunction`, `InvokeMcpTool` y el streaming de servidor `StreamExecution` (un evento `log` por línea y
+exactamente un `result` o `error` al final).
+
+```bash
+# Python: generar los stubs y llamar; samples/python/ason_bridge_client.py ya lo encapsula
+python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
+
+# Go / Java / cualquier lenguaje que soporte protoc
+protoc -I./ason-contract --go_out=. --go-grpc_out=. ason_bridge.proto
+protoc -I./ason-contract --java_out=. ason_bridge.proto
+
+# grpcurl, con el contrato en disco...
+grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
+  -d '{"code":"return 1;"}' localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
+
+# ...o sin él, si la aplicación publicó reflexión (--reflection, desactivado por defecto)
+grpcurl -plaintext -d '{"operator":"LibDemoOperator","method":"Add","arguments_json":"[40,2]"}' \
+  localhost:5222 ason.bridge.v1.AsonBridge/InvokeFunction
+```
+
+`samples/python/` es la versión ejecutable del primer ejemplo: compila el contrato en el primer uso y expone
+`manifest`, `instances`, `call`, `script [--stream]` y `mcp <server> <tool>`.
+
+La reflexión es opt-in y está desactivada por defecto (`AddAsonGrpcBridge(runtime, enableReflection: true)`, o
+`--reflection` en el ejemplo): publicarla difunde la superficie llamable a cualquiera que alcance el puerto, lo
+cual está bien en loopback y debe combinarse con la autorización de la sección [Seguridad](#seguridad) en
+cualquier otro caso. En cualquier caso, **lo que un llamador puede invocar lo sigue diciendo el manifiesto**: la
+reflexión solo te ahorra mantener el `.proto` sincronizado.
+
 ## Delegar la orquestación al agente
 
 El agente puede conservar la orquestación de ASON sin poseer operadores: `manifest.ToOperatorsLibrary()` convierte
 el manifiesto en la biblioteca de operadores con la que trabaja el cliente, y `AsonClientOptions.TransportFactory`
 (por debajo, `RunnerClient.UseTransport`) apunta su runner a la aplicación, por ejemplo
-`TransportFactory = () => new GrpcAsonBridgeTransport(client)`. La aplicación resuelve las llamadas a
-operadores en su propio proceso, de modo que el transporte nunca ve un mensaje `invoke`; si llegara uno, se
-responde con un error en lugar de dejar al llamador esperando.
+`TransportFactory = () => new GrpcAsonBridgeTransport(client) { Proxies = manifest.Proxies }` (definir
+`Proxies` hace que la aplicación reconstruya las declaraciones de instancia en cada ejecución). La aplicación
+resuelve las llamadas a operadores en su propio proceso, de modo que el transporte nunca ve un mensaje
+`invoke`; si llegara uno, se responde con un error en lugar de dejar al llamador esperando.
 
 ## Usar el puente sin un agente
 
@@ -146,7 +234,9 @@ endpoints. Lo único que cambia es quién compone las llamadas — un modelo, o 
 - Definir `ForbiddenScriptKeywords` con la misma lista que se daría a un `AsonClient` local; es un filtro de
   palabras clave, no un sandbox.
 - Habilitar solo las capacidades necesarias; el manifiesto dice la verdad sobre cuáles están activas.
-- `invokeMcpTool` está desactivado por defecto.
+- `invokeMcpTool` está desactivado por defecto: reenvía a los servidores MCP que consume la *aplicación*, con
+  las credenciales que esa aplicación ya tiene. Activarlo expone esas herramientas a todo llamador que el
+  puente acepte, así que combínalo con la autorización de abajo cuando el puente no sea solo loopback.
 
 ### Exigir autenticación al llamador
 
@@ -275,10 +365,14 @@ aplicación, y una aplicación cuya vida *es* la sesión del agente puede servir
 
 ## Límites conocidos
 
-- `manifest.proxies` es una instantánea; la interfaz de función única resuelve el handle vivo en cada llamada y
-  es la ruta robusta para operadores de instancia.
+- `manifest.proxies` es una instantánea y sus declaraciones de instancia envejecen: compara
+  `instancesRevision`, envía solo el cuerpo con `includeInstanceDeclarations`, o define `Proxies` en el
+  transporte del runner (ver «Instancias vivas y frescura del manifiesto»). La interfaz de función única
+  resuelve el handle vivo en cada llamada y es la ruta robusta para operadores de instancia.
 - Invocar un operador cuya vista no está cargada dispara la recarga normal del runtime, que puede abrir o
   navegar la vista.
 - El espacio de nombres `Ason.Bridge.Grpc` oculta el espacio raíz `Grpc` dentro de los ficheros que lo
   importan: usar `using Grpc.Net.Client;` y luego `GrpcChannel.ForAddress(...)`.
-- El contrato gRPC no incluye el paso directo a MCP (`invokeMcpTool`); un relé lo informa como `not-supported`.
+- El paso directo solo nombra un servidor y una herramienta: el puente no replica la lista de herramientas de
+  los servidores MCP que consume la aplicación, así que el llamador las conoce por la aplicación (o por la
+  configuración del agente), no por el manifiesto.

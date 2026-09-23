@@ -18,6 +18,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Grpc.AspNetCore" Version="2.71.0" />
+    <PackageReference Include="Grpc.AspNetCore.Server.Reflection" Version="2.71.0" />
     <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
     <PackageReference Include="Grpc.Tools" Version="2.71.0" PrivateAssets="All" />
   </ItemGroup>
@@ -29,6 +30,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Ason.Bridge\Ason.Bridge.csproj" />
     <None Include="icon.png" Pack="true" PackagePath="\" />
+    <!-- A non-.NET caller needs the contract itself, so it ships with the package: unpack it, or locate it
+         with GeneratePathProperty ($(PkgAson_Bridge_Grpc))\protos\ason_bridge.proto. -->
+    <None Include="Protos\ason_bridge.proto" Pack="true" PackagePath="protos\" />
   </ItemGroup>
 
 </Project>

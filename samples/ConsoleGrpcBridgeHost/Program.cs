@@ -18,12 +18,14 @@ using Microsoft.Extensions.Logging;
 //   gRPC  -> http://localhost:<port>       (ConsoleGrpcBridgeDemo, or any gRPC client)
 //   MCP   -> http://localhost:<port+1>/mcp (an MCP-speaking agent, or the stdio relay host)
 //
-// Usage: ConsoleGrpcBridgeHost [--port 5222] [--execution inprocess|external]
+// Usage: ConsoleGrpcBridgeHost [--port 5222] [--execution inprocess|external] [--reflection]
 //
 //   inprocess (default) - scripts are evaluated in this process, so they can touch the operators directly
 //   external            - scripts are evaluated in an Ason.ExternalExecutor child process, which calls back
 //                         here for every operator invocation; use it when generated code must not run inside
 //                         the application process. The manifest reports which one is in use.
+//   --reflection        - publish the gRPC reflection service, so grpcurl and generated stubs work with no
+//                         local .proto file. Off by default: reflection republishes the callable surface.
 
 var port = ParsePort() ?? 5222;
 var mcpPort = port + 1;
@@ -55,7 +57,7 @@ builder.WebHost.ConfigureKestrel(kestrel => {
     // asking for both protocols on a cleartext port would only make Kestrel warn that it cannot do that.
     kestrel.ListenLocalhost(mcpPort, endpoint => endpoint.Protocols = HttpProtocols.Http1);
 });
-builder.Services.AddAsonGrpcBridge(runtime);
+builder.Services.AddAsonGrpcBridge(runtime, enableReflection: Has("--reflection"));
 builder.Services.AddAsonMcpBridge(runtime);
 // The same contract, for generic HTTP clients and Swagger UI. Adding a transport is one line per side.
 builder.Services.AddAsonOpenApiBridge(runtime);
@@ -74,7 +76,7 @@ Console.WriteLine($"  MCP  : http://localhost:{mcpPort}/mcp");
 Console.WriteLine($"  HTTP : http://localhost:{mcpPort}/ason/openapi.json");
 Console.WriteLine($"  {manifest.Api.Operators.Count} operators, {manifest.Api.MethodCount} methods, execution {manifest.Execution}");
 // One line that says "the bridge is up and this is what it is", so a script or a test can wait for it.
-Console.WriteLine($"ASON_BRIDGE_READY grpc=http://localhost:{port} mcp=http://localhost:{mcpPort}/mcp execution={manifest.Execution} app={manifest.AppName}");
+Console.WriteLine($"ASON_BRIDGE_READY grpc=http://localhost:{port} mcp=http://localhost:{mcpPort}/mcp execution={manifest.Execution} app={manifest.AppName} protocol={manifest.ProtocolVersion}");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 await app.WaitForShutdownAsync();
@@ -86,6 +88,8 @@ string? Value(string name) {
     var index = Array.IndexOf(args, name);
     return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
 }
+
+bool Has(string name) => Array.IndexOf(Environment.GetCommandLineArgs(), name) >= 0;
 
 int? ParsePort() {
     var args = Environment.GetCommandLineArgs();

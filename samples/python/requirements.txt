@@ -1,0 +1,9 @@
+# Non-.NET callers of an ASON bridge: calling the gRPC contract from Python.
+#
+#   python -m pip install -r samples/python/requirements.txt
+#
+# grpcio carries the runtime, grpcio-tools the protoc compiler used to build the stubs from
+# protos/ason_bridge.proto on first run.
+grpcio>=1.60
+grpcio-tools>=1.60
+protobuf>=4.25

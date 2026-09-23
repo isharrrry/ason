@@ -34,7 +34,7 @@ script orchestration. The **bridge** splits that in two while keeping the runtim
 
 | Field | Meaning |
 |---|---|
-| `protocolVersion` | Contract revision; fail fast on a mismatch |
+| `protocolVersion` | Contract revision; fail fast on a mismatch. `1.1` is additive: a `1.0` client still works |
 | `appName` | Which application answered |
 | `execution` | Where scripts run: `in-process`, `external-process`, `docker`, `remote-runner` |
 | `capabilities` | Which interfaces are enabled (below) |
@@ -42,6 +42,7 @@ script orchestration. The **bridge** splits that in two while keeping the runtim
 | `markdown` | The same listing as a document, for a human or a model |
 | `proxies` / `signatures` | The generated proxy layer and the signature listing a script needs |
 | `instances` | The live operator instances, with the handle that addresses each one |
+| `instancesRevision` | Digest of `instances`; compare it with a manifest you kept to see whether that snapshot is stale |
 
 The API listing comes from `OperatorApiCatalog`, which walks the same reflection rules the script prompt is
 built from — so a listing cannot drift from what scripts are actually able to call.
@@ -53,7 +54,7 @@ built from — so a listing cannot drift from what scripts are actually able to 
 | `listApis` | manifest | The agent needs to know what it may call |
 | `executeScript` | `ExecuteScriptAsync(script)` | The agent composes several calls, branches or loops |
 | `invokeFunction` | `InvokeFunctionAsync(operator, method, args)` | One call, precisely — no script text in the loop |
-| `invokeMcpTool` | pass-through to the application's own MCP clients | The application is a *client* of other MCP servers |
+| `invokeMcpTool` | pass-through to the application's own MCP clients: gRPC `InvokeMcpTool`, MCP tool `ason_invoke_mcp_tool` | The application is a *client* of other MCP servers |
 | `logStream` | `StreamExecutionAsync(script)` | The caller wants to watch the application work |
 
 They are independent switches, and they compose: enabling both execution interfaces changes nothing about
@@ -62,11 +63,43 @@ either. `AsonBridgeCapabilities` decides what exists, and every adapter publishe
 - gRPC: a disabled capability answers `StatusCode.Unimplemented`.
 - MCP: a disabled capability's tool is not registered at all.
 
+`invokeMcpTool` has a second, separate refusal, and the two mean different things:
+
+- **Capability off** — the call does not exist (`Unimplemented`, or no such tool), which is the same signal
+  every other disabled capability produces.
+- **Capability on, no MCP server registered** — the call exists and answers `not-supported`, because the
+  application enabled pass-through but never registered a client with `RunnerClient.RegisterMcpClient`.
+  `IAsonExecutor.McpServers` is what the bridge consults, so a host that supplies its own executor reports the
+  servers it really has.
+
 A static operator module needs no handle (`BridgeStaticOperator.Add(2, 3)`); an instance operator is resolved
 through the live instance directory when exactly one instance of its type exists, and otherwise requires the
 `handle` the manifest reported. Failures come back as stable error codes — `operator-not-found`,
 `handle-required`, `handle-ambiguous`, `handle-not-found`, `method-not-found`, `script-rejected`,
 `not-supported`, `execution-failed` — so a client branches on a code instead of parsing a message.
+
+## Live instances and manifest freshness
+
+`manifest.proxies` ends with a declaration for every live instance
+(`EmployeesOperator employeesOperator = new("EmployeesOperator");`), which is what lets a script say
+`employeesOperator.GetEmployees()`. Those declarations are only correct for the moment the manifest was read:
+a view that opened or closed afterwards is missing from them (or declared for a handle that is gone).
+
+The bridge gives a caller three ways to stay correct, in increasing order of robustness:
+
+1. **Compare `instancesRevision`.** It is a digest of the live instance list, so a caller that kept an older
+   manifest can detect that it went stale and re-read it (`ason_get_manifest`).
+2. **Send the body only.** `includeInstanceDeclarations: true` (gRPC `include_instance_declarations`, MCP
+   `includeInstanceDeclarations`, HTTP `includeInstanceDeclarations`) tells the application to supply the proxy
+   layer *and* today's declarations, so the caller sends nothing but the statements it wants to run. The
+   declarations have to live inside the generated layer, so the application is the only side that can rebuild
+   them; this flag is the explicit form of "I am sending a body, you own the layer".
+3. **Name your snapshot layer.** `GrpcAsonBridgeTransport` and `McpAsonBridgeTransport` accept
+   `Proxies = manifest.Proxies`. When it is set, the transport strips that exact layer back off the composed
+   script and asks the application for its current one, per call and with no extra round trip. This is the
+   switch the agent-side runner protocol uses, since it always prepends the layer it read at start-up.
+
+The single-function interface needs none of this: it resolves the live handle on every call.
 
 ## Transports
 
@@ -106,6 +139,12 @@ app.MapAsonGrpcBridge();
 ```
 
 The gRPC endpoint must be HTTP/2 without TLS on a dedicated listener (`h2c`) unless it is served over TLS.
+
+`Protos/ason_bridge.proto` holds the contract: `GetManifest`, `ListInstances`, `ExecuteScript`,
+`InvokeFunction`, `InvokeMcpTool` and the streaming `StreamExecution`. `ExecuteScriptRequest` carries
+`include_proxy_preamble` and `include_instance_declarations`, `ManifestReply` carries `instances_revision`,
+and `InvokeMcpToolRequest` takes the tool arguments as a JSON object. Everything added in protocol `1.1` is
+additive: a `1.0` client keeps working against a `1.1` bridge.
 
 ### MCP
 
@@ -158,6 +197,53 @@ a capability that is switched off is not served at all (`404`); and with `ApiKey
 that key in `ApiKeyHeader` (`401` otherwise) - which matters because an HTTP endpoint is reachable by anything
 on the machine, not just by ASON clients.
 
+## Calling the bridge without .NET
+
+The gRPC contract is the interface, so a Python, Go, Java, Rust or `curl`-with-`grpcurl` caller needs the
+`.proto` file and nothing else. Two ways to get the exact copy an application is serving:
+
+```xml
+<!-- 1. From the package: the file travels inside Ason.Bridge.Grpc -->
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<!-- the contract is then at $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
+```
+
+```bash
+# 2. From the repository, or from an unpacked package
+unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+# src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
+```
+
+The service is `ason.bridge.v1.AsonBridge`, with `GetManifest`, `ListInstances`, `ExecuteScript`,
+`InvokeFunction`, `InvokeMcpTool` and the server-streaming `StreamExecution` (one `log` event per line, then
+exactly one `result` or `error`).
+
+```bash
+# Python: build stubs, then call. samples/python/ason_bridge_client.py does this for you.
+python -m grpc_tools.protoc -I./ason-contract --python_out=. --grpc_python_out=. ason_bridge.proto
+
+# Go / Java / anything else protoc supports
+protoc -I./ason-contract --go_out=. --go-grpc_out=. ason_bridge.proto
+protoc -I./ason-contract --java_out=. ason_bridge.proto
+
+# grpcurl, with the contract on disk...
+grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
+  -d '{"code":"return 1;"}' localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
+
+# ...or without it, when the application published reflection (--reflection, off by default)
+grpcurl -plaintext -d '{"operator":"LibDemoOperator","method":"Add","arguments_json":"[40,2]"}' \
+  localhost:5222 ason.bridge.v1.AsonBridge/InvokeFunction
+```
+
+`samples/python/` is a runnable version of the first example: it compiles the contract on first use and exposes
+`manifest`, `instances`, `call`, `script [--stream]` and `mcp <server> <tool>` as subcommands.
+
+Reflection is opt-in and off by default (`AddAsonGrpcBridge(runtime, enableReflection: true)`, or the sample's
+`--reflection`): publishing it broadcasts the callable surface to anyone who can reach the port, which is fine
+on loopback and should be paired with the authorization of the [Security](#security) section anywhere else.
+Either way, **what a caller may call is still what the manifest says** - reflection only saves you from keeping
+a `.proto` file in step; capabilities, the keyword filter and the operator API all still apply.
+
 ## Delegating orchestration to the agent
 
 An agent that keeps ASON's own orchestration can use the application's operators without owning any. The
@@ -174,7 +260,9 @@ var library = manifest.ToOperatorsLibrary();
 var agent = new AsonClient(chatService, new RootOperator(new object()), library, new AsonClientOptions {
     // The application decides where the script is isolated; this side only says how to reach it.
     ExecutionMode = ExecutionMode.ExternalProcess,
-    TransportFactory = () => new GrpcAsonBridgeTransport(client)
+    // Proxies: the layer this client read from the manifest. Setting it makes the application rebuild the
+    // instance declarations on every execution, so a view that opened after this manifest was read still works.
+    TransportFactory = () => new GrpcAsonBridgeTransport(client) { Proxies = manifest.Proxies }
 });
 ```
 
@@ -265,7 +353,9 @@ privileged:
   untrusted input.
 - Enable only the capabilities the deployment needs; the manifest tells every client the truth about which
   are on.
-- `invokeMcpTool` is off by default: it forwards to the MCP servers the *application* consumes.
+- `invokeMcpTool` is off by default: it forwards to the MCP servers the *application* consumes, using the
+  credentials that application already holds. Turning it on exposes those tools to every caller the bridge
+  accepts, so pair it with the authorization below when the bridge is not loopback-only.
 - Every request is validated, gated and answered with a code, but nothing here replaces network-level access
   control.
 
@@ -384,11 +474,14 @@ dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration R
 
 ## Known limits
 
-- `manifest.proxies` is a snapshot taken when the caller read it. A script that uses an instance variable may
-  be stale if views opened or closed since; the single-function interface resolves the live handle on every
-  call and is the robust path for instance operators.
+- `manifest.proxies` is a snapshot taken when the caller read it, so its instance declarations age. Compare
+  `instancesRevision`, send the body only with `includeInstanceDeclarations`, or set `Proxies` on the runner
+  transport (see [Live instances and manifest freshness](#live-instances-and-manifest-freshness)). The
+  single-function interface needs none of that and is the robust path for instance operators.
 - Invoking a method on an operator whose view is not loaded triggers the runtime's normal reload, which can
   open or navigate the view. Use attached instances when a side effect is not wanted.
 - The `Ason.Bridge.Grpc` namespace shadows the `Grpc` root namespace inside files that import it: write
   `using Grpc.Net.Client;` and then `GrpcChannel.ForAddress(...)`, or fully qualify the type.
-- The gRPC contract has no MCP pass-through (`invokeMcpTool`); a relay reports it as `not-supported`.
+- Pass-through can only name a server and a tool; the bridge does not mirror the tool list of the MCP servers
+  the application consumes, so a caller learns them from the application (or from the agent's own
+  configuration) rather than from the manifest.
