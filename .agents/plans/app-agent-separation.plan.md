@@ -4,7 +4,7 @@
 **Mode**: conversational `/plan`（eccplan → `references/commands/plan.md`）
 **Branch**: `feat/agent-app-separation-bridge`
 **Baseline**: `fb00b0f`（撰写本文件时的 HEAD，工作树干净）
-**Complexity**: Large（Wave 1 已落地 5 个新项目 + 5 个样例 + 91 个桥测试；Wave 2 约 9.5 人日）
+**Complexity**: Large（Wave 1 已落地 5 个新项目 + 5 个样例 + 91 个桥测试；Wave 2 约 10.0 人日）
 **Status**: Wave 1 **已完成并提交**；Wave 2 **待确认** —— 规划阶段不写实现代码，等人工检测本文件后开工
 **Evidence**: `docs/testing/app-agent-separation.tdd.md`（Wave 1 的逐任务 RED/GREEN 证据、覆盖率与缺口清单）
 **Provenance**: Wave 1 的原始计划是内联给出的（未落盘）。本文件是**唯一计划产物**：§5 的 Wave 1 部分按当时确认的范围 + 真实提交记录重建，Wave 2 部分为本轮待执行计划。根目录曾短暂存在的 `plan.md` 已删除（见 §10.1）。
@@ -41,6 +41,7 @@
 5. 同时提供**整段代码**接口与**单函数级**接口，二者可组合、不冲突；例如 gRPC 既能执行原始 script，也能精准调用单个函数。
 6. 追加要求（会话中提出）：补一个 gRPC 客户端 exe demo 展示精准执行函数能力；TDD 测试先行；先做 Phase 0–3，随后完成其余全部。
 7. 追加要求（本轮）：把两波计划合并成 `.agents/plans/` 下 eccplan 格式的计划文件（本文件）。
+8. 追加要求（本轮）：把"**非 .NET 调用 gRPC**"缺口（`Ason.Bridge.Grpc` 的 NuGet 包内没有 `ason_bridge.proto`，Python/Go/Java/Node 等调用方无法从包生成客户端）纳入 Wave 2（→ T10）；**本轮只修订本计划文件，不执行任何实现**。
 
 ---
 
@@ -84,6 +85,7 @@
 | E | 适配器分支覆盖 51–80%；样例程序集覆盖率未采集；UI 自动化未接入 | ✅ T5 |
 | F | 发布卫生：版本、release notes、包清单 | ✅ T6 |
 | G | CI：无覆盖率门禁；Windows 作业未跑 `Ason.Tests` | ✅ T7 |
+| **H** | **非 .NET 调用 gRPC：`Ason.Bridge.Grpc` 的 nupkg 内只有 `lib/net9.0/Ason.Bridge.Grpc.dll` + `icon.png` + nuspec，没有 `ason_bridge.proto`；非 .NET 调用方无法从包生成客户端（只能回仓库取），且无反射可用** | ✅ **T10（本轮指定纳入，未执行）** |
 | — | 决定不动的：Agent 聊天需模型 key、`--verify`/`--bridge-only` 为样例级钩子、集成测试单项目、gRPC 命名空间遮蔽 `Grpc`（已在文档给出写法） | ❌ 仅记录 |
 
 ---
@@ -101,6 +103,7 @@
 | 样例即测试钩子 | `WpfAppOnlyDemo --bridge-only`、`WpfAgentDemo --verify`、`ConsoleAgentSample --list` | 无模型、无桌面也能在 CI 驱动真实进程 |
 | 三语文档 | `docs/app-agent-separation.*`、`docs/architecture.*`（含 `<!-- i18n: localize-labels -->`） | 用户可见变更三语同步；ASCII 只翻译标签、结构不动 |
 | 覆盖率口径 | `coverlet.runsettings` | 排除 `**/Protos/*.cs`，只度量手写适配器 |
+| 包内投递额外契约文件 | `src/Ason.ExternalExecutor/Ason.ExternalExecutor.csproj` + `buildTransitive/Ason.ExternalExecutor.targets`；`src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj` 现有 `<None … Pack="true" PackagePath="…"/>`（icon） | 包需要额外文件时用 `Pack="true"` + `PackagePath` 显式投递，不让消费者猜路径 |
 
 ---
 
@@ -118,9 +121,11 @@
 | `src/Ason.Bridge.Mcp/McpAsonBridgeEndpoint.cs` | UPDATE | T3 由 `not-supported` 改为转发（未配置时才 `not-supported`） |
 | `src/Ason.Bridge.OpenApi/AsonBridgeOpenApiExtensions.cs`、`AsonOpenApiDocument.cs` | UPDATE | T2 SSE 端点；T4 body 字段；文档同步 |
 | `src/Ason.Bridge.Grpc/AsonBridgeGrpcExtensions.cs`、`src/Ason.Bridge.Mcp/AsonBridgeMcpExtensions.cs` | UPDATE | T1 授权钩子 |
-| `src/Ason.Bridge.McpHost/Program.cs` | UPDATE | T1 `--key`/`--header`；T2 视需要 |
+| `src/Ason.Bridge.McpHost/Program.cs` | UPDATE | T1 `--key`/`--header`；T2 视需要；T10 视需要（`--reflection` 不在此进程） |
+| `src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj` | UPDATE | **T10** 把 `Protos\ason_bridge.proto` 打进包（`Pack="true" PackagePath="protos\"`）；（可选）`Grpc.AspNetCore.Server.Reflection` + `MapGrpcReflectionService()` 作为 opt-in |
+| `README.*`、`docs/app-agent-separation.*` | UPDATE | **T10** 新增"非 .NET 调用方"小节：proto 获取路径、`protoc`/`grpcurl` 最小示例、服务与方法全名（三语） |
 | `tests/Ason.Bridge.Tests/*` | CREATE/UPDATE | T1–T5 的新测试；T4 鲜度测试；T2 流式测试 |
-| `coverlet.runsettings`、`.github/workflows/ci.yml` | UPDATE | T5 样例覆盖率采集；T7 门禁与 Windows 作业补测 |
+| `coverlet.runsettings`、`.github/workflows/ci.yml` | UPDATE | T5 样例覆盖率采集；T7 门禁与 Windows 作业补测；**T10 打包校验**（pack 后断言 nupkg 内含 proto） |
 | `Directory.Build.props` | UPDATE | T6 版本递增 |
 | `docs/app-agent-separation.*`、`docs/configuration.*`、`docs/contributing.*`、`docs/architecture.*`、`README.*` | UPDATE | T0 图 + T1/T2/T4 的能力与安全说明（三语） |
 | `docs/testing/app-agent-separation.tdd.md` | UPDATE | T8 增补 "Wave 2" 章节 + 覆盖率表 + 缺口更新 |
@@ -263,6 +268,26 @@
 - **Validate**: 三语结构一致（标题层级、`i18n` 注释、边界命名 D/E/A′ 一致）；全量验证矩阵复跑。
 - **Risk**: 低。
 
+#### Task 10（T10 / 缺口 H）—— 非 .NET 调用 gRPC：契约交付（打包 + 文档）· 0.5 天
+- **Action**:
+  ① **打包 proto**：`src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj` 增加
+  `<None Include="Protos\ason_bridge.proto" Pack="true" PackagePath="protos\" />`
+  （实测现状：nupkg 里只有 `lib/net9.0/Ason.Bridge.Grpc.dll`、`icon.png`、`nuspec`，无 proto）。
+  ② **可选反射**：`Grpc.AspNetCore.Server.Reflection` + `MapGrpcReflectionService()`，以
+  `MapAsonGrpcBridge(enableReflection: true)`（或样例 `--reflection`）**opt-in**，让 `grpcurl` 与非 .NET
+  调用方无需本地 proto 即可调用；**默认关闭**（反射等于把可调用面再对外广播一次，须与 T1 的鉴权一起评估）。
+  ③ **三语文档**：`docs/app-agent-separation.*` 新增"非 .NET 调用方"小节 —— proto 的两条获取路径
+  （NuGet 包内 `protos/ason_bridge.proto`，可用 `GeneratePathProperty=true` 定位 `$(PkgAson_Bridge_Grpc)`，或解包；
+  仓库 `src/Ason.Bridge.Grpc/Protos/ason_bridge.proto`）、三种最小示例
+  （`python -m grpc_tools.protoc`、`protoc --go_out`/`--java_out`、`grpcurl -proto`）、服务与方法全名
+  （`ason.bridge.v1.AsonBridge/{GetManifest,ListInstances,ExecuteScript,InvokeFunction,StreamExecution}`；
+  T3 会再加 `InvokeMcpTool`）、以及"**能调什么仍以 manifest 为准**"这一边界。
+- **Mirror**: `Ason.ExternalExecutor` 的 `Pack="true"`/`buildTransitive` 投递方式；`Ason.Bridge.Grpc.csproj` 现有 icon 投递；`docs/app-agent-separation.*` 既有"传输"小节与 `i18n` 注释。
+- **Validate**: `dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj -c Release -o ./artifacts/pack` 后解包断言存在 `protos/ason_bridge.proto`（脚本化并入 CI）；
+  手工 `grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto -d "{\"code\":\"return 1;\"}" localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript` 跑通（若②落地，再验证不带 `-proto` 也可用）；三语结构一致。
+- **Risk**: 低（纯投递 + 文档）；唯一决策点是②的反射默认值及其与 T1 鉴权的组合语义。
+- **依赖/顺序**: **必须排在 T3 与 T4 之后** —— 那两项会改动 proto（`InvokeMcpTool`、`include_instance_declarations`），否则打包与文档要跟随两次。
+
 ---
 
 ## 6. Validation
@@ -283,11 +308,21 @@ dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release \
 dotnet build samples/ConsoleGrpcBridgeHost/ConsoleGrpcBridgeHost.csproj -c Release
 dotnet build samples/ConsoleAgentSample/ConsoleAgentSample.csproj -c Release
 dotnet build samples/ConsoleGrpcBridgeDemo/ConsoleGrpcBridgeDemo.csproj -c Release
+
+# T10：契约交付（非 .NET 调用方）
+dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj -c Release -o ./artifacts/pack
+#   解包断言（nupkg 是 zip，先改扩展名）：应存在 protos/ason_bridge.proto
+#   Copy-Item artifacts/pack/Ason.Bridge.Grpc.*.nupkg $env:TEMP\p.zip; Expand-Archive $env:TEMP\p.zip $env:TEMP\p
+#   Get-ChildItem -Recurse $env:TEMP\p -Filter *.proto
+#   非 .NET 调用方手工验证：
+#   grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
+#           -d "{\"code\":\"return 1;\"}" localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
 ```
 
 **Wave 2 依赖顺序**：Task 1（T0）独立 → Task 2（T1）→ Task 3 + Task 4 合并为一次契约变更（proto 1.1）→
-Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
-合计约 **9.5 人日**。
+**Task 10（T10，必须落在 T3/T4 之后：它交付的就是那份 proto）** → Task 5（T2，SSE 必须受 T1 约束）→
+Task 6（T5，覆盖 1–5、10 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
+合计约 **10.0 人日**（Wave 2；含本轮新增的 T10 0.5 天）。
 
 ---
 
@@ -325,6 +360,7 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5 的新分
 - [ ] Task 7：版本号与 release notes 就绪；4 个包可打包且顺序正确
 - [ ] Task 8：CI 有覆盖率门禁；Windows 作业覆盖 `Ason.Tests`
 - [ ] Task 9：三语文档与证据报告同步；全量验证矩阵通过；每项任务都有 RED→GREEN 检查点提交
+- [ ] Task 10：`Ason.Bridge.Grpc` 包内含 `protos/ason_bridge.proto`（有解包断言，必要时并入 CI）；三语"非 .NET 调用方"小节含两条 proto 获取路径与最小示例；反射若开启则默认关闭且与 T1 鉴权语义一致
 
 ---
 
@@ -341,6 +377,8 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5 的新分
 1. **目标版本号**：建议 `0.9.0`（追加式 API 至少 minor）；release notes 落盘位置需确认。
 2. **Task 5 的 MCP 日志流**：走 **progress notification**（更原生，需先验证 stdio/HTTP 一致性）还是 **`ason_stream_script` 工具**（更通用，可作回退）。
 3. **Task 6 的 FlaUI**：接入 Windows 作业并 `continue-on-error` 观察，还是明确不接入并写入文档。
+4. **Task 10 的 gRPC 反射**：是否提供 opt-in 反射（`grpcurl`/非 .NET 调用方无需本地 proto 即可调用）；默认关闭；
+   若开启，需与 T1 的鉴权一起评估（反射会把可调用面再对外广播一次）。
 
 ---
 
@@ -375,3 +413,11 @@ Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5 的新分
 | `c4991af` | 无 Agent 调用方文档 |
 | `18b8613` | 每种形态↔样例↔运行命令映射 |
 | `fb00b0f` | 跨平台 Agent 样例 + 外部脚本宿主模式 + `manifest.ToOperatorsLibrary()`（91/91） |
+
+### 10.3 本轮计划修订（只改本文件，未执行任何实现）
+
+| 变更 | 原因 |
+|---|---|
+| 新增缺口 **H** 与 Wave 2 **Task 10（T10）**：`Ason.Bridge.Grpc` 包内补齐 `ason_bridge.proto`（可选 opt-in gRPC 反射）+ 三语"非 .NET 调用方"小节 | 实测解包 `Ason.Bridge.Grpc.0.8.2.nupkg`：仅含 `lib/net9.0/Ason.Bridge.Grpc.dll` + `icon.png` + nuspec，无 proto；Python/Go/Java/Node 调用方无法从包生成客户端 |
+| 复杂度/合计 9.5 → **10.0 人日**；依赖顺序把 T10 排在 **T3/T4 之后** | T3/T4 会改动 proto（`InvokeMcpTool`、`include_instance_declarations`），打包与文档必须跟随**最终契约**，否则要做两次 |
+| 本轮**未**纳入计划：示例改名（`ConsoleGrpcBridgeHost`＝应用侧 / `ConsoleGrpcBridgeDemo`＝调用方，名字易反读）与"调用方需要知道/配置什么"对照表 | 按指示本轮只纳入"非 .NET 调用 gRPC"缺口；这两项待你裁决（如需纳入，建议并入 T9 或新增 Task 11） |
