@@ -42,7 +42,14 @@ jobs:
           dotnet build src/Ason/Ason.csproj --configuration Release
           dotnet build src/Ason.ExternalExecutor/Ason.ExternalExecutor.csproj --configuration Release
           dotnet build src/Ason.RemoteBridge/Ason.RemoteBridge.csproj --configuration Release
+          dotnet build src/Ason.Bridge/Ason.Bridge.csproj --configuration Release
+          dotnet build src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release
+          dotnet build src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release
+          dotnet build src/Ason.Bridge.McpHost/Ason.Bridge.McpHost.csproj --configuration Release
           dotnet build samples/LibDemo/LibDemo.csproj --configuration Release
+          # The bridge samples are console applications, so unlike the WPF sample they also run here.
+          dotnet build samples/ConsoleGrpcBridgeHost/ConsoleGrpcBridgeHost.csproj --configuration Release
+          dotnet build samples/ConsoleGrpcBridgeDemo/ConsoleGrpcBridgeDemo.csproj --configuration Release
 
       # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test
       # project is exercised on Windows (see the comment above).
@@ -60,3 +67,9 @@ jobs:
           dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release
           dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release
           dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests"
+
+      # The bridge suite hosts gRPC and MCP in process and drives them over the wire; no Docker, desktop
+      # session or network access is needed.
+      - name: Bridge tests
+        run: |
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release

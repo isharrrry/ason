@@ -12,6 +12,7 @@
 | **编写 operator** | [English](operators.md) · [中文](operators.zh-CN.md) · [Español](operators.es.md) | `OperatorBase`、root operator、`GetViewOperator` / `AttachChildOperator` 生命周期、无状态模块、`[AsonModel]`、`Ason.Abstractions` |
 | **客户端配置** | [English](configuration.md) · [中文](configuration.zh-CN.md) · [Español](configuration.es.md) | `AsonClient` 构造函数、完整的 `AsonClientOptions` 参考、`AddAson` 注册、提示词覆盖、日志记录 |
 | **执行模式** | [English](execution-modes.md) · [中文](execution-modes.zh-CN.md) · [Español](execution-modes.es.md) | 进程内、外部进程、Docker 与远程执行，五种部署组合，以及各种应用形态该选哪种配置 |
+| **应用 / Agent 分离** | [English](app-agent-separation.md) · [中文](app-agent-separation.zh-CN.md) · [Español](app-agent-separation.es.md) | 把“只含 `[Ason*]` operator 与桥”的应用与驱动它的 Agent 分开：清单、脚本与单函数接口、gRPC 与 MCP 适配器、执行位置与安全 |
 | **架构与代理** | [English](architecture.md) · [中文](architecture.zh-CN.md) · [Español](architecture.es.md) | ASON 如何工作、部署拓扑与进程边界、凭据边界、内部代理，以及与 tool calling / MCP 的详细比较 |
 | **贡献指南** | [English](contributing.md) · [中文](contributing.zh-CN.md) · [Español](contributing.es.md) | 构建、测试套件、CI，以及哪些内容需要 Windows 或 Docker |
 

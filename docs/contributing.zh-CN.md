@@ -25,6 +25,12 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `src/Ason.Runner.Core` | 脚本执行宿主 |
 | `src/Ason.ExternalExecutor` | 进程外运行器可执行文件 |
 | `src/Ason.RemoteBridge` | ASP.NET Core 远程运行器 |
+| `src/Ason.Bridge` | 与传输无关的桥：清单、能力、执行器、operator 目录（`net6.0`、`net9.0`） |
+| `src/Ason.Bridge.Grpc` | gRPC 适配器：服务、类型化客户端、runner 传输、转发端点 |
+| `src/Ason.Bridge.Mcp` | MCP 适配器：工具面、类型化客户端、runner 传输（Streamable HTTP） |
+| `src/Ason.Bridge.McpHost` | 把应用的 gRPC 桥重新发布为 stdio MCP 的中继 |
+| `samples/ConsoleGrpcBridgeHost` | 分离部署的应用侧：`[Ason*]` operator + gRPC 与 MCP 服务 |
+| `samples/ConsoleGrpcBridgeDemo` | 外部请求侧：清单、单函数调用、脚本、流式日志 |
 | `samples/WptDemoApp` | WPF 演示（`net10.0`、`net9.0`、`net6.0-windows`） |
 | `samples/LibDemo` | 仅使用标记的类库（`net6.0`、`netstandard2.0`） |
 | `samples/templates` | `dotnet new` 模板 |
@@ -38,6 +44,7 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | `tests/Ason.Tests` | net9.0 | `E2E_AllExecutionModes(executionMode: Docker, …)` 用例需要 Docker 守护进程；`McpClientTests` 需要实时的 MCP server |
 | `tests/Ason.Runner.Tests` | net9.0 | 脚本运行器 |
 | `tests/Ason.RemoteRunner.Tests` | net9.0 | 除非 `ASON_REMOTE_RUNNER_URL` 指向正在运行的远程运行器，否则该集成测试会被跳过 |
+| `tests/Ason.Bridge.Tests` | net9.0 | 桥核心、gRPC 与 MCP 适配器（各自在进程内起宿主并走真实链路）、runner 传输缝与中继端点 |
 | `tests/WpfDemoApp.UiTests` | net9.0-windows | FlaUI UI 自动化 —— 需要交互式的 Windows 桌面会话 |
 
 在不使用 Docker 的情况下运行与外部环境隔离的子集：

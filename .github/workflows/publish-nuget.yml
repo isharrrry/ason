@@ -72,6 +72,22 @@ jobs:
           dotnet build src/Ason.RemoteBridge/Ason.RemoteBridge.csproj --configuration Release
           dotnet pack src/Ason.RemoteBridge/Ason.RemoteBridge.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
 
+      # The bridge packages depend on Ason and Ason.Runner.Core, so they are packed after them.
+      - name: Build & Pack Ason.Bridge
+        run: |
+          dotnet build src/Ason.Bridge/Ason.Bridge.csproj --configuration Release
+          dotnet pack src/Ason.Bridge/Ason.Bridge.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
+
+      - name: Build & Pack Ason.Bridge.Grpc
+        run: |
+          dotnet build src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release
+          dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
+
+      - name: Build & Pack Ason.Bridge.Mcp
+        run: |
+          dotnet build src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release
+          dotnet pack src/Ason.Bridge.Mcp/Ason.Bridge.Mcp.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.get_version.outputs.version }}
+
       - name: Build & Pack Ason.ProjectTemplates
         run: |
           dotnet restore samples/templates/Ason.ProjectTemplates.csproj
