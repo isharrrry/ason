@@ -7,7 +7,11 @@ namespace Ason.Bridge.Tests;
 /// The separation, end to end, against the real WPF application: the application is started headless, an
 /// external client discovers its operators and calls them, and the application stays in charge of its own
 /// state - including the UI thread its operators run on.
+///
+/// Shares a collection with the agent tests because each test starts a real process and they must not race for
+/// ports.
 /// </summary>
+[Collection(WpfEndToEnd.CollectionName)]
 public class WpfApplicationEndToEndTests {
 
     [RequiresWpfApplicationFact]

@@ -36,11 +36,27 @@ internal sealed class WpfApplication : IDisposable {
     }
 
     /// <summary>
-    /// Starts the application on a free port and waits until its bridge answers. Waiting on a real gRPC call
-    /// rather than on a log line means the application is not considered ready before it can serve requests.
+    /// Starts the application on a free port pair and waits until its bridge answers. Waiting on a real gRPC
+    /// call rather than on a log line means the application is not considered ready before it can serve
+    /// requests; a port race (the pair is claimed between the check and the bind) is retried.
     /// </summary>
     public static async Task<WpfApplication> StartAsync(string executable, TimeSpan? startupTimeout = null) {
-        var port = FreePort();
+        Exception? lastFailure = null;
+        for (var attempt = 0; attempt < 3; attempt++) {
+            var (grpcPort, _) = FreePortPair();
+            try {
+                return await StartOnceAsync(executable, grpcPort, startupTimeout).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) {
+                // "address already in use" only: another process took the pair between check and bind.
+                if (!ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase)) throw;
+                lastFailure = ex;
+            }
+        }
+        throw lastFailure ?? new InvalidOperationException("Could not start the WPF application sample.");
+    }
+
+    static async Task<WpfApplication> StartOnceAsync(string executable, int port, TimeSpan? startupTimeout) {
         var info = new ProcessStartInfo(executable) {
             RedirectStandardInput = false,
             RedirectStandardOutput = true,
@@ -96,11 +112,22 @@ internal sealed class WpfApplication : IDisposable {
         }
     }
 
-    static int FreePort() {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+    /// <summary>
+    /// The sample binds two ports (gRPC and MCP, next to each other), so both are claimed at once before they
+    /// are released for the application to use.
+    /// </summary>
+    static (int GrpcPort, int McpPort) FreePortPair() {
+        for (var attempt = 0; attempt < 100; attempt++) {
+            var first = new TcpListener(IPAddress.Loopback, 0);
+            first.Start();
+            var second = new TcpListener(IPAddress.Loopback, 0);
+            second.Start();
+            var grpcPort = ((IPEndPoint)first.LocalEndpoint).Port;
+            var mcpPort = ((IPEndPoint)second.LocalEndpoint).Port;
+            first.Stop();
+            second.Stop();
+            if (mcpPort == grpcPort + 1) return (grpcPort, mcpPort);
+        }
+        throw new InvalidOperationException("Could not find two consecutive free ports for the application sample.");
     }
 }

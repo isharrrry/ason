@@ -1,0 +1,86 @@
+<Window x:Class="WpfAgentDemo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ASON agent (no operators)" Height="720" Width="1180">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="ASON agent" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock x:Name="SeparationText" Margin="0,4,0,0" TextWrapping="Wrap" />
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap"
+                       Text="This window owns the model and the orchestration. It declares no operators: the operator API you see below was fetched from the application over gRPC or MCP, and scripts execute there." />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,12,0,12" Orientation="Horizontal">
+            <TextBlock Text="Endpoint" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBox x:Name="EndpointBox" Width="260" Margin="8,0,16,0" Padding="4" VerticalContentAlignment="Center" />
+            <TextBlock Text="Transport" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <ComboBox x:Name="TransportBox" Width="110" Margin="8,0,16,0" SelectedIndex="0">
+                <ComboBoxItem Content="gRPC" />
+                <ComboBoxItem Content="MCP" />
+            </ComboBox>
+            <Button x:Name="ConnectButton" Content="Connect" Padding="12,4" Margin="0,0,8,0" Click="OnConnect" />
+            <Button x:Name="RefreshButton" Content="Refresh API" Padding="12,4" Margin="0,0,8,0" Click="OnRefresh" IsEnabled="False" />
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="Operator API published by the application" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TabControl>
+                    <TabItem Header="Markdown">
+                        <TextBox x:Name="MarkdownBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    </TabItem>
+                    <TabItem Header="Manifest (JSON)">
+                        <TextBox x:Name="ManifestBox" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    </TabItem>
+                    <TabItem Header="Live instances">
+                        <TextBox x:Name="InstancesBox" IsReadOnly="True" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" />
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="140" />
+                </Grid.RowDefinitions>
+
+                <TextBox x:Name="ChatBox" Grid.Row="0" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto" />
+
+                <DockPanel Grid.Row="1" Margin="0,8,0,8">
+                    <Button x:Name="SendButton" DockPanel.Dock="Right" Content="Send" Padding="16,4" Margin="8,0,0,0" Click="OnSend" IsEnabled="False" />
+                    <TextBox x:Name="InputBox" Padding="4" VerticalContentAlignment="Center"
+                             KeyDown="OnInputKeyDown" />
+                </DockPanel>
+
+                <DockPanel Grid.Row="2">
+                    <TextBlock DockPanel.Dock="Top" Text="Calls" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <ListView x:Name="CallsList">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Call" Width="620" DisplayMemberBinding="{Binding}" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
