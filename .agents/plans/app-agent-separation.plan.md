@@ -644,3 +644,16 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | §9-5/§9-10 改名 | **保留 `Sample` 后缀**：`ConsoleBridgeAppSample` / `ConsoleBridgeCallerSample` | 本文件已全量替换该命名（§4/§5/§6 同步） |
 | §9-6 最小 MCP 消费端 | **Python**；并**追加要求**：用 OpenAI 官方库 + 配置 + 命令行指令，实现"模型自动选择并调用 MCP 工具"的**自动化测试** | T14 重写（1.0 → **1.5 人日**）：③ Python 最小客户端；④ OpenAI 驱动自动调用测试（断言"真的调了 operator 且状态变了"，带轮数/超时保护；无 key 明确报错退出） |
 | §9-2 T5 实现形式（progress vs 工具）、§9-3 FlaUI、§9-7 WPF 开关、§9-8 `.http` 落点 | 仍待你裁决（不挡当前顺序） | 到对应任务时再问；默认按计划里的建议执行 |
+
+### 10.8 CI 失败复盘与"可匿名读取的失败"（本轮；不属于 Wave 2 任务，是你选定的 B 选项授权的修复）
+
+| 项 | 内容（含核实结论） |
+|---|---|
+| 现象 | `main` 上最近两次运行（`6b5194f`、`f69f9a4`）同一处红：job `Build & unit tests`（ubuntu）的 `Unit tests` 步骤 `dotnet test tests/Ason.Tests` 失败；其后 `Bridge tests (with coverage)`、`Coverage floor (bridge adapters)`、`The contract ships with the package` **全部 skipped**。 |
+| 附带结论（比这次红更严重） | 作业在 `Unit tests` 就中止，因此**桥测试在 Ubuntu 上从未真正执行过**。"桥在 Linux 上可用"此前只有 Windows 作业的证据。 |
+| 为什么只能"推"不能"读" | 匿名可读：`api.github.com/repos/.../check-runs/<id>/annotations` ✅；作业日志 ❌ `403 Must have admin rights`（HTML／代理／Jina 抓取均失败）。所以只能从"哪一步失败"倒推，再到本机复现根因。 |
+| 根因 | `tests/Ason.Tests/Client/AnswerLanguageTests.cs` 的 `A_well_formed_but_unregistered_language_is_passed_through` 断言 `Assert.Contains("in zz", directive)`；该子串来自 `CultureInfo.GetCultureInfo("zz").EnglishName`，由运行时 globalization 提供：本机默认 → `zz`；`DOTNET_SYSTEM_GLOBALIZATION_USENLS=1` → `Unknown Locale (zz)`（本机实测 1 failed / 104 passed）；Linux runner 的 ICU → 预期 `Unknown Language (zz)`（**未在本机验证**，但该测试自身的注释已预言这一差异）。结论：**是平台差异，不是回归**。 |
+| 修复（`4fa33c0`） | 断言收敛到库真正承诺的内容：`StartsWith("Language rule")`、`Contains("(zz)")`（标签原样进入提示词）、`Contains("instead of copying")`（规则正文完整）、`DoesNotContain("zz / zz")`；注释写明显示名由运行时提供。验证：默认 **105/105**、强制 NLS **105/105**。 |
+| 可匿名读取的失败（`708712b`） | 新增 `scripts/emit-test-failures.ps1`：TRX → `::error title=<测试名>::<断言 + 行号>`，`%` 与换行按 GitHub 注解规则转义，永不使作业失败，纯 ASCII（PS 5.1 亦可解析）；两个作业的每个 `dotnet test` 均写 TRX，末尾各加一个 `if: failure()` + `shell: pwsh` 的注解步骤。三语 `docs/contributing.*` 记录了该机制与用途。 |
+| 本机验证 | 红样本 TRX → 输出 `::error title=Ason.Tests.Client.AnswerLanguageTests.A_well_formed_but_unregistered_language_is_passed_through::Assert.Contains() Failure: Sub-string not found ... Not found: "in zz" ... line 57`（退码 0）；绿样本 TRX → `No failed tests in the TRX files.`（退码 0）；`ci.yml` 经 PyYAML 解析通过，两个作业的注解步骤都是最后一步且带 `if: failure()`。 |
+| 下一步（待观察） | 推送后 Ubuntu 作业将**首次**执行桥测试：WPF 端到端按 `OperatingSystem.IsWindows()` 跳过，console 与 remote-runner 端到端用"定位已构建产物 → `dotnet exec`"启动（理论跨平台，**尚无 Linux 实测**）；若红，注解会直接给出测试名与断言。 |
