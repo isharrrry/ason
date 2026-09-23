@@ -110,6 +110,9 @@ public class AsonClient : IChatClient {
         if (!string.IsNullOrWhiteSpace(_options.RunnerExecutablePath)) {
             _runner.RunnerExecutablePath = _options.RunnerExecutablePath;
         }
+        if (_options.TransportFactory is not null) {
+            _runner.UseTransport(_options.TransportFactory);
+        }
         SetupCommonLogging();
 
         _repairExecutor = repairExecutor ?? new ScriptRepairExecutor();

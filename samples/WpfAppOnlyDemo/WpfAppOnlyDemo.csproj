@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- One process hosts both the WPF application and the bridge services: the operators keep their UI
+       affinity, and the agent talks to them over gRPC/MCP. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
+    <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
+    <ProjectReference Include="..\LibDemo\LibDemo.csproj" />
+  </ItemGroup>
+
+</Project>

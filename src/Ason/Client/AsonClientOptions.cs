@@ -81,4 +81,11 @@ public sealed class AsonClientOptions {
 
     // Optional explicit path to Ason.ExternalExecutor (dll or exe). If null, default discovery logic is used.
     public string? RunnerExecutablePath { get; init; }
+
+    /// <summary>
+    /// A transport supplied by the host, replacing the ones the execution mode and the remote runner switches
+    /// would build. This is how an application whose operators live somewhere else - a bridge endpoint reached
+    /// over gRPC or MCP - keeps the whole client pipeline while the script runs on the far side.
+    /// </summary>
+    public Func<Ason.Transport.IRunnerTransport>? TransportFactory { get; init; }
 }
