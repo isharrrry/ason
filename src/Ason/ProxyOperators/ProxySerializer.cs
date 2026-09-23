@@ -230,6 +230,11 @@ public static class ProxySerializer {
     #endregion
 
     #region Helpers
+    // These four helpers define the agent-facing view of an operator: the names, types and comments the
+    // Script agent sees. Any other rendering of the operator API (a different prompt format, a JSON or
+    // tool/function-calling schema, generated documentation) must reuse them instead of re-implementing the
+    // mapping, otherwise the renderings drift apart. They are internal rather than private so such a
+    // renderer can call them from this assembly without copying the rules.
     private static IEnumerable<Type> GetTypesWithAttribute<TAttr>(Assembly[] assemblies) where TAttr : Attribute {
         IEnumerable<Assembly> source = assemblies.Length > 0 ? assemblies : AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic);
         foreach (var asm in source) {
@@ -246,9 +251,9 @@ public static class ProxySerializer {
         return false;
     }
 
-    private static string TrimAsyncSuffix(string name) => name.EndsWith("Async", StringComparison.Ordinal) ? name[..^5] : name;
+    internal static string TrimAsyncSuffix(string name) => name.EndsWith("Async", StringComparison.Ordinal) ? name[..^5] : name;
 
-    private static string MapReturnSignature(Type rt) {
+    internal static string MapReturnSignature(Type rt) {
         if (rt == typeof(void) || rt == typeof(Task)) return "void";
         if (rt.IsGenericType && rt.GetGenericTypeDefinition() == typeof(Task<>)) {
             var tArg = rt.GetGenericArguments()[0];
@@ -258,7 +263,7 @@ public static class ProxySerializer {
         return GetFriendlyTypeName(rt);
     }
 
-    private static string GetFriendlyTypeName(Type t) {
+    internal static string GetFriendlyTypeName(Type t) {
         if (t.IsArray) return GetFriendlyTypeName(t.GetElementType()!) + "[]";
         if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Nullable<>)) return GetFriendlyTypeName(t.GetGenericArguments()[0]) + "?";
         if (t.IsGenericType) {
@@ -268,7 +273,7 @@ public static class ProxySerializer {
         return t.Name;
     }
 
-    private static IEnumerable<string> SplitLines(string value) => value.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+    internal static IEnumerable<string> SplitLines(string value) => value.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
 
     // MCP helpers
     private static void BuildModelClassStandalone(string modelName, JsonElement schema, StringBuilder runtime, StringBuilder sig, Dictionary<string, string> mcpModelMap, string serverName, string toolName) {
