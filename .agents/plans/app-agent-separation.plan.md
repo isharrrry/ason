@@ -4,7 +4,7 @@
 **Mode**: conversational `/plan`（eccplan → `references/commands/plan.md`）
 **Branch**: `feat/agent-app-separation-bridge`
 **Baseline**: `fb00b0f`（撰写本文件时的 HEAD，工作树干净）
-**Complexity**: Large（Wave 1 已落地 5 个新项目 + 5 个样例 + 91 个桥测试；Wave 2 约 10.0 人日）
+**Complexity**: Large（Wave 1 已落地 5 个新项目 + 5 个样例 + 91 个桥测试；Wave 2 约 11.0 人日）
 **Status**: Wave 1 **已完成并提交**；Wave 2 **待确认** —— 规划阶段不写实现代码，等人工检测本文件后开工
 **Evidence**: `docs/testing/app-agent-separation.tdd.md`（Wave 1 的逐任务 RED/GREEN 证据、覆盖率与缺口清单）
 **Provenance**: Wave 1 的原始计划是内联给出的（未落盘）。本文件是**唯一计划产物**：§5 的 Wave 1 部分按当时确认的范围 + 真实提交记录重建，Wave 2 部分为本轮待执行计划。根目录曾短暂存在的 `plan.md` 已删除（见 §10.1）。
@@ -42,6 +42,9 @@
 6. 追加要求（会话中提出）：补一个 gRPC 客户端 exe demo 展示精准执行函数能力；TDD 测试先行；先做 Phase 0–3，随后完成其余全部。
 7. 追加要求（本轮）：把两波计划合并成 `.agents/plans/` 下 eccplan 格式的计划文件（本文件）。
 8. 追加要求（本轮）：把"**非 .NET 调用 gRPC**"缺口（`Ason.Bridge.Grpc` 的 NuGet 包内没有 `ason_bridge.proto`，Python/Go/Java/Node 等调用方无法从包生成客户端）纳入 Wave 2（→ T10）；**本轮只修订本计划文件，不执行任何实现**。
+9. 追加要求（本轮，随后指示"纳入"）：把两项可用性/文档缺口也纳入 Wave 2 ——
+   ① **示例命名可读性**：`ConsoleGrpcBridgeHost`＝应用侧 / `ConsoleGrpcBridgeDemo`＝调用方，名字易反读（→ T11）；
+   ② **"调用方需要知道/配置什么"对照表**：分离形态下调用方各需准备什么、能否零配置接入、以及"无自动发现"等语义（→ T12）。
 
 ---
 
@@ -86,6 +89,8 @@
 | F | 发布卫生：版本、release notes、包清单 | ✅ T6 |
 | G | CI：无覆盖率门禁；Windows 作业未跑 `Ason.Tests` | ✅ T7 |
 | **H** | **非 .NET 调用 gRPC：`Ason.Bridge.Grpc` 的 nupkg 内只有 `lib/net9.0/Ason.Bridge.Grpc.dll` + `icon.png` + nuspec，没有 `ason_bridge.proto`；非 .NET 调用方无法从包生成客户端（只能回仓库取），且无反射可用** | ✅ **T10（本轮指定纳入，未执行）** |
+| **I** | **示例命名可读性：`ConsoleGrpcBridgeHost` 其实是应用侧（服务端）、`ConsoleGrpcBridgeDemo` 其实是调用方（客户端），名字易反读；指南形态表也缺一行"角色图例"** | ✅ **T11（本轮指定纳入，未执行）** |
+| **J** | **调用方配置语义未成表：各形态下调用方需要准备什么（URL／客户端／启动命令）、应用侧配置什么、能否"零配置接入"，以及"无注册中心/无自动发现、handle 是运行期状态、`proxies` 是快照"这些前提，散落在正文里** | ✅ **T12（本轮指定纳入，未执行）** |
 | — | 决定不动的：Agent 聊天需模型 key、`--verify`/`--bridge-only` 为样例级钩子、集成测试单项目、gRPC 命名空间遮蔽 `Grpc`（已在文档给出写法） | ❌ 仅记录 |
 
 ---
@@ -104,6 +109,7 @@
 | 三语文档 | `docs/app-agent-separation.*`、`docs/architecture.*`（含 `<!-- i18n: localize-labels -->`） | 用户可见变更三语同步；ASCII 只翻译标签、结构不动 |
 | 覆盖率口径 | `coverlet.runsettings` | 排除 `**/Protos/*.cs`，只度量手写适配器 |
 | 包内投递额外契约文件 | `src/Ason.ExternalExecutor/Ason.ExternalExecutor.csproj` + `buildTransitive/Ason.ExternalExecutor.targets`；`src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj` 现有 `<None … Pack="true" PackagePath="…"/>`（icon） | 包需要额外文件时用 `Pack="true"` + `PackagePath` 显式投递，不让消费者猜路径 |
+| 样例/工程重命名 | `Ason.sln` 的 Project 行 + `.github/workflows/*.yml` 的构建清单 + 三语文档命令块 + `tests/Ason.Bridge.Tests` 的路径定位助手 | 重命名必须一次改到位，并用"无残留引用"的 grep 断言收口（样例非公开 API，不做别名/兼容） |
 
 ---
 
@@ -123,7 +129,9 @@
 | `src/Ason.Bridge.Grpc/AsonBridgeGrpcExtensions.cs`、`src/Ason.Bridge.Mcp/AsonBridgeMcpExtensions.cs` | UPDATE | T1 授权钩子 |
 | `src/Ason.Bridge.McpHost/Program.cs` | UPDATE | T1 `--key`/`--header`；T2 视需要；T10 视需要（`--reflection` 不在此进程） |
 | `src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj` | UPDATE | **T10** 把 `Protos\ason_bridge.proto` 打进包（`Pack="true" PackagePath="protos\"`）；（可选）`Grpc.AspNetCore.Server.Reflection` + `MapGrpcReflectionService()` 作为 opt-in |
-| `README.*`、`docs/app-agent-separation.*` | UPDATE | **T10** 新增"非 .NET 调用方"小节：proto 获取路径、`protoc`/`grpcurl` 最小示例、服务与方法全名（三语） |
+| `README.*`、`docs/app-agent-separation.*` | UPDATE | **T10** 新增"非 .NET 调用方"小节：proto 获取路径、`protoc`/`grpcurl` 最小示例、服务与方法全名（三语）；**T12** 新增"调用方需要知道/配置什么"对照表（三语） |
+| `samples/ConsoleGrpcBridgeHost/**` → `samples/ConsoleBridgeApp/**`、`samples/ConsoleGrpcBridgeDemo/**` → `samples/ConsoleBridgeCaller/**` | RENAME/CREATE/DELETE | **T11** 消除"Host/Demo 谁是哪一侧"的反读；示例非公开 API，纯重命名 |
+| `Ason.sln`、`.github/workflows/ci.yml`、`docs/**`、`README.*`、`.agents/plans/**`、`docs/testing/**`、`tests/Ason.Bridge.Tests/TestSupport/**` | UPDATE | **T11** 重命名后的全量引用更新（含 CI 构建清单、三语命令块、E2E 助手与测试定位） |
 | `tests/Ason.Bridge.Tests/*` | CREATE/UPDATE | T1–T5 的新测试；T4 鲜度测试；T2 流式测试 |
 | `coverlet.runsettings`、`.github/workflows/ci.yml` | UPDATE | T5 样例覆盖率采集；T7 门禁与 Windows 作业补测；**T10 打包校验**（pack 后断言 nupkg 内含 proto） |
 | `Directory.Build.props` | UPDATE | T6 版本递增 |
@@ -288,6 +296,40 @@
 - **Risk**: 低（纯投递 + 文档）；唯一决策点是②的反射默认值及其与 T1 鉴权的组合语义。
 - **依赖/顺序**: **必须排在 T3 与 T4 之后** —— 那两项会改动 proto（`InvokeMcpTool`、`include_instance_declarations`），否则打包与文档要跟随两次。
 
+#### Task 11（T11 / 缺口 I）—— 示例命名可读性 + 角色图例（重命名）· 0.5 天
+- **Action**:
+  ① **重命名**：`samples/ConsoleGrpcBridgeHost/` → `samples/ConsoleBridgeApp/`（工程 `ConsoleBridgeApp.csproj`）、
+     `samples/ConsoleGrpcBridgeDemo/` → `samples/ConsoleBridgeCaller/`（工程 `ConsoleBridgeCaller.csproj`）；同步
+     `AssemblyName`/`RootNamespace`（若有）与输出名。
+  ② **引用全量更新**：`Ason.sln`（Project 行 + `NestedProjects`）、`.github/workflows/ci.yml`（Linux 作业构建清单）、
+     三语文档的所有命令块与形态表、`README.*`、`.agents/plans/app-agent-separation.plan.md`、
+     `docs/testing/app-agent-separation.tdd.md`、`tests/Ason.Bridge.Tests/TestSupport/`（路径定位助手）与相关 E2E 断言。
+  ③ **角色图例**：在 `docs/app-agent-separation.{md,zh-CN,es}` 形态矩阵上方加一行 ——
+     "`App`/`Host` = **应用侧**（暴露端点）；`Caller`/`Demo` = **调用方**（连接端点）；同一程序可以横跨两条边界（例如中继）"。
+  ④ **不做别名或兼容**（样例不是公开 API）。
+- **Mirror**: §3「样例/工程重命名」；既有命名风格（应用侧样例 `ConsoleMcpSample`/`WpfAppOnlyDemo`，角色即名字）。
+- **Validate**: `Select-String -Pattern 'ConsoleGrpcBridgeHost|ConsoleGrpcBridgeDemo'` 在 `git ls-files` 范围内**无残留**（历史提交与 §10 记录除外）；
+  `dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj -c Release` 仍 **91/91**；
+  `dotnet build samples/ConsoleBridgeApp -c Release` 与 `samples/ConsoleBridgeCaller -c Release` 通过；CI YAML 清单同步。
+- **Risk**: 低-中（机械但面广：漏一处会让 CI 构建失败或文档命令失效 → 用 grep 断言收口）。
+- **顺序**: 排在 **T8/T9 之前**（否则 CI 与文档要被改两遍）；与 T2/T5/T6 无依赖，可并行。
+- **备选（零 churn）**: 若维护者不愿改目录名，退化为"仅加 ③ 角色图例 + 在表头标注旧名"，并在 §10.3 记录该决定；**默认按 ①–④ 执行**。
+
+#### Task 12（T12 / 缺口 J）—— "调用方需要知道/配置什么"对照表（文档）· 0.5 天
+- **Action**: 在 `docs/app-agent-separation.{md,zh-CN,es}` 的"不用 Agent…"之后新增一节
+  **"调用方接入：需要知道什么、需要配置什么"**：
+  ① **表**：按形态（HTTP/OpenAPI、MCP-over-HTTP、gRPC（.NET／非 .NET）、stdio-only MCP）列出——调用方要准备
+     （一个 URL／一个客户端包装／**写一条启动命令**）、应用侧要配置（挂哪个 `AddAson*Bridge` + `Map*`、端口、`capabilities`、可选 key、`Execution`）、
+     以及"能否零配置接入"的判定：HTTP/OpenAPI 与 MCP-HTTP = ✅ 一个 URL；gRPC = ⚠️ 需客户端包装（非 .NET 还需 proto → T10）；stdio MCP = ❌ 必须写启动配置。
+  ② **三条前提显式写出**：**无注册中心/mDNS/自动发现**（URL 必须带外告知：命令行、配置、环境变量；manifest 只是"已知 URL 之后"的发现机制）；
+     **handle 是运行期状态**（不先取 instances 就会撞上 `handle-required`/`handle-ambiguous`/`handle-not-found`）；**`proxies` 是快照**（脚本用实例变量时的口径 → T4）。
+  ③ 能力开关由应用侧决定、调用方无法改变（关闭时：gRPC→`Unimplemented`、MCP→工具不存在、HTTP→`404`），与 T1 的**鉴权开关**并列说明。
+  ④ **交叉链接**：`docs/architecture.*` 的边界 D 段、`docs/index.*`「从哪里开始」行、`docs/execution-modes.*` 的第三轴段。
+- **Mirror**: 既有三语表格风格与 `i18n: localize-labels` 注释；`docs/app-agent-separation.*` 的"传输"与"不用 Agent"小节。
+- **Validate**: 三语标题层级与表格列数一致；表中结论都引用 **T10/T11 之后**的样例名与可跑命令；`git diff --stat` 仅文档。
+- **Risk**: 低（纯文档）；唯一风险是三语漂移 → 由 T9 的跨文档命名核对兜住。
+- **顺序**: 与 T11 同批（都在 T9 之前），避免文档被重复编辑两次。
+
 ---
 
 ## 6. Validation
@@ -317,12 +359,20 @@ dotnet pack src/Ason.Bridge.Grpc/Ason.Bridge.Grpc.csproj -c Release -o ./artifac
 #   非 .NET 调用方手工验证：
 #   grpcurl -plaintext -proto src/Ason.Bridge.Grpc/Protos/ason_bridge.proto \
 #           -d "{\"code\":\"return 1;\"}" localhost:5222 ason.bridge.v1.AsonBridge/ExecuteScript
+
+# T11：重命名后的"无残留引用"断言（历史提交与 §10 记录除外）
+git ls-files | Select-String -Pattern 'ConsoleGrpcBridgeHost|ConsoleGrpcBridgeDemo'   # 期望：无输出
+dotnet build samples/ConsoleBridgeApp/ConsoleBridgeApp.csproj -c Release
+dotnet build samples/ConsoleBridgeCaller/ConsoleBridgeCaller.csproj -c Release
+
+# T12：三语文档结构一致性（Case/边界/表格列数）
+git diff --stat -- docs/README.*      # 期望：仅文档
 ```
 
 **Wave 2 依赖顺序**：Task 1（T0）独立 → Task 2（T1）→ Task 3 + Task 4 合并为一次契约变更（proto 1.1）→
-**Task 10（T10，必须落在 T3/T4 之后：它交付的就是那份 proto）** → Task 5（T2，SSE 必须受 T1 约束）→
-Task 6（T5，覆盖 1–5、10 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
-合计约 **10.0 人日**（Wave 2；含本轮新增的 T10 0.5 天）。
+**Task 10（T10，必须落在 T3/T4 之后：它交付的就是那份 proto）** → **Task 11 + Task 12（T11/T12，重命名与调用方对照表；都在 T8/T9 之前，避免 CI 与文档被改两遍）** →
+Task 5（T2，SSE 必须受 T1 约束）→ Task 6（T5，覆盖 1–5、10–12 的新分支）→ Task 7（T6）与 Task 8（T7）→ Task 9（T8）。
+合计约 **11.0 人日**（Wave 2；含本轮新增的 T10 0.5 + T11 0.5 + T12 0.5）。
 
 ---
 
@@ -361,6 +411,8 @@ Task 6（T5，覆盖 1–5、10 的新分支）→ Task 7（T6）与 Task 8（T7
 - [ ] Task 8：CI 有覆盖率门禁；Windows 作业覆盖 `Ason.Tests`
 - [ ] Task 9：三语文档与证据报告同步；全量验证矩阵通过；每项任务都有 RED→GREEN 检查点提交
 - [ ] Task 10：`Ason.Bridge.Grpc` 包内含 `protos/ason_bridge.proto`（有解包断言，必要时并入 CI）；三语"非 .NET 调用方"小节含两条 proto 获取路径与最小示例；反射若开启则默认关闭且与 T1 鉴权语义一致
+- [ ] Task 11：`ConsoleBridgeApp` / `ConsoleBridgeCaller` 重命名到位、`git ls-files` 无残留引用、sln/CI/三语文档/E2E 助手同步、形态矩阵含角色图例（或按备选记录"仅图例"决定）
+- [ ] Task 12：三语新增"调用方接入：需要知道什么、需要配置什么"节，含形态对照表 + 三条前提（无自动发现／handle 运行期／proxies 快照）+ 交叉链接
 
 ---
 
@@ -379,6 +431,8 @@ Task 6（T5，覆盖 1–5、10 的新分支）→ Task 7（T6）与 Task 8（T7
 3. **Task 6 的 FlaUI**：接入 Windows 作业并 `continue-on-error` 观察，还是明确不接入并写入文档。
 4. **Task 10 的 gRPC 反射**：是否提供 opt-in 反射（`grpcurl`/非 .NET 调用方无需本地 proto 即可调用）；默认关闭；
    若开启，需与 T1 的鉴权一起评估（反射会把可调用面再对外广播一次）。
+5. **Task 11 的重命名目标名**：建议 `ConsoleBridgeApp` / `ConsoleBridgeCaller`（角色即名字）；
+   是否接受这套名字、或退化为"仅加角色图例、不改目录"（备选路径已写入 T11）。
 
 ---
 
@@ -420,4 +474,5 @@ Task 6（T5，覆盖 1–5、10 的新分支）→ Task 7（T6）与 Task 8（T7
 |---|---|
 | 新增缺口 **H** 与 Wave 2 **Task 10（T10）**：`Ason.Bridge.Grpc` 包内补齐 `ason_bridge.proto`（可选 opt-in gRPC 反射）+ 三语"非 .NET 调用方"小节 | 实测解包 `Ason.Bridge.Grpc.0.8.2.nupkg`：仅含 `lib/net9.0/Ason.Bridge.Grpc.dll` + `icon.png` + nuspec，无 proto；Python/Go/Java/Node 调用方无法从包生成客户端 |
 | 复杂度/合计 9.5 → **10.0 人日**；依赖顺序把 T10 排在 **T3/T4 之后** | T3/T4 会改动 proto（`InvokeMcpTool`、`include_instance_declarations`），打包与文档必须跟随**最终契约**，否则要做两次 |
-| 本轮**未**纳入计划：示例改名（`ConsoleGrpcBridgeHost`＝应用侧 / `ConsoleGrpcBridgeDemo`＝调用方，名字易反读）与"调用方需要知道/配置什么"对照表 | 按指示本轮只纳入"非 .NET 调用 gRPC"缺口；这两项待你裁决（如需纳入，建议并入 T9 或新增 Task 11） |
+| 本轮**未**纳入计划：示例改名（`ConsoleGrpcBridgeHost`＝应用侧 / `ConsoleGrpcBridgeDemo`＝调用方，名字易反读）与"调用方需要知道/配置什么"对照表 | 首次修订只纳入"非 .NET 调用 gRPC"缺口；**随后你回复"纳入"，这两项已作为 T11 / T12 写入本文件** |
+| 后续纳入（同一轮内追加）：缺口 **I / J** → **Task 11**（示例重命名 `ConsoleBridgeApp` / `ConsoleBridgeCaller` + 形态矩阵角色图例）、**Task 12**（三语新增"调用方接入：需要知道什么、需要配置什么"节）；复杂度合计 10.0 → **11.0 人日** | 你指示"纳入"；两项都是可用性/文档缺口，**无新增功能代码**（T11 纯重命名，T12 纯文档），因此不改动 §4 的功能面 |
