@@ -508,7 +508,7 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 - [x] Task 12：三语新增"调用方接入：需要知道什么、需要配置什么"节，含形态对照表 + 三条前提（无自动发现／handle 运行期／proxies 快照）+ 交叉链接
 - [x] Task 13：`WpfAppOnlyDemo --execution external` 可用且 operator 回环仍 `onUiThread=true`；`remote-runner` 分离部署有进程级 E2E（断言 manifest `execution=remote-runner`）；`docker` 取值的上报有断言且文档写明需要 Docker；`external` 既有交付不被重复实现
 - [x] Task 14：`samples/mcp/claude_desktop_config.json` 可被 JSON 解析且指向中继；HTTP MCP 片段与 stdio 片段都在；最小消费端 `--list`/`--call` 就位；三语 Samples 矩阵含"接到真实 MCP 客户端"一行
-- [ ] Task 15：`samples/bridge-examples.http` 覆盖发现/执行/错误面/鉴权四组，逐条执行有记录；三语 HTTP 片段改为引用该文件
+- [x] Task 15：`samples/bridge-examples.http` 覆盖发现/执行/错误面/鉴权四组，逐条执行有记录；三语 HTTP 片段改为引用该文件
 
 ---
 
