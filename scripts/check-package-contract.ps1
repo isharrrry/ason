@@ -48,6 +48,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell 5.1 does not load System.IO.Compression.FileSystem on demand, while PowerShell 7 does.
+# Loading it only when the type is missing keeps this script runnable from either shell - a maintainer on
+# Windows is as likely to type `powershell` as `pwsh`.
+if (-not ('System.IO.Compression.ZipFile' -as [type])) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+}
+
 # Resolved from the script's own location so the check works from any working directory.
 Push-Location (Split-Path -Parent $PSScriptRoot)
 try {
