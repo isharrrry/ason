@@ -7,6 +7,10 @@ public static class ScriptExecutor
 {
     private static ScriptOptions CreateDefaultOptions() => ScriptOptions.Default
         .AddReferences(typeof(ScriptExecutor).Assembly)
+        // The script preamble imports System.Text.Json, and on .NET Framework there is no shared framework to
+        // resolve it from: without this reference the generated script fails to compile with CS0234. The net472
+        // certificate leg in tests/LibDemo.SmokeTests is what surfaced it (net6.0+ resolves it anyway).
+        .AddReferences(typeof(System.Text.Json.JsonSerializer).Assembly)
         .AddImports("System", "System.Threading.Tasks", "AsonHostInterop");
 
     public static Task<object?> EvaluateAsync(string code, AsonHostInterop.IHostBridge hostBridge)

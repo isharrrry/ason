@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <!-- One leg per Windows runtime the demo application ships, so UI Automation can drive any of them:
+         WPF_DEMO_TFM picks the sample build the tests launch, and it defaults to net9.0-windows. FlaUI.UIA3
+         5.0.0 carries a net6.0-windows7.0 asset, so the oldest leg is covered too. -->
+    <TargetFrameworks>net6.0-windows;net9.0-windows;net10.0-windows</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

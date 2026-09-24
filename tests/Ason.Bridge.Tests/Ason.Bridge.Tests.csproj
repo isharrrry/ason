@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Both runtime legs the adapters ship: net9.0 is the floor the official MCP SDK allows and net10.0 is the
+         newest tier. Building the adapters for net10.0 only proves they compile; running this suite on net10.0 is
+         what proves the net10.0 assets behave, including the process-level end-to-end tests. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

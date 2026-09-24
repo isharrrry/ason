@@ -241,13 +241,13 @@ The gRPC contract is the interface, so a Python, Go, Java, Rust or `curl`-with-`
 
 ```xml
 <!-- 1. From the package: the file travels inside Ason.Bridge.Grpc -->
-<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.10.0" GeneratePathProperty="true" />
 <!-- the contract is then at $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
 ```
 
 ```bash
 # 2. From the repository, or from an unpacked package
-unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+unzip -o Ason.Bridge.Grpc.0.10.0.nupkg 'protos/*' -d ./ason-contract
 # src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
 ```
 
@@ -588,3 +588,25 @@ dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration R
 - Pass-through can only name a server and a tool; the bridge does not mirror the tool list of the MCP servers
   the application consumes, so a caller learns them from the application (or from the agent's own
   configuration) rather than from the manifest.
+
+## Framework support
+
+| Package | Assets | Notes |
+|---|---|---|
+| `Ason.Abstractions`, `Ason.Runner.Core`, `Ason` | `netstandard2.0` | One asset for everything from .NET Framework 4.6.2 on; this is what a legacy host embeds |
+| `Ason.Bridge`, `Ason.Bridge.Grpc`, `Ason.Bridge.OpenApi`, `Ason.RemoteBridge`, `Ason.ExternalExecutor` | `net6.0`, `net9.0`, `net10.0` | `Ason.Bridge` uses default interface members, so it cannot target netstandard2.0 |
+| `Ason.Bridge.Mcp`, `Ason.Bridge.McpHost` | `net9.0`, `net10.0` | The official MCP SDK requires net8+, and this repository does not ship a net8 tier |
+
+**A `net6.0` application cannot embed an MCP server, and does not have to.** It publishes gRPC (and HTTP/OpenAPI)
+and an MCP agent reaches it through the stdio relay, which is a separate process:
+
+```bash
+dotnet exec src/bin/Release/net9.0/Ason.Bridge.McpHost.dll --url http://localhost:5222
+```
+
+The application's manifest tells the truth about it: `capabilities.invokeMcpTool` is `false` and the tool list has
+no `ason_invoke_mcp_tool`. Everything else - the manifest, script execution, single-function calls, the operator
+API - is identical to a `net9.0`/`net10.0` host.
+
+**Where a legacy host cannot follow:** `Ason.ExternalExecutor` is an executable, so a .NET Framework host has to
+use in-process execution (`ExecutionMode.InProcess`); `ExternalProcess` and `docker` need .NET 6+.

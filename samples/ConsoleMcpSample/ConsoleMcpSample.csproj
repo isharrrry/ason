@@ -1,8 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- The only dependency is Ason (a single netstandard2.0 asset), so the net6.0 floor costs nothing here: this
+         is an agent-side sample a legacy host can also run. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

@@ -1,3 +1,5 @@
+using Ason.Compat;
+
 namespace Ason;
 
 // Processes raw replies from the ScriptAgent into executable C# script
@@ -5,7 +7,7 @@ internal static class ScriptReplyProcessor {
     // Entry point: clean up the raw agent reply into a script body
     public static string Process(string? agentReply) {
         if (string.IsNullOrWhiteSpace(agentReply)) return string.Empty;
-        string cleaned = StripCodeFences(agentReply);
+        string cleaned = StripCodeFences(agentReply!);
         cleaned = RemoveBlockComments(cleaned);
         cleaned = RemoveLineComments(cleaned);
         cleaned = StripDuplicateUsings(cleaned);

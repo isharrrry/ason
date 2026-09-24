@@ -1,9 +1,9 @@
-﻿using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Agents;
 using Microsoft.SemanticKernel.ChatCompletion;
 using System.Text;
 using System.Text.Json;
-
+using Ason.Compat;
 namespace Ason;
 
 internal class ExtractionOperator : RootOperator {

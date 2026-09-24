@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- One leg per runtime the libraries admit. Microsoft.AspNetCore.Mvc.Testing used to be referenced here and
+         was the reason this suite stayed on net9.0 - it ships a net8.0 asset only - but nothing in the repository
+         ever used it (no WebApplicationFactory anywhere), so the unused reference is gone and the oldest
+         supported host is covered. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
+    <!-- The net6.0 leg would otherwise compile as C# 10 (its default) while the sources use C# 12 syntax such as
+         primary constructors (CS8936); the compiler is the SDK's, so the language level is a project choice. -->
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -10,7 +17,6 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="ModelContextProtocol" Version="0.4.0-preview.3" />

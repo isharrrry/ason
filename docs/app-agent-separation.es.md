@@ -168,13 +168,13 @@ El contrato gRPC *es* la interfaz: un llamador en Python, Go, Java, Rust o `grpc
 
 ```xml
 <!-- 1. Desde el paquete: el fichero viaja dentro de Ason.Bridge.Grpc -->
-<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.10.0" GeneratePathProperty="true" />
 <!-- el contrato queda en $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
 ```
 
 ```bash
 # 2. Desde el repositorio, o desde el paquete descomprimido
-unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+unzip -o Ason.Bridge.Grpc.0.10.0.nupkg 'protos/*' -d ./ason-contract
 # src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
 ```
 
@@ -479,3 +479,26 @@ aplicación, y una aplicación cuya vida *es* la sesión del agente puede servir
 - El paso directo solo nombra un servidor y una herramienta: el puente no replica la lista de herramientas de
   los servidores MCP que consume la aplicación, así que el llamador las conoce por la aplicación (o por la
   configuración del agente), no por el manifiesto.
+
+## Frameworks admitidos
+
+| Paquete | Assets | Notas |
+|---|---|---|
+| `Ason.Abstractions`, `Ason.Runner.Core`, `Ason` | `netstandard2.0` | Un unico asset, consumible desde .NET Framework 4.6.2 y desde cualquier .NET moderno; es lo que incrusta un host heredado |
+| `Ason.Bridge`, `Ason.Bridge.Grpc`, `Ason.Bridge.OpenApi`, `Ason.RemoteBridge`, `Ason.ExternalExecutor` | `net6.0`, `net9.0`, `net10.0` | `Ason.Bridge` usa miembros de interfaz por defecto, asi que no puede bajar a netstandard2.0 |
+| `Ason.Bridge.Mcp`, `Ason.Bridge.McpHost` | `net9.0`, `net10.0` | El SDK oficial de MCP exige net8+, y este repositorio no publica un nivel net8 |
+
+**Una aplicacion `net6.0` no puede incrustar un servidor MCP, y no lo necesita.** Publica gRPC (y HTTP/OpenAPI) y
+un agente MCP la alcanza a traves del rele stdio, que es un proceso aparte:
+
+```bash
+dotnet exec src/bin/Release/net9.0/Ason.Bridge.McpHost.dll --url http://localhost:5222
+```
+
+El manifiesto lo dice con honestidad: `capabilities.invokeMcpTool` es `false` y la lista de herramientas no
+contiene `ason_invoke_mcp_tool`. Todo lo demas - manifiesto, ejecucion de scripts, llamadas a una funcion, la API
+de operadores - es identico a un host `net9.0`/`net10.0`.
+
+**Donde no puede seguir un host heredado:** `Ason.ExternalExecutor` es un ejecutable, asi que un host de .NET
+Framework tiene que usar ejecucion en proceso (`ExecutionMode.InProcess`); `ExternalProcess` y `docker` necesitan
+.NET 6+.

@@ -1,18 +1,40 @@
 <Project>
-  <!-- Copy Ason.ExternalExecutor host manifest files (runtimeconfig/deps) from the package into the consumer's output & publish directories -->
+  <!-- Copy the executor host manifest files (runtimeconfig/deps) that match the consuming project's framework.
 
-  <ItemGroup>
-    <AsonExternalExecutorHost Include="$(MSBuildThisFileDirectory)Ason.ExternalExecutor.runtimeconfig.json" Condition="Exists('$(MSBuildThisFileDirectory)Ason.ExternalExecutor.runtimeconfig.json')" />
-    <AsonExternalExecutorHost Include="$(MSBuildThisFileDirectory)Ason.ExternalExecutor.deps.json" Condition="Exists('$(MSBuildThisFileDirectory)Ason.ExternalExecutor.deps.json')" />
-  </ItemGroup>
+       The package carries one pair per framework under buildTransitive/host/<tfm>/, because a multi-targeted
+       executable has one pair per framework and handing a consumer the wrong pair makes the external execution
+       location fail at run time with a confusing message. So the folder is resolved from the consumer's own
+       framework, and a miss is a hard error instead of a silent no-op. -->
+
+  <Target Name="AsonExternalExecutor_ResolveHostFiles">
+    <PropertyGroup>
+      <!-- "net6.0" out of "net6.0" or "net6.0-windows". Deliberately not $(TargetFrameworkVersion): it carries a
+           'v' prefix (v6.0) and its unprefixed sibling is an SDK internal, so a regex over the moniker is the
+           dependable form - and a silent miss here is exactly the bug this file used to have. -->
+      <_AsonExecutorTfm>$([System.Text.RegularExpressions.Regex]::Match('$(TargetFramework)', '^net[0-9]+\.[0-9]+').Value)</_AsonExecutorTfm>
+      <_AsonExecutorHostDir>$(MSBuildThisFileDirectory)host/$(_AsonExecutorTfm)/</_AsonExecutorHostDir>
+    </PropertyGroup>
+
+    <ItemGroup Condition="'$(_AsonExecutorTfm)' != '' and Exists('$(_AsonExecutorHostDir)Ason.ExternalExecutor.runtimeconfig.json')">
+      <AsonExternalExecutorHost Include="$(_AsonExecutorHostDir)Ason.ExternalExecutor.runtimeconfig.json;$(_AsonExecutorHostDir)Ason.ExternalExecutor.deps.json" />
+    </ItemGroup>
+
+    <Error Condition="'$(_AsonExecutorTfm)' != '' and '@(AsonExternalExecutorHost)' == ''"
+           Code="ASONEXEC001"
+           Text="Ason.ExternalExecutor carries no host files for '$(_AsonExecutorTfm)' (target framework '$(TargetFramework)'). Supported frameworks: net6.0, net9.0, net10.0. Use ExecutionMode.InProcess, or add the framework to the package." />
+  </Target>
 
   <!-- Copy early so subsequent targets (e.g. packaging, single-file analysis) see them -->
-  <Target Name="AsonExternalExecutor_CopyHostFiles" AfterTargets="ResolveReferences" Condition="@(AsonExternalExecutorHost) != ''">
+  <Target Name="AsonExternalExecutor_CopyHostFiles" AfterTargets="ResolveReferences"
+          DependsOnTargets="AsonExternalExecutor_ResolveHostFiles"
+          Condition="@(AsonExternalExecutorHost) != ''">
     <Message Importance="Low" Text="[Ason.ExternalExecutor] Copying host manifest files to $(TargetDir)" />
     <Copy SourceFiles="@(AsonExternalExecutorHost)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
   </Target>
 
-  <Target Name="AsonExternalExecutor_CopyHostFiles_Publish" AfterTargets="Publish" Condition="'$(PublishDir)' != '' and @(AsonExternalExecutorHost) != ''">
+  <Target Name="AsonExternalExecutor_CopyHostFiles_Publish" AfterTargets="Publish"
+          DependsOnTargets="AsonExternalExecutor_ResolveHostFiles"
+          Condition="'$(PublishDir)' != '' and @(AsonExternalExecutorHost) != ''">
     <Message Importance="Low" Text="[Ason.ExternalExecutor] Copying host manifest files to $(PublishDir)" />
     <Copy SourceFiles="@(AsonExternalExecutorHost)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
   </Target>

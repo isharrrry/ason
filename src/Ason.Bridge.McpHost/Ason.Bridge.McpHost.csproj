@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Same floor as Ason.Bridge.Mcp. The relay is a tool process: its own framework does not constrain the
+         application it talks to, which is why a net6.0 application can still be driven over MCP through it. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

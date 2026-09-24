@@ -8,9 +8,13 @@ namespace WpfAgentDemo;
 public partial class App : Application {
 
     public App() {
+#if NET9_0_OR_GREATER
+        // ThemeMode is a .NET 9 API, and it is evaluation-only - hence the pragma, which is also how WptDemoApp
+        // handles it. The net6.0-windows leg simply has no theme to set.
 #pragma warning disable WPF0001
         ThemeMode = ThemeMode.Light;
 #pragma warning restore WPF0001
+#endif
     }
 
     protected override void OnStartup(StartupEventArgs e) {

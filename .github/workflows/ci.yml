@@ -24,13 +24,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Ason and Ason.Runner.Core multi-target net6.0 and net9.0, so both SDKs are installed.
+      # Wave 3: Ason and Ason.Runner.Core ship the netstandard2.0 asset only, while the adapters and samples
+      # cover net6.0/net9.0/net10.0 - so all three SDKs are installed, and the net472 certificate leg of the
+      # smoke tests runs in the Windows job (there is no .NET Framework on Linux).
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
             6.0.x
             9.0.x
+            10.0.x
 
       # Only cross-platform projects are built here. The WPF sample and the FlaUI UI tests target
       # *-windows, and the sample that targets net10.0-windows additionally needs a .NET 10 SDK;
@@ -49,46 +52,82 @@ jobs:
           dotnet build src/Ason.Bridge.McpHost/Ason.Bridge.McpHost.csproj --configuration Release
           dotnet build samples/LibDemo/LibDemo.csproj --configuration Release
           # The bridge samples are console applications, so unlike the WPF sample they also run here, and the
-          # console end-to-end tests exercise them on this job.
+          # console end-to-end tests exercise them on this job. Each one builds every leg it declares.
           dotnet build samples/ConsoleBridgeAppSample/ConsoleBridgeAppSample.csproj --configuration Release
           dotnet build samples/ConsoleAgentSample/ConsoleAgentSample.csproj --configuration Release
           dotnet build samples/ConsoleBridgeCallerSample/ConsoleBridgeCallerSample.csproj --configuration Release
+          dotnet build samples/ConsoleMcpSample/ConsoleMcpSample.csproj --configuration Release
+          dotnet build samples/ConsoleExtractorSample/ConsoleExtractorSample.csproj --configuration Release
+          # Pinned by MudBlazor 8.x (net8/net9 assets only), so no net6.0 leg is possible here; it is built so it
+          # cannot rot unnoticed, which is exactly what happened while it was in no build list at all.
+          dotnet build samples/BlazorAdvancedApp/BlazorAdvancedApp.csproj --configuration Release
           # The remote script host of a split deployment: the remote-runner end-to-end test starts this sample
           # as a second process, so it has to be built here as well.
           dotnet build samples/RemoteRunnerService/RunnerServiceSample.csproj --configuration Release
+          # The same host as a *consumer* of the published package (Ason.RemoteBridge), not of the local project.
+          # It had been broken for as long as nothing built it: it still referenced the retired Ason.RemoteRunner
+          # package, whose API no longer contains AddAsonScriptRunner/MapAson.
+          dotnet build samples/RemoteRunnerService/RemoteRunnerService.csproj --configuration Release
+          # Test fixtures that had no build of their own in CI.
+          dotnet build tests/TestMcpServer/TestMcpServer.csproj --configuration Release
+          dotnet build tests/TestRemoteExecutorServer/TestRemoteExecutorServer.csproj --configuration Release
+          # The template package plus every template half that does not need a platform workload. The MAUI app
+          # half is the one exception (android/ios/maccatalyst workloads); the matrix records it as by design.
+          dotnet pack samples/templates/Ason.ProjectTemplates.csproj --configuration Release --output artifacts/template-pack
+          dotnet build samples/templates/Content/Ason.Console.Template/Ason.Console.Template.csproj --configuration Release
+          dotnet build samples/templates/Content/Ason.BlazorServer.Template/Ason.BlazorServer.Template.csproj --configuration Release
+          dotnet build samples/templates/Content/Ason.Maui.Template/Ason.Maui.Template.Server/Ason.Maui.Template.Server.csproj --configuration Release
 
-      # The smoke tests run on both supported runtimes of the library. The net10.0 leg of that test
-      # project is exercised on Windows (see the comment above).
+      # Every runtime the library claims to support is exercised here; the net472 leg (the .NET Framework side
+      # of the netstandard2.0 asset) runs in the Windows job instead.
       # TRX files are what makes a failure readable: `scripts/emit-test-failures.ps1` turns them into check-run
       # annotations, which - unlike the job log - can be read without authentication.
-      - name: Smoke tests (net6.0 / net9.0)
+      - name: Smoke tests (net6.0 / net9.0 / net10.0)
         run: |
           dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net6.0 \
             --logger "trx;LogFileName=libdemo-net6.trx" --results-directory TestResults
           dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net9.0 \
             --logger "trx;LogFileName=libdemo-net9.trx" --results-directory TestResults
+          dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net10.0 \
+            --logger "trx;LogFileName=libdemo-net10.trx" --results-directory TestResults
 
       # Excluded here:
       #   * Docker      - those theory cases need a Docker daemon,
       #   * McpClientTests - they need live MCP servers/network.
       # Everything else in Ason.Tests runs in-process or via the external executor and is hermetic.
-      - name: Unit tests
+      #
+      # One leg per runtime, named explicitly - the same reason as the bridge suite below: a multi-target
+      # `dotnet test` writes a single TRX for all of its frameworks, and the annotations would then describe one
+      # framework while the step was supposed to run three.
+      - name: Unit tests (net6.0 / net9.0 / net10.0)
         run: |
-          dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release \
-            --logger "trx;LogFileName=ason-runner-tests.trx" --results-directory TestResults
-          dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release \
-            --logger "trx;LogFileName=ason-remoterunner-tests.trx" --results-directory TestResults
-          dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" \
-            --logger "trx;LogFileName=ason-tests.trx" --results-directory TestResults
+          for framework in net6.0 net9.0 net10.0; do
+            dotnet test tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj --configuration Release --framework "$framework" \
+              --logger "trx;LogFileName=ason-runner-tests-$framework.trx" --results-directory TestResults
+            dotnet test tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj --configuration Release --framework "$framework" \
+              --logger "trx;LogFileName=ason-remoterunner-tests-$framework.trx" --results-directory TestResults
+            dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --framework "$framework" \
+              --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" \
+              --logger "trx;LogFileName=ason-tests-$framework.trx" --results-directory TestResults
+          done
 
       # The bridge suite hosts gRPC and MCP in process and drives them over the wire; no Docker, desktop
       # session or network access is needed. Coverage is collected here because this is the job that always
       # runs the whole suite; the floor is checked per adapter right after.
-      - name: Bridge tests (with coverage)
+      #
+      # One leg per runtime the adapters ship, named explicitly: a multi-target `dotnet test` writes a single
+      # TRX for all of its frameworks (the last one wins), which would leave the annotations - the only part of
+      # a failed run that is readable from outside - describing one framework while both were supposed to run.
+      - name: Bridge tests (net9.0, with coverage)
         run: |
-          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release \
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --framework net9.0 \
             --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory artifacts/coverage \
-            --logger "trx;LogFileName=ason-bridge-tests.trx"
+            --logger "trx;LogFileName=ason-bridge-tests-net9.trx"
+
+      - name: Bridge tests (net10.0)
+        run: |
+          dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --framework net10.0 \
+            --logger "trx;LogFileName=ason-bridge-tests-net10.trx" --results-directory TestResults
 
       # Floors, not targets: a change that drops a whole area fails, ordinary refactoring does not. Sample
       # assemblies are excluded on purpose - each sample is a separate process, so its own assembly cannot be
@@ -124,44 +163,68 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The WPF samples cover three Windows frameworks each now (net6.0-windows/net9.0-windows/net10.0-windows),
+      # and all three legs build - including the original demo, whose ThemeMode usage is guarded by
+      # #if NET9_0_OR_GREATER. All three SDKs are therefore installed.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
+            6.0.x
             9.0.x
+            10.0.x
 
       - name: Build the WPF samples
         run: |
           dotnet build samples/WpfAppOnlyDemo/WpfAppOnlyDemo.csproj --configuration Release
           dotnet build samples/WpfAgentDemo/WpfAgentDemo.csproj --configuration Release
-          # The original WPF demo is built too, so a change to the library cannot silently break the sample
-          # that must keep working. One target framework on purpose: the project also targets net10.0-windows,
-          # which would need a .NET 10 SDK that is still in preview.
-          dotnet build samples/WptDemoApp/WpfSampleApp.csproj --configuration Release --framework net9.0-windows
+          # Also build the original WPF demo for every framework it targets, so a change to the library cannot
+          # silently break the sample that must keep working - on any of its legs.
+          dotnet build samples/WptDemoApp/WpfSampleApp.csproj --configuration Release
+          # Windows-only template halves (the MAUI app half is the documented exception: it needs the MAUI
+          # workloads, which these runners do not install).
+          dotnet build samples/templates/Content/Ason.WinForms.Template/Ason.WinForms.Template.csproj --configuration Release
+          dotnet build samples/templates/Content/Ason.Wpf.Template/Ason.Wpf.Template.csproj --configuration Release
+
+      # The certificate for the netstandard2.0 asset: this is the only place where what a .NET Framework host
+      # actually receives is *run* rather than merely compiled - and it found two real defects the moment it was
+      # added (a missing script reference and a version split in Microsoft.Bcl.AsyncInterfaces).
+      - name: Smoke tests (net472 - the netstandard2.0 asset runs)
+        run: dotnet test tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --configuration Release --framework net472 --logger "trx;LogFileName=libdemo-net472.trx" --results-directory TestResults
 
       # One command per line, no backslash continuation: the default shell of this job is pwsh, where a
       # trailing backslash is a literal argument rather than a line continuation. The Linux job runs bash,
       # where it is one - but a workflow that only holds together under one shell is a trap for the next edit.
-      - name: Bridge tests (includes the WPF application and agent end-to-end tests)
-        run: dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --logger "trx;LogFileName=ason-bridge-tests-windows.trx" --results-directory TestResults
+      #
+      # One leg per runtime, explicitly: the WPF end-to-end tests inside this suite start the real samples, so
+      # this is where the net10.0 adapters are exercised on the platform they are used on. A multi-target
+      # `dotnet test` would write one TRX for both legs and hide which one failed.
+      - name: Bridge tests (net9.0, includes the WPF application and agent end-to-end tests)
+        run: dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --framework net9.0 --logger "trx;LogFileName=ason-bridge-tests-net9-windows.trx" --results-directory TestResults
+
+      - name: Bridge tests (net10.0, includes the WPF application and agent end-to-end tests)
+        run: dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Release --framework net10.0 --logger "trx;LogFileName=ason-bridge-tests-net10-windows.trx" --results-directory TestResults
 
       # The library's own hermetic suite also runs here, so a Windows-only failure (file paths, the external
       # executor's process handling, a culture-dependent format) is caught on the platform most users are on.
-      - name: Library unit tests (Windows)
-        run: dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" --logger "trx;LogFileName=ason-tests-windows.trx" --results-directory TestResults
-
-      # The net10.0 leg of the smoke tests stays out until that SDK is GA: the project targets it, but a
-      # preview SDK on CI would make unrelated pull requests red for reasons that are not this repository's.
+      # One leg per runtime, explicitly (see the bridge steps above for why).
+      - name: Library unit tests (Windows, net6.0 / net9.0 / net10.0)
+        run: foreach ($framework in 'net6.0','net9.0','net10.0') { dotnet test tests/Ason.Tests/Ason.Tests.csproj --configuration Release --framework $framework --filter "DisplayName!~Docker&FullyQualifiedName!~McpClientTests" --logger "trx;LogFileName=ason-tests-$framework-windows.trx" --results-directory TestResults; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
 
       # FlaUI drives the original WPF demo through UI Automation. That needs an interactive desktop session,
       # which a hosted runner provides only inconsistently, so this job observes it instead of gating on it:
       # a failure here does not fail the build. What it looks for - a request that arrives over the network
       # ends up running on the UI thread - is asserted headlessly (and gating) by the bridge end-to-end tests
       # above, so nothing is left unverified when this step is red.
-      - name: UI automation (non-blocking)
+      #
+      # The test project ships one leg per Windows runtime and the sample application ships the same three, so
+      # WPF_DEMO_TFM can point it at any of them.
+      - name: UI automation (non-blocking, net6.0-windows / net9.0-windows / net10.0-windows)
         continue-on-error: true
         run: |
-          dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release
+          dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release --framework net6.0-windows
+          dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release --framework net9.0-windows
+          dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration Release --framework net10.0-windows
 
       # Same purpose as in the other job: a red run must say *which* test broke, in a place that can be read
       # without an authenticated session.

@@ -132,7 +132,7 @@ public class AsonClient : IChatClient {
 
         if (_options.UseRemoteRunner) {
             if (!string.IsNullOrWhiteSpace(_options.RemoteRunnerBaseUrl)) {
-                _ = EnableRemoteRunnerAsync(_options.RemoteRunnerBaseUrl, _options.StopLocalRunnerWhenEnablingRemote, _options.RemoteRunnerDockerImage);
+                _ = EnableRemoteRunnerAsync(_options.RemoteRunnerBaseUrl!, _options.StopLocalRunnerWhenEnablingRemote, _options.RemoteRunnerDockerImage);
             }
             else {
                 throw new ArgumentException("When UseRemoteRunner is true, you must provide a Remote runner base URL. Make sure your server is configured by calling RemoteRunnerServiceExtensions.AddRemoteScriptRunner and RemoteRunnerServiceExtensions.MapRemoteScriptRunner, then set the server URL in RemoteRunnerBaseUrl.", nameof(options));
@@ -241,7 +241,7 @@ public class AsonClient : IChatClient {
     }
 
     string BuildReceptionInstructions() {
-        if (!string.IsNullOrWhiteSpace(_options.ReceptionInstructions)) return _options.ReceptionInstructions;
+        if (!string.IsNullOrWhiteSpace(_options.ReceptionInstructions)) return _options.ReceptionInstructions!;
         return AgentPrompts.ReceptionAgentTemplate;
     }
 
@@ -391,6 +391,15 @@ public class AsonClient : IChatClient {
         while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false)) {
             while (channel.Reader.TryRead(out var update)) yield return update;
         }
+
+        // The producer above turns a cancelled run into a *completed* channel (it has to: an exception cannot
+        // cross a channel), so which path notices the cancellation first is a race - the reader throwing from
+        // WaitToReadAsync, or the producer completing the writer first. The runtime decides that race: on net9.0/
+        // net10.0 the net8.0 asset of SemanticKernel surfaces the cancellation early enough for the reader, while
+        // on net6.0 the netstandard2.0 asset does not, and the stream simply ended. That made a cancelled answer
+        // indistinguishable from a finished one on the net6.0 leg. The contract is the .NET one: a cancelled
+        // token ends this enumeration with OperationCanceledException, never with a silent completion.
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private async Task ExecuteInternalStreamingCoreAsync(IEnumerable<ChatMessage> messages, ChannelWriter<ChatResponseUpdate> writer, CancellationToken cancellationToken) {
@@ -402,7 +411,7 @@ public class AsonClient : IChatClient {
         if (!receptionResult.ProceedToScript) {
             var payload = receptionResult.AnswerPayload;
             if (!string.IsNullOrWhiteSpace(payload) && !thread.ChatHistory.Any(m => m.Role == AuthorRole.Assistant && m.Content == payload)) {
-                thread.ChatHistory.AddAssistantMessage(payload);
+                thread.ChatHistory.AddAssistantMessage(payload!);
             }
             return;
         }

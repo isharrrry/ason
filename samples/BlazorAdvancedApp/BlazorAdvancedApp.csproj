@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Both runtime tiers this repository runs on. MudBlazor 8.x ships net8/net9 assets, which a net10.0 host
+         consumes through NuGet's nearest-compatible rule - so the newest tier costs nothing here. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

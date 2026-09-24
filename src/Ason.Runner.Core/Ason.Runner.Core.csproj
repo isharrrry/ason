@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net9.0</TargetFrameworks>
+    <!-- Wave 3: one asset only - the netstandard2.0 build is what .NET Framework 4.6.2+ and every modern .NET
+         host consume. Keeping net6.0/net9.0 legs as well would add build and test surface, not consumers. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -23,6 +25,9 @@
          project shares (BaseOutputPath=..\bin) is not a floor, it is a race: this project copied 8.0.0 over the
          9.0.10 next to the stdio relay, and the relay child process then died on Linux with exit 134. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
+    <!-- netstandard2.0 has no in-box System.Text.Json (it is part of the framework from .NET 5 on), so it has
+         to be referenced here. Version matches what the rest of the graph resolves, to avoid NU1605. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
   </ItemGroup>
 
   <ItemGroup>

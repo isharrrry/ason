@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<BaseOutputPath>..\bin</BaseOutputPath>
@@ -27,16 +27,22 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
 	</ItemGroup>
 
-	<!-- Package host manifest files (runtimeconfig/deps) into buildTransitive so they are not added to the consumer project tree, but available for our targets to copy next to the consuming output -->
+	<!-- Host manifest files (runtimeconfig/deps) travel per target framework: a multi-targeted executable has one
+	     pair per framework, and a consuming project must get the pair matching its own framework. They are
+	     collected in a target so the list follows $(TargetFrameworks) automatically; evaluating $(OutputPath) at
+	     evaluation time is empty in the outer build, which is what used to fail with NU5019. -->
+	<Target Name="AsonExternalExecutor_CollectHostFiles" BeforeTargets="_GetPackageFiles">
+		<ItemGroup>
+			<None Include="$(BaseOutputPath)$(Configuration)\%(AsonExecutorTfm.Identity)\$(AssemblyName).runtimeconfig.json"
+			      Pack="true" PackagePath="buildTransitive/host/%(AsonExecutorTfm.Identity)/" />
+			<None Include="$(BaseOutputPath)$(Configuration)\%(AsonExecutorTfm.Identity)\$(AssemblyName).deps.json"
+			      Pack="true" PackagePath="buildTransitive/host/%(AsonExecutorTfm.Identity)/" />
+		</ItemGroup>
+	</Target>
+
 	<ItemGroup>
-		<Content Include="$(OutputPath)$(AssemblyName).runtimeconfig.json">
-			<Pack>true</Pack>
-			<PackagePath>buildTransitive/</PackagePath>
-		</Content>
-		<Content Include="$(OutputPath)$(AssemblyName).deps.json">
-			<Pack>true</Pack>
-			<PackagePath>buildTransitive/</PackagePath>
-		</Content>
+		<!-- One item per framework; the target above batches over them. -->
+		<AsonExecutorTfm Include="$(TargetFrameworks)" />
 		<!-- Explicitly include the targets file in the nupkg (SDK does not auto-include arbitrary buildTransitive files inside project dir unless marked) -->
 		<None Include="buildTransitive/Ason.ExternalExecutor.targets" Pack="true" PackagePath="buildTransitive/" />
 		<None Include="icon.png" Pack="true" PackagePath="\"/>

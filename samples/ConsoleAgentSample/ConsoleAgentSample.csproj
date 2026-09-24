@@ -2,11 +2,21 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Three legs, matching its WPF twin and the application-side console sample: the agent side can drive a
+         bridge over gRPC from an old host too, and the MCP client is the part that needs net8+. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- One property decides whether this leg carries the MCP client; the reference and the compile symbol hang off
+       it, so a new leg is added by editing TargetFrameworks alone. Note the negative condition: comparing
+       $(TargetFrameworkVersion) fails silently because that value carries a 'v' prefix (v9.0). -->
+  <PropertyGroup>
+    <AsonMcpSupported Condition="'$(TargetFramework)' != 'net6.0'">true</AsonMcpSupported>
+    <AsonMcpSupported Condition="'$(AsonMcpSupported)' == ''">false</AsonMcpSupported>
   </PropertyGroup>
 
   <!-- The agent side as a console program: cross-platform, no UI, no operators of its own. The WPF agent
@@ -15,7 +25,14 @@
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge\Ason.Bridge.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(AsonMcpSupported)' == 'true'">
     <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
   </ItemGroup>
+
+  <PropertyGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <DefineConstants>$(DefineConstants);ASON_MCP</DefineConstants>
+  </PropertyGroup>
 
 </Project>

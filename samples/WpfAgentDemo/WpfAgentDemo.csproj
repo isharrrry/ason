@@ -2,12 +2,22 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <!-- Three Windows legs, same shape as WpfAppOnlyDemo: on net6.0-windows there is no MCP client (the official
+         SDK needs net8+) and the agent drives the application over gRPC, or through the stdio relay. -->
+    <TargetFrameworks>net6.0-windows;net9.0-windows;net10.0-windows</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Only the legs that can have MCP pull it in. The condition is written as "everything except net6": comparing
+       $(TargetFrameworkVersion) would fail silently because that value carries a 'v' prefix - and a silent gate
+       failure is not hypothetical, it once left every leg without MCP while the build stayed green. -->
+  <PropertyGroup>
+    <AsonMcpSupported Condition="'$(TargetFramework)' != 'net6.0-windows'">true</AsonMcpSupported>
+    <AsonMcpSupported Condition="'$(AsonMcpSupported)' == ''">false</AsonMcpSupported>
   </PropertyGroup>
 
   <!-- The agent side. It declares no [AsonOperator] at all: it reads the application's operator API from the
@@ -16,7 +26,14 @@
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge\Ason.Bridge.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(AsonMcpSupported)' == 'true'">
     <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
   </ItemGroup>
+
+  <PropertyGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <DefineConstants>$(DefineConstants);ASON_MCP</DefineConstants>
+  </PropertyGroup>
 
 </Project>

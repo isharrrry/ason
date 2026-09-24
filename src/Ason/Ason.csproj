@@ -1,10 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net9.0</TargetFrameworks>
+    <!-- Wave 3: see Ason.Runner.Core - a single netstandard2.0 asset, consumed by .NET Framework 4.6.2+ and by
+         every modern .NET host. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Nullable stays on, but netstandard2.0's reference assemblies carry no nullable annotations: guards such
+         as `string.IsNullOrWhiteSpace(x)` have no NotNullWhen(false) there, so they cannot narrow `x` and the
+         compiler reports CS8602/CS8604/CS8603 at call sites the net9.0-annotated BCL narrowed by itself. The
+         affected sites state what the guard proved with `!` (erased at compile time, no behaviour change) rather
+         than weakening Nullable for the whole project. -->
     <BaseOutputPath>..\bin</BaseOutputPath>
 	<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 	<IsPackable>true</IsPackable>
@@ -21,6 +28,14 @@
     <PackageReference Include="Microsoft.SemanticKernel.Agents.Core" Version="1.45.0" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.7" />
     <PackageReference Include="ModelContextProtocol.Core" Version="0.4.0-preview.3" />
+    <!-- netstandard2.0 has no in-box System.Text.Json; version matches the rest of the graph (no NU1605). -->
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <!-- The netstandard2.0 asset needs the IAsyncEnumerable/IAsyncDisposable shims. Pinned up to the version the
+         graph already forces (ModelContextProtocol.Core -> System.Net.ServerSentEvents 10.0.0-rc.2 -> this):
+         without an explicit pin this project resolved a different one, so the compiled assembly asked for
+         Microsoft.Bcl.AsyncInterfaces 10.0.0.0 while consumers had 8.0.0.0 - a FileNotFoundException at run time
+         that only the process-level tests could see. Pinning down to 8.0.0 instead trips NU1605. -->
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.0-rc.2.25502.107" />
   </ItemGroup>
 
   <ItemGroup>

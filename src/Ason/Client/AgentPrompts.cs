@@ -154,7 +154,7 @@ public static class AgentPrompts
 
         CultureInfo culture;
         try {
-            culture = CultureInfo.GetCultureInfo(answerLanguage.Trim());
+            culture = CultureInfo.GetCultureInfo(answerLanguage!.Trim());
         }
         catch (CultureNotFoundException ex) {
             throw new ArgumentException(

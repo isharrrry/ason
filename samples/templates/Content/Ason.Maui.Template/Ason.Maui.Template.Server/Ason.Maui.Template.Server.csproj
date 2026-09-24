@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- The platform-neutral half of the MAUI template: it builds on every tier, unlike the app half next to it. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Platforms>AnyCPU;x64</Platforms>
@@ -10,7 +11,8 @@
   <ItemGroup>
     <PackageReference Include="Ason.ExternalExecutor" Version="0.2.20" />
     <PackageReference Include="Ason.RemoteBridge" Version="0.2.20" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
 </Project>

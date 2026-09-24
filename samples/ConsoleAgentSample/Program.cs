@@ -2,7 +2,9 @@ using System.Reflection;
 using Ason;
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
+#if ASON_MCP
 using Ason.Bridge.Mcp;
+#endif
 using AsonRunner;
 using Microsoft.SemanticKernel.ChatCompletion;
 
@@ -15,6 +17,10 @@ using Microsoft.SemanticKernel.ChatCompletion;
 //   ConsoleAgentSample --url http://localhost:5223/mcp --transport mcp --list
 //   ConsoleAgentSample --url http://localhost:5222 --send "add 20 and 22"    # needs MY_OPEN_AI_KEY
 //   ConsoleAgentSample --url http://localhost:5222 --send "rename employee 1 to Ada"
+//
+// The net6.0 leg has no MCP client (the official SDK needs net8+, see src/Ason.Bridge.Mcp). It says so instead
+// of pretending: --transport mcp stops with a message naming the two working alternatives.
+const string McpUnavailable = "this build has no MCP client (the official MCP SDK requires net8+; this is the net6.0 leg). Use --transport grpc, or drive the application through the stdio relay (Ason.Bridge.McpHost).";
 
 var url = Value("--url") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_URL") ?? "http://localhost:5222";
 var transport = (Value("--transport") ?? Environment.GetEnvironmentVariable("ASON_BRIDGE_TRANSPORT") ?? "grpc").ToLowerInvariant();
@@ -25,14 +31,24 @@ if (transport is not ("grpc" or "mcp")) {
     Console.Error.WriteLine($"unknown transport '{transport}'; expected 'grpc' or 'mcp'");
     return 2;
 }
+if (transport == "mcp" && !McpSupported()) {
+    Console.Error.WriteLine(McpUnavailable);
+    return 2;
+}
 
 GrpcAsonBridgeClient? grpc = null;
+#if ASON_MCP
 McpAsonBridgeClient? mcp = null;
+#endif
 AsonBridgeManifest manifest;
 try {
     if (transport == "mcp") {
+#if ASON_MCP
         mcp = await McpAsonBridgeClient.ConnectAsync(url);
         manifest = await mcp.GetManifestAsync();
+#else
+        throw new PlatformNotSupportedException(McpUnavailable);
+#endif
     }
     else {
         grpc = GrpcAsonBridgeClient.Connect(url);
@@ -75,7 +91,11 @@ try {
         ExecutionMode = ExecutionMode.ExternalProcess,
         TransportFactory = grpc is not null
             ? () => new GrpcAsonBridgeTransport(grpc)
+#if ASON_MCP
             : () => new McpAsonBridgeTransport(mcp!),
+#else
+            : () => throw new PlatformNotSupportedException(McpUnavailable),
+#endif
         ForbiddenScriptKeywords = new[] { "System.IO", "System.Reflection", "Process.Start", "DllImport" }
     };
     var agent = new AsonClient(chat, new RootOperator(new object()), library, options);
@@ -88,7 +108,19 @@ try {
 }
 finally {
     if (grpc is not null) await grpc.DisposeAsync();
+#if ASON_MCP
     if (mcp is not null) await mcp.DisposeAsync();
+#endif
+}
+
+// Declared next to the other helpers so the transport check at the top can call it: on the net6.0 leg the MCP
+// client is compiled out, and everything user-facing stays the same.
+static bool McpSupported() {
+#if ASON_MCP
+    return true;
+#else
+    return false;
+#endif
 }
 
 string? Value(string name) {

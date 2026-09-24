@@ -38,7 +38,9 @@ public class OperatorBase {
 
     internal async Task Reload() {
         if (!IsInitialized) {
-            var taskCompletionSource = new TaskCompletionSource();
+            // The non-generic TaskCompletionSource is netstandard2.1+; netstandard2.0 only has the generic one,
+            // so the payload is a throw-away bool (the task is only ever awaited for completion).
+            var taskCompletionSource = new TaskCompletionSource<bool>();
             RootOperator.OperatorTaskCompletions[Handle] = taskCompletionSource;
             Reopen();
             await Task.Delay(1).ConfigureAwait(false); // Allow UI thread to process unload
@@ -112,7 +114,7 @@ public class OperatorBase<TAttached> : OperatorBase {
 }
 
 public class RootOperator : OperatorBase {
-    internal readonly ConcurrentDictionary<string, TaskCompletionSource> OperatorTaskCompletions = new();
+    internal readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> OperatorTaskCompletions = new();
 
     // Publicly readable so a host (and the bridge built on top of it) can enumerate the operators it can
     // address, which is what the single-function interface needs in order to resolve an operator to a handle.
@@ -125,8 +127,8 @@ public class RootOperator : OperatorBase {
     }
 
     internal void CompleteNavigationTask(OperatorBase childOperator) {
-        if (OperatorTaskCompletions.TryRemove(childOperator.Handle, out TaskCompletionSource? tcs)) {
-            tcs.SetResult();
+        if (OperatorTaskCompletions.TryRemove(childOperator.Handle, out TaskCompletionSource<bool>? tcs)) {
+            tcs.SetResult(true);
         }
     }
 

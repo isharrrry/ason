@@ -2,7 +2,9 @@ using System.Net;
 using System.Net.Sockets;
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
+#if ASON_MCP
 using Ason.Bridge.Mcp;
+#endif
 using Ason.Bridge.OpenApi;
 using LibDemo;
 using Microsoft.AspNetCore.Builder;
@@ -71,13 +73,17 @@ builder.WebHost.ConfigureKestrel(kestrel => {
     kestrel.ListenLocalhost(mcpPort, endpoint => endpoint.Protocols = HttpProtocols.Http1);
 });
 builder.Services.AddAsonGrpcBridge(runtime, enableReflection: Has("--reflection"));
+#if ASON_MCP
 builder.Services.AddAsonMcpBridge(runtime);
+#endif
 // The same contract, for generic HTTP clients and Swagger UI. Adding a transport is one line per side.
 builder.Services.AddAsonOpenApiBridge(runtime);
 
 var app = builder.Build();
 app.MapAsonGrpcBridge();
+#if ASON_MCP
 app.MapAsonMcpBridge();
+#endif
 app.MapAsonOpenApiBridge();
 
 await app.StartAsync();
@@ -85,11 +91,20 @@ await app.StartAsync();
 var manifest = await runtime.GetManifestAsync();
 Console.WriteLine($"ASON application bridge listening.");
 Console.WriteLine($"  gRPC : http://localhost:{port}");
+#if ASON_MCP
 Console.WriteLine($"  MCP  : http://localhost:{mcpPort}/mcp");
+#else
+Console.WriteLine($"  MCP  : not embedded in this build (no official MCP SDK below net8) - an MCP agent can still");
+Console.WriteLine($"         drive this application through the stdio relay: Ason.Bridge.McpHost --url http://localhost:{port}");
+#endif
 Console.WriteLine($"  HTTP : http://localhost:{mcpPort}/ason/openapi.json");
 Console.WriteLine($"  {manifest.Api.Operators.Count} operators, {manifest.Api.MethodCount} methods, execution {manifest.Execution}");
 // One line that says "the bridge is up and this is what it is", so a script or a test can wait for it.
+#if ASON_MCP
 Console.WriteLine($"ASON_BRIDGE_READY grpc=http://localhost:{port} mcp=http://localhost:{mcpPort}/mcp execution={manifest.Execution} app={manifest.AppName} protocol={manifest.ProtocolVersion}");
+#else
+Console.WriteLine($"ASON_BRIDGE_READY grpc=http://localhost:{port} mcp=none execution={manifest.Execution} app={manifest.AppName} protocol={manifest.ProtocolVersion}");
+#endif
 Console.WriteLine("Press Ctrl+C to stop.");
 
 await app.WaitForShutdownAsync();

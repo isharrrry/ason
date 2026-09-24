@@ -7,7 +7,10 @@
     <Description>ASON templates for Blazor, WPF, WinFormsm and MAUI</Description>
     <PackageTags>dotnet-new;templates;AI;Ason;Blazor;WPF;WinForms;MAUI</PackageTags>
     <PackageType>Template</PackageType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- The pack project follows the two runtime tiers the templates scaffold. What it *is* does not depend on
+         the TFM (it ships content), but leaving it on the older tier is how a package ends up disagreeing with
+         everything it contains. `dotnet pack` writes the same nupkg once per tier; the content is identical. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <IncludeContentInPack>true</IncludeContentInPack>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <ContentTargetFolders>content</ContentTargetFolders>

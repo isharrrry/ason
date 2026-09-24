@@ -1,6 +1,8 @@
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
+#if ASON_MCP
 using Ason.Bridge.Mcp;
+#endif
 using Ason.Bridge.OpenApi;
 using LibDemo;
 using Microsoft.AspNetCore.Builder;
@@ -69,21 +71,37 @@ internal sealed class BridgeHost : IDisposable {
             kestrel.ListenLocalhost(mcpPort, endpoint => endpoint.Protocols = HttpProtocols.Http1);
         });
         builder.Services.AddAsonGrpcBridge(runtime);
+#if ASON_MCP
         builder.Services.AddAsonMcpBridge(runtime);
+#endif
         // A third transport for generic HTTP clients and Swagger UI, mapped on the MCP listener below.
         builder.Services.AddAsonOpenApiBridge(runtime);
 
         var app = builder.Build();
         app.MapAsonGrpcBridge();
+#if ASON_MCP
         app.MapAsonMcpBridge();
+#endif
         app.MapAsonOpenApiBridge();
         app.Start();
 
-        var host = new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", $"http://localhost:{mcpPort}/mcp", $"http://localhost:{mcpPort}/ason/openapi.json") {
+        var host = new BridgeHost(app, runtime, $"http://localhost:{grpcPort}", McpEndpointOrNote(mcpPort), $"http://localhost:{mcpPort}/ason/openapi.json") {
             Execution = execution
         };
         return host;
     }
+
+    /// <summary>
+    /// The MCP endpoint of this build, or an honest note that there is none: the official MCP SDK needs net8+, so
+    /// the net6.0-windows leg has no embedded MCP server and is driven over gRPC/OpenAPI - or through the stdio
+    /// relay when the caller is an MCP agent. Reporting the port anyway would be a lie the caller cannot see.
+    /// </summary>
+    static string McpEndpointOrNote(int mcpPort) =>
+#if ASON_MCP
+        $"http://localhost:{mcpPort}/mcp";
+#else
+        "none on this build (no MCP SDK below net8; use the stdio relay)";
+#endif
 
     public string OpenApiUrl { get; }
 

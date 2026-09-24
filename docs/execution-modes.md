@@ -17,7 +17,7 @@
   Requires Docker installed locally.  
   Pull the required container before running the app:
 
-  > docker pull ghcr.io/alexgoon/ason:0.9.0
+  > docker pull ghcr.io/alexgoon/ason:0.10.0
 
 - **Remote server** – Scripts execute on a remote server, either in an external process or Docker container.  
   See the next section for configuration details.

@@ -183,7 +183,7 @@ ChatResponse = await asonChatClient.SendAsync(userText);
   Requiere Docker instalado localmente.  
   Descarga el contenedor requerido antes de ejecutar la aplicación:
 
-  > docker pull ghcr.io/alexgoon/ason:0.9.0
+  > docker pull ghcr.io/alexgoon/ason:0.10.0
 
 - **Servidor remoto** – Los scripts se ejecutan en un servidor remoto, ya sea en un proceso externo o en un contenedor Docker.  
   Consulta [modos de ejecución y ejecución remota](docs/execution-modes.es.md) para más detalles.

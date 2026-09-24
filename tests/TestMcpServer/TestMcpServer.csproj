@@ -1,17 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- The protocol fixture the MCP client tests launch. Built on both runtime tiers the MCP family ships, so a
+         change that only breaks on net10.0 does not wait for someone to notice by hand. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <BaseOutputPath>..\bin</BaseOutputPath>
   </PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+		<!-- The Microsoft.Extensions.* line has to match what the MCP SDK itself was built against, per leg. It did
+		     not, and the fixture could not start: ModelContextProtocol's net9.0 asset asks for
+		     Microsoft.Extensions.Primitives 9.0.0.0 while Hosting 8.0.1 pulled 8.0.0 into the output, so the host
+		     threw FileNotFoundException before answering a single request. (The same class of defect as the
+		     Microsoft.Bcl.AsyncInterfaces split the net472 smoke leg found.) -->
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" Condition="'$(TargetFramework)' == 'net9.0'" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
 		<PackageReference Include="ModelContextProtocol" Version="0.4.0-preview.3" />
-		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.10" Condition="'$(TargetFramework)' == 'net9.0'" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
 	</ItemGroup>
 	
 </Project>

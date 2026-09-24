@@ -51,11 +51,11 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | Suite | Framework | Notes |
 |---|---|---|
 | `tests/LibDemo.SmokeTests` | net6.0 / net9.0 / net10.0 | marker discovery, type forwards and real in-process operator invocation |
-| `tests/Ason.Tests` | net9.0 | the `E2E_AllExecutionModes(executionMode: Docker, …)` cases need a Docker daemon; `McpClientTests` needs live MCP servers |
-| `tests/Ason.Runner.Tests` | net9.0 | script runner |
-| `tests/Ason.RemoteRunner.Tests` | net9.0 | the integration test is skipped unless `ASON_REMOTE_RUNNER_URL` points at a running remote runner |
-| `tests/Ason.Bridge.Tests` | net9.0 | the bridge core, the gRPC/MCP/OpenAPI adapters (each host is started in-process and driven over the wire), the runner transport seam, the relay endpoint, and the WPF samples' end-to-end tests — which skip on Linux and on a machine where the Windows-only samples have not been built |
-| `tests/WpfDemoApp.UiTests` | net9.0-windows | FlaUI UI automation — needs an interactive Windows desktop session |
+| `tests/Ason.Tests` | net6.0 / net9.0 / net10.0 | the `E2E_AllExecutionModes(executionMode: Docker, …)` cases need a Docker daemon; `McpClientTests` needs live MCP servers. One `--framework` leg per runtime — see the note on `Ason.Bridge.Tests` below |
+| `tests/Ason.Runner.Tests` | net6.0 / net9.0 / net10.0 | script runner, on the oldest and newest supported host |
+| `tests/Ason.RemoteRunner.Tests` | net6.0 / net9.0 / net10.0 | the integration test is skipped unless `ASON_REMOTE_RUNNER_URL` points at a running remote runner |
+| `tests/Ason.Bridge.Tests` | net9.0 / net10.0 | the bridge core, the gRPC/MCP/OpenAPI adapters (each host is started in-process and driven over the wire), the runner transport seam, the relay endpoint, the repository-wide build matrix, and the WPF samples' end-to-end tests — which skip on Linux and on a machine where the Windows-only samples have not been built. Both legs run because the adapters ship both; run them one `--framework` at a time, since a multi-target `dotnet test` writes a single TRX for all of its frameworks |
+| `tests/WpfDemoApp.UiTests` | net6.0-windows / net9.0-windows / net10.0-windows | FlaUI UI automation — needs an interactive Windows desktop session, so CI runs it with `continue-on-error`. `WPF_DEMO_TFM` selects which sample build it drives (default `net9.0-windows`) |
 
 The bridge packages (`Ason.Bridge`, `Ason.Bridge.Grpc`, `Ason.Bridge.Mcp`, `Ason.Bridge.McpHost`) and their
 test suite are cross-platform and run on Linux; see [application / agent separation](app-agent-separation.md).
@@ -105,7 +105,14 @@ the adapter floors, and unpacks the `Ason.Bridge.Grpc` package to prove the ship
 `protos/ason_bridge.proto`. A second job (`windows-samples`) builds the WPF samples and re-runs
 `tests/Ason.Bridge.Tests` plus the library suite on Windows, which is what makes those end-to-end tests actually
 execute; it also runs the FlaUI UI tests with `continue-on-error`, because UI Automation needs an interactive
-desktop session a hosted runner provides only inconsistently. The net10.0 leg stays out until that SDK is GA.
+desktop session a hosted runner provides only inconsistently. Both jobs install the .NET 6, 9 and 10 SDKs, and the
+suites that ship more than one runtime asset run one `--framework` leg per runtime (the smoke tests on
+`net6.0`/`net9.0`/`net10.0`, the library/runner/remote-runner suites on `net6.0`/`net9.0`/`net10.0`, the bridge suite
+on `net9.0`/`net10.0`, the UI tests on the three Windows runtimes, plus the `net472` leg on Windows). The build step
+also compiles every sample, test fixture and template half — including the ones that used to sit in no build list at
+all, and on both of the tiers this repository ships (`net9.0` and `net10.0`) — and the template package is packed.
+Which project must declare which frameworks, and why a few stay narrower, is a test rather than a convention:
+`tests/Ason.Bridge.Tests/BuildMatrixTests.cs`.
 
 Every test step writes a TRX file, and one last step (`scripts/emit-test-failures.ps1`, guarded by
 `if: failure()`) turns them into check-run annotations. That is deliberate: the job log of a failed run can only

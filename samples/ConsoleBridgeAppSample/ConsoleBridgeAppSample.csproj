@@ -2,11 +2,22 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Three legs on purpose: net6.0 is the "old host" shape, where the application has no embedded MCP server
+         (the official SDK needs net8+, see src/Ason.Bridge.Mcp) and is driven over gRPC/OpenAPI - or through the
+         stdio relay when the caller is an MCP agent. net9.0/net10.0 keep the full transport set. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- One property decides whether this leg carries MCP; the reference and the compile symbol hang off it, so a
+       new leg (net11) is added by editing TargetFrameworks alone. Note the negative condition: comparing
+       $(TargetFrameworkVersion) fails silently because that value carries a 'v' prefix (v9.0). -->
+  <PropertyGroup>
+    <AsonMcpSupported Condition="'$(TargetFramework)' != 'net6.0'">true</AsonMcpSupported>
+    <AsonMcpSupported Condition="'$(AsonMcpSupported)' == ''">false</AsonMcpSupported>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,7 +26,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ason.Bridge.Grpc\Ason.Bridge.Grpc.csproj" />
-    <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
     <ProjectReference Include="..\..\src\Ason.Bridge.OpenApi\Ason.Bridge.OpenApi.csproj" />
     <ProjectReference Include="..\LibDemo\LibDemo.csproj" />
     <!-- Referenced so the sample can demonstrate Execution = ExternalProcess. The NuGet package copies the
@@ -24,11 +34,26 @@
     <ProjectReference Include="..\..\src\Ason.ExternalExecutor\Ason.ExternalExecutor.csproj" />
   </ItemGroup>
 
-  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build">
+  <ItemGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <DefineConstants>$(DefineConstants);ASON_MCP</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Only in the inner (per framework) build: AfterTargets="Build" also runs in the outer dispatch build, where
+       $(OutDir) is empty and the Copy task would fail with MSB3023. -->
+  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+    <PropertyGroup>
+      <!-- "net6.0" out of "net6.0" or "net6.0-windows": the executor is a framework-independent exe, so its host
+           files live under the plain framework folder even for a Windows-targeted sample. -->
+      <_AsonExecutorTfm>$([System.Text.RegularExpressions.Regex]::Match('$(TargetFramework)', '^net[0-9]+\.[0-9]+').Value)</_AsonExecutorTfm>
+    </PropertyGroup>
     <ItemGroup>
-      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.deps.json" />
+      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\$(_AsonExecutorTfm)\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\$(_AsonExecutorTfm)\Ason.ExternalExecutor.deps.json" />
     </ItemGroup>
-    <Copy SourceFiles="@(AsonExternalExecutorHostFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(AsonExternalExecutorHostFiles)' != ''" />
+    <Copy SourceFiles="@(AsonExecutorHostFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(AsonExecutorHostFiles)' != ''" />
   </Target>
 
 </Project>

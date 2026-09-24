@@ -73,15 +73,44 @@ public class AsonClientAdditionalTests {
 
     [Fact]
     public async Task Cancellation_DuringAnswerStreaming() {
-        var repair = new NoInvokeRepairExecutor();
-        var chat = new DelayedQueueChatService(50, "LongAnswerThatWillBeCancelled");
-        var client = CreateClient(chat, repair);
+        // Two things are asserted, and both matter: cancelling stops the stream before it completes (the double
+        // yields one character per 50 ms, so an uncancelled run consumes all 27 chunks), and it surfaces as the
+        // .NET cancellation shape. The second one used to depend on the runtime: the client's background producer
+        // converts a cancelled run into a completed channel, so whichever path noticed the token first decided
+        // whether the caller saw OperationCanceledException or a silent, finished-looking stream - and the
+        // net6.0 leg resolves the netstandard2.0 SemanticKernel asset, which lost that race. The client now
+        // re-checks the token after the channel completes, so all three runtimes behave the same.
+        const string answer = "LongAnswerThatWillBeCancelled";
+        var chat = new DelayedQueueChatService(50, answer);
+        var client = CreateClient(chat, new NoInvokeRepairExecutor());
         using var cts = new CancellationTokenSource();
+        var consumed = 0;
         var task = Task.Run(async () => {
-            await foreach (var _ in client.SendStreamingAsync("question", cts.Token)) { /* consume */ }
+            await foreach (var _ in client.SendStreamingAsync("question", cts.Token)) { consumed++; }
         });
-        cts.CancelAfter(60); // after a couple of characters
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
+
+        cts.CancelAfter(60); // while the first characters are still arriving
+        var thrown = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
+
+        Assert.True(consumed < answer.Length,
+            $"cancellation must stop the stream before it completes, but {consumed} of {answer.Length} chunks were consumed");
+        Assert.True(thrown.CancellationToken == cts.Token || thrown.CancellationToken == default,
+            "the cancellation should be reported with the caller's token");
+    }
+
+    [Fact]
+    public async Task Completed_AnswerStream_Does_Not_Throw() {
+        // The reverse guard for the normalisation above: an uncancelled, complete stream must end normally.
+        // Without this, "throw whenever the token happens to be cancelled" would pass the cancellation test.
+        var chat = new DelayedQueueChatService(0, "ShortAnswer");
+        var client = CreateClient(chat, new NoInvokeRepairExecutor());
+        using var cts = new CancellationTokenSource();
+        var text = new System.Text.StringBuilder();
+
+        await foreach (var chunk in client.SendStreamingAsync("question", cts.Token)) text.Append(chunk);
+
+        Assert.False(cts.IsCancellationRequested);
+        Assert.Contains("ShortAnswer", text.ToString());
     }
 
     [Fact]

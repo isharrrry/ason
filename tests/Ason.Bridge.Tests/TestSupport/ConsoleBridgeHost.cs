@@ -27,25 +27,35 @@ internal sealed class ConsoleBridgeHost : IDisposable {
 
     public int Port { get; }
 
-    public static string? LocateAssembly() {
+    /// <summary>Everything the process has written so far (stdout and stderr), so a test can assert on what the
+    /// sample reported about itself - for example that a net6.0 leg really says it has no embedded MCP server.</summary>
+    public string Output => _output.ToString();
+
+    /// <summary>The framework folder used by the tests that do not care which leg they run.</summary>
+    public const string DefaultFramework = "net9.0";
+
+    /// <summary>The legacy-host leg: no embedded MCP server, driven over gRPC or through the stdio relay.</summary>
+    public const string Net6Framework = "net6.0";
+
+    public static string? LocateAssembly(string framework = DefaultFramework) {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Ason.sln"))) directory = directory.Parent;
         if (directory is null) return null;
 
         foreach (var configuration in new[] { "Release", "Debug" }) {
-            var candidate = Path.Combine(directory.FullName, "samples", "ConsoleBridgeAppSample", "bin", configuration, "net9.0", "ConsoleBridgeAppSample.dll");
+            var candidate = Path.Combine(directory.FullName, "samples", "ConsoleBridgeAppSample", "bin", configuration, framework, "ConsoleBridgeAppSample.dll");
             if (File.Exists(candidate)) return candidate;
         }
         return null;
     }
 
     /// <summary>Starts the host and waits until it answers, so a test never races the startup.</summary>
-    public static async Task<ConsoleBridgeHost> StartAsync(string execution = "inprocess", string? remoteUrl = null, TimeSpan? startupTimeout = null) {
+    public static async Task<ConsoleBridgeHost> StartAsync(string execution = "inprocess", string? remoteUrl = null, TimeSpan? startupTimeout = null, string framework = DefaultFramework) {
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < 3; attempt++) {
             var (port, _) = TestPorts.Pair();
             try {
-                return await StartOnceAsync(port, execution, remoteUrl, startupTimeout).ConfigureAwait(false);
+                return await StartOnceAsync(port, execution, remoteUrl, startupTimeout, framework).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex) when (TestPorts.IsPortRace(ex)) {
                 lastFailure = ex;
@@ -54,8 +64,8 @@ internal sealed class ConsoleBridgeHost : IDisposable {
         throw lastFailure ?? new InvalidOperationException("Could not start the console bridge host.");
     }
 
-    static async Task<ConsoleBridgeHost> StartOnceAsync(int port, string execution, string? remoteUrl, TimeSpan? startupTimeout) {
-        var assembly = LocateAssembly() ?? throw new InvalidOperationException("samples/ConsoleBridgeAppSample has not been built.");
+    static async Task<ConsoleBridgeHost> StartOnceAsync(int port, string execution, string? remoteUrl, TimeSpan? startupTimeout, string framework) {
+        var assembly = LocateAssembly(framework) ?? throw new InvalidOperationException($"samples/ConsoleBridgeAppSample ({framework}) has not been built.");
         var info = new ProcessStartInfo("dotnet") {
             RedirectStandardOutput = true,
             RedirectStandardError = true,

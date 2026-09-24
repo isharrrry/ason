@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net9.0</TargetFrameworks>
+    <!-- Wave 3: net6.0/net9.0/net10.0, *not* netstandard2.0. Two reasons, both verified: the core uses default
+         interface members (IAsonExecutor.McpServers, IAsonBridgeEndpoint.ExecuteScriptWithLogsAsync), which
+         netstandard2.0 cannot compile (CS8701); and nothing would consume a netstandard2.0 bridge anyway - every
+         adapter needs the ASP.NET Core shared framework, so a legacy .NET Framework host can only embed the
+         scripting engine (Ason.Runner.Core + Ason), which is where the ns2.0 asset actually belongs. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

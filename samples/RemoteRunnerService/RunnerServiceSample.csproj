@@ -1,13 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Both runtime tiers the adapters ship: the remote-runner end-to-end test drives the net9.0 leg (it locates
+         that binary by path), and the net10.0 leg keeps this sample honest on the newest tier too. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" />
+    <!-- The OpenAPI document is this host's readiness probe, so the package follows the leg: 9.0.x serves the
+         net9.0 leg, 10.0.x the net10.0 one. A single pin would leave one leg on a foreign runtime's package. -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.7" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -18,9 +23,15 @@
     <ProjectReference Include="..\..\src\Ason.ExternalExecutor\Ason.ExternalExecutor.csproj" />
   </ItemGroup>
 
-  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build">
+  <Target Name="CopyAsonExternalExecutorHostFiles" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+    <PropertyGroup>
+      <!-- "net6.0" out of "net6.0" or "net6.0-windows": the executor is a framework-independent exe, so its host
+           files live under the plain framework folder. Resolved here rather than hard-coded, so this sample
+           follows its own TargetFramework(s) instead of silently copying the wrong pair. -->
+      <_AsonExecutorTfm>$([System.Text.RegularExpressions.Regex]::Match('$(TargetFramework)', '^net[0-9]+\.[0-9]+').Value)</_AsonExecutorTfm>
+    </PropertyGroup>
     <ItemGroup>
-      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\net9.0\Ason.ExternalExecutor.deps.json" />
+      <AsonExecutorHostFiles Include="..\..\src\bin\$(Configuration)\$(_AsonExecutorTfm)\Ason.ExternalExecutor.runtimeconfig.json;..\..\src\bin\$(Configuration)\$(_AsonExecutorTfm)\Ason.ExternalExecutor.deps.json" />
     </ItemGroup>
     <Copy SourceFiles="@(AsonExecutorHostFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(AsonExecutorHostFiles)' != ''" />
   </Target>

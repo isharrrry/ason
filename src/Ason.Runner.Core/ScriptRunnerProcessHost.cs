@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace AsonRunner;
@@ -40,18 +41,22 @@ public sealed class ScriptRunnerProcessHost : IAsyncDisposable {
         string dllPath;
         string exePath;
         if (!string.IsNullOrWhiteSpace(overridePath)) {
+            // The netstandard2.0 BCL carries no nullable annotations, so `IsNullOrWhiteSpace` cannot narrow
+            // `overridePath` for the compiler (CS8602 on every use below). The alias states what the guard has
+            // already proved; on the net9.0 leg the annotated BCL narrows the same code by itself.
+            string overrideTarget = overridePath!;
             // If a directory was supplied, compose expected names inside it
-            if (Directory.Exists(overridePath)) {
-                dllPath = Path.Combine(overridePath, runnerBaseName + ".dll");
-                exePath = Path.Combine(overridePath, runnerBaseName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+            if (Directory.Exists(overrideTarget)) {
+                dllPath = Path.Combine(overrideTarget, runnerBaseName + ".dll");
+                exePath = Path.Combine(overrideTarget, runnerBaseName + (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : string.Empty));
             } else {
                 // A file path was supplied explicitly (.dll or .exe)
-                dllPath = overridePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? overridePath : Path.Combine(Path.GetDirectoryName(overridePath)!, runnerBaseName + ".dll");
-                exePath = overridePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? overridePath : Path.Combine(Path.GetDirectoryName(overridePath)!, runnerBaseName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+                dllPath = overrideTarget.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? overrideTarget : Path.Combine(Path.GetDirectoryName(overrideTarget)!, runnerBaseName + ".dll");
+                exePath = overrideTarget.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? overrideTarget : Path.Combine(Path.GetDirectoryName(overrideTarget)!, runnerBaseName + (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : string.Empty));
             }
         } else {
             dllPath = Path.Combine(baseDir, runnerBaseName + ".dll");
-            exePath = Path.Combine(baseDir, runnerBaseName + (OperatingSystem.IsWindows() ? ".exe" : string.Empty));
+            exePath = Path.Combine(baseDir, runnerBaseName + (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ".exe" : string.Empty));
         }
 
         string launchFile;
@@ -68,7 +73,8 @@ public sealed class ScriptRunnerProcessHost : IAsyncDisposable {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = new UTF8Encoding(false),
-            StandardInputEncoding = new UTF8Encoding(false),
+            // StandardInputEncoding is netstandard2.1+; stdin is written through an explicit UTF-8 StreamWriter
+            // below instead, which is what this property would have configured anyway.
             CreateNoWindow = true
         };
 
@@ -116,18 +122,9 @@ public sealed class ScriptRunnerProcessHost : IAsyncDisposable {
                     if (_mode == ExecutionMode.Docker) {
                         SafeKill(p, tree: false);
                     } else {
-                        bool attemptedTree = false;
-                        if (CanAttemptTreeKill()) {
-                            attemptedTree = true;
-                            try { p.Kill(entireProcessTree: true); }
-                            catch (System.ComponentModel.Win32Exception win32Ex) when (win32Ex.NativeErrorCode == 5 || win32Ex.NativeErrorCode == 87) {
-                                _logger?.LogDebug(win32Ex, "Tree kill failed (error {Code}) for process pid={Pid}; falling back to single kill.", win32Ex.NativeErrorCode, SafeProcessId(p));
-                                SafeKill(p, tree: false);
-                            } catch (InvalidOperationException ioe) {
-                                _logger?.LogDebug(ioe, "Tree kill invalid operation for pid={Pid} (already exited?).", SafeProcessId(p));
-                            }
-                        }
+                        var attemptedTree = CanAttemptTreeKill() && TryKillTree(p);
                         if (!attemptedTree) {
+                            _logger?.LogDebug("Killing only pid={Pid}: tree kill is unavailable or refused on this runtime.", SafeProcessId(p));
                             SafeKill(p, tree: false);
                         }
                     }
@@ -144,17 +141,34 @@ public sealed class ScriptRunnerProcessHost : IAsyncDisposable {
         await Task.CompletedTask;
     }
 
-    private static void SafeKill(Process p, bool tree) {
-        try { if (tree) p.Kill(entireProcessTree: true); else p.Kill(); } catch { }
+    /// <summary><c>Kill(entireProcessTree:)</c> exists from .NET Core 3.0 / netstandard2.1 on; this library ships
+    /// the netstandard2.0 asset, so the method is resolved once at runtime and a plain <c>Kill()</c> is the
+    /// fallback for hosts that do not have it.</summary>
+    static readonly MethodInfo? KillTreeMethod = typeof(Process).GetMethod("Kill", new[] { typeof(bool) });
+
+    private static bool TryKillTree(Process p) {
+        if (KillTreeMethod is null) return false;
+        try { KillTreeMethod.Invoke(p, new object[] { true }); return true; } catch { return false; }
     }
 
+    private static void SafeKill(Process p, bool tree) {
+        try {
+            if (tree && TryKillTree(p)) return;
+            p.Kill();
+        } catch { }
+    }
+
+    /// <summary>
+    /// Whether killing the whole process tree can be attempted. On Windows this needs a privileged process
+    /// (.NET 8's <c>Environment.IsPrivilegedProcess</c>), and that refinement has to be probed *at runtime*:
+    /// this library ships the netstandard2.0 asset only, so a compile-time <c>#if NET8_0_OR_GREATER</c> would be
+    /// false for every consumer, including the .NET 8+ ones that could answer the question.
+    /// </summary>
     private static bool CanAttemptTreeKill() {
-#if NET8_0_OR_GREATER
-        if (!OperatingSystem.IsWindows()) return true;
-        try { return Environment.IsPrivilegedProcess; } catch { return true; }
-#else
-        return true;
-#endif
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return true;
+        var property = typeof(Environment).GetProperty("IsPrivilegedProcess", BindingFlags.Public | BindingFlags.Static);
+        if (property is null || property.PropertyType != typeof(bool)) return true;
+        try { return (bool)property.GetValue(null)!; } catch { return true; }
     }
 
     private static string BuildDockerArgs(string? image) => $"run --rm -i {(string.IsNullOrWhiteSpace(image) ? DockerInfo.DockerImageString : image)}";

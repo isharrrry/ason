@@ -2,7 +2,10 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Three legs on purpose, and it needs no conditional compilation to get them: the caller side references
+         only Ason.Bridge.Grpc, which covers net6.0/net9.0/net10.0, and the MCP capability it prints is a field of
+         the manifest rather than a package reference. A net6.0 caller is the "old client" shape. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

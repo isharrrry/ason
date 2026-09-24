@@ -185,5 +185,5 @@ public sealed class OperatorApiCatalog {
     // Markdown tables break on unescaped pipes and multi-line cells; descriptions come from attributes.
     static string Escape(string? text) => string.IsNullOrWhiteSpace(text)
         ? string.Empty
-        : text.Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Trim();
+        : text!.Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Trim();
 }

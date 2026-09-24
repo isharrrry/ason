@@ -51,11 +51,11 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | Suite | Framework | Notas |
 |---|---|---|
 | `tests/LibDemo.SmokeTests` | net6.0 / net9.0 / net10.0 | descubrimiento de marcadores, reenvíos de tipos e invocación real de operadores en proceso |
-| `tests/Ason.Tests` | net9.0 | los casos de `E2E_AllExecutionModes(executionMode: Docker, …)` necesitan un demonio de Docker; `McpClientTests` necesita servidores MCP activos |
-| `tests/Ason.Runner.Tests` | net9.0 | runner de scripts |
-| `tests/Ason.RemoteRunner.Tests` | net9.0 | la prueba de integración se omite a menos que `ASON_REMOTE_RUNNER_URL` apunte a un runner remoto en ejecución |
-| `tests/Ason.Bridge.Tests` | net9.0 | el núcleo del puente, los adaptadores gRPC/MCP/OpenAPI (cada host se levanta en proceso y se conduce por el cable), la costura del transporte, el endpoint de reenvío y las pruebas de extremo a extremo de los ejemplos de WPF (se omiten en Linux o si los ejemplos de Windows no están compilados) |
-| `tests/WpfDemoApp.UiTests` | net9.0-windows | automatización de interfaz de FlaUI — necesita una sesión interactiva de escritorio de Windows |
+| `tests/Ason.Tests` | net6.0 / net9.0 / net10.0 | los casos de `E2E_AllExecutionModes(executionMode: Docker, …)` necesitan un demonio de Docker; `McpClientTests` necesita servidores MCP activos. Una variante `--framework` por runtime — véase la nota sobre `Ason.Bridge.Tests` más abajo |
+| `tests/Ason.Runner.Tests` | net6.0 / net9.0 / net10.0 | runner de scripts, en el host más antiguo y en el más nuevo |
+| `tests/Ason.RemoteRunner.Tests` | net6.0 / net9.0 / net10.0 | la prueba de integración se omite a menos que `ASON_REMOTE_RUNNER_URL` apunte a un runner remoto en ejecución |
+| `tests/Ason.Bridge.Tests` | net9.0 / net10.0 | el núcleo del puente, los adaptadores gRPC/MCP/OpenAPI (cada host se levanta en proceso y se conduce por el cable), la costura del transporte, el endpoint de reenvío, la guarda de la matriz de compilación de todo el repositorio y las pruebas de extremo a extremo de los ejemplos de WPF (se omiten en Linux o si los ejemplos de Windows no están compilados). Se ejecutan ambas variantes porque los adaptadores se publican para ambas; ejecútelas de a una con `--framework`, ya que un `dotnet test` multi-destino escribe un solo TRX para todos sus frameworks |
+| `tests/WpfDemoApp.UiTests` | net6.0-windows / net9.0-windows / net10.0-windows | automatización de interfaz de FlaUI — necesita una sesión interactiva de escritorio de Windows, así que CI la ejecuta con `continue-on-error`; `WPF_DEMO_TFM` elige qué variante del ejemplo se conduce (por defecto `net9.0-windows`) |
 
 Ejecución del subconjunto hermético sin Docker:
 
@@ -104,8 +104,15 @@ de WPF se omiten. Después recoge la cobertura, comprueba los suelos por adaptad
 segundo job (`windows-samples`) compila los ejemplos de WPF y vuelve a ejecutar `tests/Ason.Bridge.Tests` y la
 suite de la biblioteca en Windows, que es lo que hace que esas pruebas se ejecuten de verdad; además ejecuta las
 pruebas de UI de FlaUI con `continue-on-error`, porque UI Automation necesita una sesión de escritorio
-interactiva que un runner alojado solo ofrece de forma inconsistente. La variante net10.0 queda fuera hasta que
-ese SDK sea GA.
+interactiva que un runner alojado solo ofrece de forma inconsistente. Ambos jobs instalan los SDK de .NET 6, 9 y
+10, y las suites que publican más de un activo de runtime se ejecutan con una variante `--framework` por runtime
+(las pruebas de humo y las suites de biblioteca/runner/runner remoto en `net6.0`/`net9.0`/`net10.0`, la suite del
+puente en `net9.0`/`net10.0`, las pruebas de interfaz en los tres runtimes de Windows, más la variante `net472` en
+Windows). El paso de compilación compila además **cada** ejemplo, fixture y mitad de plantilla — incluidos los que
+no estaban en ninguna lista de compilación — en los **dos** niveles que publica este repositorio (`net9.0` y
+`net10.0`), y empaqueta el paquete de plantillas. Qué proyecto debe declarar qué frameworks, y por qué unos pocos
+siguen siendo más estrechos, es una **prueba** y no una convención:
+`tests/Ason.Bridge.Tests/BuildMatrixTests.cs`.
 
 Cada paso de pruebas escribe un archivo TRX, y un último paso (`scripts/emit-test-failures.ps1`, protegido con
 `if: failure()`) los convierte en anotaciones del check run. Es intencionado: el log del job de una ejecución

@@ -72,7 +72,7 @@ internal sealed class ProxyCodeGenerationService {
         if (string.IsNullOrWhiteSpace(value)) return value;
         var parts = value.Split(new[] {'-','_',' ','.'}, StringSplitOptions.RemoveEmptyEntries);
         var sb = new StringBuilder();
-        foreach (var p in parts) sb.Append(char.ToUpperInvariant(p[0])).Append(p.AsSpan(1));
+        foreach (var p in parts) sb.Append(char.ToUpperInvariant(p[0])).Append(p.Substring(1));
         return sb.ToString();
     }
     static string CamelCase(string name) {

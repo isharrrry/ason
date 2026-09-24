@@ -1,14 +1,38 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- Kept as the "consume what we publish" example: unlike RunnerServiceSample.csproj next to it (which
+         references the local project and is what the end-to-end tests drive), this one adds the *published*
+         package, so a consumer's experience - including the package's own transitive targets - is what gets
+         built. It is pinned rather than floating so a CI run cannot change meaning overnight.
+
+         Two projects share this directory and therefore the same Program.cs, so this one gets its own
+         intermediate and output folders: with a shared obj/ each build would overwrite the other's
+         project.assets.json and produce NETSDK1005-style failures depending on the order. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <BaseIntermediateOutputPath>obj\published-consumer\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin\published-consumer\</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Ason.RemoteRunner" Version="0.2.4" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" />
+    <!-- Two projects share this directory. The default source glob would otherwise compile the generated
+         AssemblyInfo/.AssemblyAttributes files under either obj/ tree, which surfaces as CS0579 "duplicate
+         attribute" - the sibling's obj/Release is not this project's BaseIntermediateOutputPath, so it is not
+         excluded for us. -->
+    <Compile Remove="obj\**" />
+    <Compile Remove="bin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The package this repository publishes for this purpose. Ason.RemoteRunner (0.2.x) is the retired name:
+         its API does not contain AddAsonScriptRunner/MapAson any more, which is why this project stopped
+         compiling while nothing in CI was building it. The published package ships a net9.0 asset, which a
+         net10.0 host consumes through NuGet's nearest-compatible rule. -->
+    <PackageReference Include="Ason.RemoteBridge" Version="0.8.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
 </Project>

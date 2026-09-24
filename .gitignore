@@ -62,3 +62,7 @@ nunit-*.xml
 # Local agent tooling (not part of the library). Plans under .agents/plans are kept in the
 # repository on purpose so design decisions can be reviewed alongside the code.
 .agents/skills/
+# Written into the current working directory at run time by a third-party operator dependency
+# (ICDLite column-order settings). Nothing in this repository references it, but running the samples or
+# the tests from the repository root drops a fresh copy next to the sources.
+GlobalCfg.json

@@ -108,7 +108,10 @@ public static class AsonBridgeOpenApiExtensions {
                 channel.Writer.TryComplete();
             }
 
-            return Results.Empty;
+            // Results.Empty is net7+; this is the same thing (an IResult that does nothing) and keeps one code path
+            // for net6.0/net9.0/net10.0. It must be a no-op: the SSE body has already been written, so setting a
+            // status code here throws "response has already started" and cuts the stream off mid-body.
+            return EmptyResult.Instance;
         });
 
         endpoints.MapPost($"{root}/functions/invoke", async (HttpContext context, IAsonBridgeEndpoint endpoint) => {
@@ -142,6 +145,17 @@ public static class AsonBridgeOpenApiExtensions {
 
     static IResult Result(AsonBridgeCallResult result) =>
         Results.Json(result, statusCode: result.Success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest);
+
+    /// <summary>
+    /// The net6.0 equivalent of net7's <c>Results.Empty</c>: a handler that has already written the response (the
+    /// SSE stream) still has to return something, and that something must do nothing at all. Acting on the
+    /// response here - even just setting the status code - throws "response has already started" and truncates
+    /// the stream, which is what the HTTP log-streaming tests caught.
+    /// </summary>
+    sealed class EmptyResult : IResult {
+        public static readonly EmptyResult Instance = new();
+        public Task ExecuteAsync(HttpContext httpContext) => Task.CompletedTask;
+    }
 
     /// <summary>Writes one server-sent event, flushing so a caller sees logs as they happen.</summary>
     static async Task WriteEventAsync(HttpContext context, string name, object payload) {

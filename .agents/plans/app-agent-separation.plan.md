@@ -34,6 +34,9 @@
 | gRPC 反射（T10） | **提供 opt-in 开关，默认关闭**；文档写明"开了等于公开方法清单，应与鉴权并用" | 你已拍板（§9-4） |
 | 非 .NET 调用示例 | **T10 必须交付 Python 的 gRPC 调用示例**（除 proto 投递与反射开关外） | 你已追加要求（§9-3） |
 | 最小 MCP 消费端（T14） | **Python**；并且用 **OpenAI 官方库 + 配置 + 命令行参数传入对话指令**，实现"模型自动选择并调用 MCP 工具"的**自动化测试** | 你已拍板并追加要求（§9-6）：验的是"真实第三方 Agent 能否自动用起来"，而非只连得上 |
+| TFM 支持矩阵（Wave 3） | **`net6.0` 是必须保留的下界**：为兼容其他业务线第三方产品的旧宿主，不接受"用 net6 EOL 换掉它"的取舍 | 你本轮拍板。直接后果：MCP 家族（`ModelContextProtocol.AspNetCore` 无 net6.0 资产）必须走"net6.0 宿主不内嵌 MCP"的形态（→ T18），`Ason.Bridge.OpenApi` 的 net6.0 代码面必须修（→ T20） |
+| ns2.0 归属（Wave 3，**实现时按证据收窄**） | 实际落地：**`Ason.Runner.Core` / `Ason` 两个换成单一 `netstandard2.0`**（不再保留 `net6.0`/`net9.0`/`net10.0` 专门腿）；**`Ason.Bridge` 不转 ns2.0**，留在 `net6.0;net9.0;net10.0` | 你的原始裁决是"三个都要 ns2.0"；实编时 `Ason.Bridge` 撞上 **`CS8701`：默认接口实现在 netstandard2.0 上不存在**（`IAsonExecutor.McpServers`、`IAsonBridgeEndpoint.ExecuteScriptWithLogsAsync` 都是 DIM），且它的消费者全是 ASP.NET Core 宿主（共享框架 = .NET Core/5+），ns2.0 版**没有真实消费者**——.NET Framework 宿主能内嵌的只有标记特性与脚本引擎，即 Abstractions + Runner.Core + Ason（§10.14） |
+| **MCP 的 TFM 口径（Wave 3，最终）** | **继续用官方 `ModelContextProtocol*`（不手写）**：`Ason.Bridge.Mcp` / `Ason.Bridge.McpHost` = **`net9.0;net10.0`**（SDK 需 net8+，而 **net8 不需要兼容**，故下界就是 net9）；**net6.0 宿主不自嵌 MCP**，改为"`net6.0` 应用跑 gRPC/OpenAPI + agent 侧独立进程的 **net9 stdio 中继**（`McpHost`）"被 MCP Agent 驱动 —— 中继是工具，它的 TFM 不约束宿主 | 你本轮拍板（手写工作量太大，回到 SDK；net8 不兼容）。代价：net6.0 宿主拿不到**内嵌** MCP 服务端，由中继形态覆盖（T18 因此只剩"样例 + 一条 E2E + 文档"，从 3.0 天降到 1.0 天）。参考实现另有旁证：本机 RT 仓库用 net6.0 手写 MCP 打通，说明"手写可行"，但我们选择不承担这份自有协议实现的长期成本 |
 
 ---
 
@@ -405,6 +408,138 @@
 
 ---
 
+### Wave 3 —— TFM 支持矩阵扩展（**本轮只写计划，未执行任何实现**）
+
+**输入约束（你已拍板，见 §0）**：① `net6.0` 是**必须支持**的下界（其他业务线第三方产品的旧宿主）；② 三个底层库**换成单一 `netstandard2.0`**——ns2.0 资产本身可被 .NET Framework 4.6.2+ 与所有现代 .NET 消费，所以这三者**不再保留 `net6.0`/`net9.0`/`net10.0` 专门腿**（见 T16）。
+**目标矩阵**（`√`＝本轮已实测可编译；`✗`＝实测不可行；`△`＝需改代码/需重新设计打包）：
+
+| 工程 | 现 TFM | Wave 3 目标 | 状态 |
+|---|---|---|---|
+| `Ason.Abstractions` | `netstandard2.0` | 不变 | ✔ 已是 |
+| `Ason.Runner.Core` | `net6.0;net9.0` | **`netstandard2.0`（单目标）** | √ 实测编译通过（三处修复后）；运行时待 `net472` 冒烟腿 |
+| `Ason` | `net6.0;net9.0` | **`netstandard2.0`（单目标）** | √ 实测编译通过（随链条）；现代宿主改为消费 ns2.0 资产，须由现有测试兜 |
+| `Ason.Bridge` | `net6.0;net9.0` | `net6.0;net9.0;net10.0`（**不转 ns2.0**，见 §0 与 §10.14） | √ 实测三腿通过；架构上必须留在 net6+ |
+| `Ason.Bridge.Grpc` | `net9.0` | `net6.0;net9.0;net10.0` | √ 实测三腿通过 |
+| `Ason.RemoteBridge` | `net9.0` | `net6.0;net9.0;net10.0` | √ 实测三腿通过 |
+| `Ason.Bridge.OpenApi` | `net9.0` | `net6.0;net9.0;net10.0` | △ net6.0 腿有真实代码错误（10 个） |
+| `Ason.Bridge.Mcp` | `net9.0` | **`net9.0;net10.0`**（官方 SDK；SDK 有 net10 资产；**无 net6/net8**） | √ SDK 的 net10.0 资产已在本地缓存核实；只需加一条腿 |
+| `Ason.Bridge.McpHost`（中继） | `net9.0` | **`net9.0;net10.0`** | √ 同上（中继是独立进程，TFM 不约束应用） |
+| `Ason.ExternalExecutor` | `net9.0` | `net6.0;net9.0;net10.0` + 打包重设计 | △ 多腿后 `NU5019`（host 文件取空） |
+| `samples/WptDemoApp` | `net10.0-windows;net9.0-windows;net6.0-windows` | 不变（范式） | ✔ 已是 |
+| `samples/WpfAppOnlyDemo` / `WpfAgentDemo` | `net9.0-windows` | **`net6.0-windows;net9.0-windows;net10.0-windows`**（MCP **按 TFM 自动**引入：net6 腿不带 MCP，由中继覆盖） | √ 模式已实测（`artifacts/tfm-proof/` 三腿运行打印）；△ `ThemeMode` 需 `#if`、ExternalExecutor 需条件化或先做 T19 |
+
+#### Task 16（T16）—— 两个底层库换成单一 `netstandard2.0` · 1.5 天（已实施，见 §10.14）
+- **决策（你本轮拍板）**: `Ason.Runner.Core` / `Ason` / `Ason.Bridge` 的 TFM **换成单一 `<TargetFramework>netstandard2.0</TargetFramework>`**，**不再保留 `net6.0`/`net9.0`/`net10.0` 专门腿**。理由：ns2.0 资产可被 .NET Framework 4.6.2+ 与所有现代 .NET（net6/net8/net9/net10）消费，"第三方旧宿主兼容"由这一个目标承担，不必再维护多条腿。直接结果：三个包各自只有一个 `lib/netstandard2.0/` 文件夹，NuGet 兼容面最广。
+- **Action（实测得出的最小改动集）**:
+  ① 三处 TFM 声明改为 `netstandard2.0`；同时确认 `LangVersion` 显式设 `latest`（ns2.0 默认 C# 7.3，装不下 file-scoped namespace / records —— `Ason.Abstractions` 已有此先例）；
+  ② 各加 `<PackageReference Include="System.Text.Json" .../>`（实测无它必有 `CS0234`；只剩一条腿后不需要 `Condition` 限定）；
+  ③ 各加一份 `internal static class IsExternalInit`（records / `init` 需要；**实测无它 36 个 `CS0518`**）——因为只剩 ns2.0 一条腿，可以不带 `#if`；
+  ④ `Ason.Runner.Core/ScriptRunnerProcessHost.cs` 的 3 处 `OperatingSystem.IsWindows()` → `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)`（ns2.0 无此 API）；
+  ⑤ **把 `#if NET8_0_OR_GREATER` 编译期分支改成运行时判断**：`CanAttemptTreeKill()` 里用 `Environment.IsPrivilegedProcess`（net8+）决定是否 `Kill(entireProcessTree:)`；库一旦只编 ns2.0，该 `#if` 会**对所有消费者**都走 `#else`（返回 true），net8+ 宿主上原有的精度就丢了 → 改为反射探测该属性（探测不到即回退到今天的 `#else` 行为），并在注释里写明理由。
+- **Mirror**: `Ason.Abstractions/Ason.Abstractions.csproj`（唯一的 ns2.0 先例，含 `LangVersion` 的处理）。
+- **Validate**（本任务的门槛，不可省——**编译通过 ≠ 真能跑**）:
+  ① `dotnet build` 单腿通过；
+  ② `tests/LibDemo.SmokeTests` 增 **`net472` 腿**（Windows 作业跑；Linux 无 Mono → 不进 Linux 清单），断言"加载 operator → 构造 `RunnerClient` → 跑一段 in-process 脚本"的真路径，这是 ns2.0 资产在 .NET Framework 上唯一的行为证据；
+  ③ **现代消费者的"资产退化"必须被现有测试覆盖**：改完后 `Ason.Tests`（net9.0）与桥测试（net9.0/net10.0）消费的都是 ns2.0 资产 → 必须全绿，这是"换了资产行为不变"的证据；
+  ④ 若编译/运行暴露 `IAsyncEnumerable` / `ValueTask` 缺失，补 `Microsoft.Bcl.AsyncInterfaces` / `System.Threading.Tasks.Extensions`（当前由 SK/MCP 传递，需确认）。
+- **Risk**: **中-高**（这是行为面变更，不是纯 TFM 变更）。现代宿主（net9/net10）从"专用资产"降级为"ns2.0 资产"：SignalR 客户端传输、`System.Text.Json` 版本、SK/MCP 的 ns2.0 分支都不是它们的主测目标；.NET Framework 侧的运行时风险（STJ 版本冲突、`HttpClient` 默认值、`Span`/`Memory` 相关包版本）只能靠 ②③ 兜。
+- **边界（必须写进文档）**: ns2.0 只覆盖**库**。`Ason.ExternalExecutor` 是可执行宿主，.NET Framework 宿主用不了 → ns2.0 宿主必须走 `ExecutionMode.InProcess`，不得使用 `external`/`docker`。
+- **顺序**: 最先做（T17 的适配器从此消费 ns2.0 资产）。
+
+#### Task 17（T17）—— 适配器与运行期的 `net6.0`/`net10.0` 腿 · 1.0 天
+- **Action**: `Ason.Bridge.Grpc` / `Ason.Bridge.OpenApi` / `Ason.RemoteBridge` → `net6.0;net9.0;net10.0`；`Ason.Bridge.Mcp` / `Ason.Bridge.McpHost` → **`net9.0;net10.0`**（只加 net10；SDK 无 net6.0 资产，故 MCP 服务端不提供 net6 腿，net6.0 宿主走 T18 的中继形态）。**全程不出现 `net8`。**
+- **Validate**: 多腿 `dotnet build`；现有测试在 **net9.0 与 net10.0 两条腿各跑一次**（`dotnet test -f net10.0`），记录每条腿的耗时（桥测试实测 21–33 s/腿）。
+- **Risk**: 低-中。Grpc/RemoteBridge 三腿已实测通过；net10.0 需要 .NET 10 SDK（本机 `10.0.100-rc.2` 已有 → T23 要在 CI 显式声明）。
+- **顺序**: T16 之后。
+
+#### Task 18（T18）—— `net6.0` 宿主的受支持形态：gRPC/OpenAPI + 独立进程的 MCP 中继 · 1.0 天
+- **决策（你本轮拍板后收敛）**: MCP 继续用官方 SDK（手写成本不划算），SDK 需要 net8+ 而 **net8 不需要兼容** → MCP 服务端（`Ason.Bridge.Mcp`）与中继（`McpHost`）就是 `net9.0;net10.0`，**不提供 net6 腿**。net6.0 宿主（其他业务线第三方旧宿主）因此**不内嵌 MCP**，但仍然完全能被 MCP Agent 驱动：
+  **`net6.0` 应用**（`Ason.Bridge.Grpc` 或 `Ason.Bridge.OpenApi` + `Ason.RemoteBridge`）←→ **agent 侧独立进程的 net9 stdio 中继**（`Ason.Bridge.McpHost --transport grpc|mcp`）←→ MCP 客户端/Claude Desktop。
+  中继是**工具进程**，其 TFM 不约束应用；这正是本仓库既有的两跳形态（§0「stdio 中继是否绕」已拍板"不是绕"）。
+- **Action**:
+  ① **示范与验证用 console 样例承载**：`ConsoleBridgeAppSample` 加 `net6.0` 腿，MCP 引用按腿条件化（`Condition="'$(TargetFramework)' != 'net6.0'"` + `#if` 包住 `AddAsonMcpBridge`/`MapAsonMcpBridge` 与反射注册，≈30–45 行），使"net6.0 应用 = gRPC/OpenAPI 两个面"成为**可跑**形态；net9/net10 腿保持 gRPC+MCP 全能力。
+  ② **一条进程级 E2E**：net6.0 的 `ConsoleBridgeAppSample` + net9 中继（`TestSupport/RelayHost.cs` 复用）+ 真实 MCP 客户端（SDK 或 `samples/python/ason_mcp_caller`）→ 断言 `tools/list` 有 5 个工具（无 `ason_invoke_mcp_tool`/`ason_stream_script` 之外的差异）与 `ason_invoke_function` 回值；并断言 net6.0 腿的 manifest 里 `capabilities.invokeMcpTool == false`（如实反映）。
+  ③ **三语文档**新增"两种宿主形态"矩阵：net6.0（gRPC/OpenAPI + 中继，无内嵌 MCP）与 net9/net10（可内嵌 MCP）；写明中继自身需要 .NET 8+ 运行时。
+- **Validate**: E2E 全绿；`ConsoleBridgeAppSample` 三腿 `dotnet build`；net6.0 腿不出现 MCP 相关类型（`grep` 断言）。
+- **Risk**: 低-中。条件编译面只在一处 console 样例（不再牵动 WPF 两件与全部测试助手）；主要风险是"文档说了但跑不起来"→ 由 ② 的 E2E 兜底。
+- **顺序**: T17 之后（MCP 两工程加 net10 腿）；与 T19/T20 并行；T21 不再依赖它。
+
+#### Task 19（T19）—— `Ason.ExternalExecutor` 多腿 + 打包重设计 · 1.5 天
+- **背景（实测）**: 多腿后 `dotnet pack` 直接失败 `NU5019: 找不到 src/bin/Release/Ason.ExternalExecutor.runtimeconfig.json`——包内 host 文件写的是 `$(OutputPath)`，外层（无 TFM）求值为空。
+- **Action**: ① host 文件按腿入包（`buildTransitive/host/<tfm>/Ason.ExternalExecutor.{runtimeconfig,deps}.json`），`.targets` 用 `$(TargetFramework)` 选**最近的腿**；选不到时给出**明确报错**而不是静默不拷（`--execution external` 静默失效最贵）；② 消费者侧写死的 `..\..\src\bin\$(Configuration)\net9.0\…` 改成 `$(TargetFramework)`（3 处 csproj，见 T22 清单）。
+- **Validate**: 扩展 `scripts/check-package-contract.ps1` 覆盖 `Ason.ExternalExecutor`（断言每腿的 host 文件都在 nupkg 里）；`--execution external` 的进程级 E2E 在 **net6.0 与 net10.0 腿**各跑一次。
+- **Risk**: 中-高（打包与子进程启动路径同时动）。
+- **顺序**: T16/T17 之后，且在任何"样例带多腿"的改动之前。
+
+#### Task 20（T20）—— `Ason.Bridge.OpenApi` 的 net6.0 代码面 · 0.5 天
+- **背景（实测，10 个错误，全部只在 net6.0 腿）**: `AsonBridgeOpenApiExtensions.cs` 用了 net7+ 的最小 API 面——`Results.Empty` 不存在（`CS0117`）、异步 lambda 无法转换为 `Task<?>` 委托（`CS4010` ×8）。
+- **Action**: net6.0 腿改用等价写法（`Results.StatusCode(204)` / `Results.Ok()` 等），或把 endpoint 注册拆成 `#if NET7_0_OR_GREATER` 两种实现；把 lambda 的委托类型显式化。
+- **Validate**: 三腿编译 + HTTP 端点用例在 net6.0 腿跑一次（`Ason.Bridge.Tests` 按腿）。
+- **Risk**: 低（局部，且行为面窄）。
+- **顺序**: 与 T17 并行。
+
+#### Task 21（T21）—— WPF 两件套的三腿 + MCP 按 TFM 条件引入 · 1.5 天
+- **Action（按 TFM 自动开关 MCP，**已实测**）**: 两件都上 `net6.0-windows;net9.0-windows;net10.0-windows`，MCP 只在 net8+ 腿引入——**一处属性、两处挂载**，加净新腿（如 net11）会自动带上 MCP：
+  ```xml
+  <PropertyGroup>
+    <!-- 官方 MCP SDK 需 net8+；net6 腿不引 MCP，由 agent 侧 net9 stdio 中继覆盖。
+         坑：$(TargetFrameworkVersion) 带 'v' 前缀（v9.0），直接 VersionGreaterThanOrEquals 会**静默**得到 false
+         （SDK 的 _TargetFrameworkVersionWithoutV 在项目体求值时还不存在）→ 用"排除 net6 腿"的写法。 -->
+    <AsonMcpSupported Condition="'$(TargetFramework)' != 'net6.0-windows'">true</AsonMcpSupported>
+    <AsonMcpSupported Condition="'$(AsonMcpSupported)' == ''">false</AsonMcpSupported>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <ProjectReference Include="..\..\src\Ason.Bridge.Mcp\Ason.Bridge.Mcp.csproj" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(AsonMcpSupported)' == 'true'">
+    <DefineConstants>$(DefineConstants);ASON_MCP</DefineConstants>
+  </PropertyGroup>
+  ```
+  代码侧只包**调用点**（不要把整个文件包起来）：应用侧 `WpfAppOnlyDemo/Bridge/BridgeHost.cs` 的 `using Ason.Bridge.Mcp;`（:3）、`AddAsonMcpBridge`（:72）、`MapAsonMcpBridge`（:78），并把 `McpUrl`/`ASON_BRIDGE_READY` 的 `mcp=` 在 net6 腿输出为"无"（**如实上报**，不要留一个假端口）；agent 侧 `WpfAgentDemo/Bridge/AgentBridge.cs` 的 `using`（:8）与 5 处 `AgentTransportKind.Mcp` 分支（:52–53 连接、:67 manifest、:88 transport、:94 execute、:105 invoke），且 `--mcp` 在 net6 腿要**明确报错退出**（"本构建不包含 MCP：请用 net9/net10 构建，或经 stdio 中继驱动应用"），而不是静默降级到 gRPC。
+- **同批必做（否则 net6 腿起不来）**: ① `ThemeMode` 包 `#if NET9_0_OR_GREATER`（`WpfAgentDemo/App.xaml.cs:10-14` 现在是**无条件**的；`WptDemoApp/App.xaml.cs:35-41` 已是正确写法），pragma 沿用仓库惯例 `#pragma warning disable WPF0001`；② `Ason.ExternalExecutor` 目前只有 net9.0 → net6 腿要么先做 T19（推荐），要么把该引用与 `--execution external` 一起条件化（net6 腿只支持 `inprocess`），并把 `CopyAsonExternalExecutorHostFiles`（`WpfAppOnlyDemo.csproj:29-34`）一并条件化。
+- **Mirror**: `samples/WptDemoApp/WpfSampleApp.csproj`（三 TFM + 条件 `WPF-UI` 引用）与 `App.xaml.cs` 的 `#if NET9_0_OR_GREATER`。
+- **Validate**: 三腿构建；WPF 端到端在 net9/net10 腿各跑一次；net6 腿跑一次 `--bridge-only --verify` 类冒烟（确认无 MCP 也能被 gRPC 驱动）；`grep` 断言 net6 腿产物不含 MCP 类型。**已实测的模式证明**见 `artifacts/tfm-proof/`（gitignored）：三腿分别 `dotnet run` 打印，net6 腿输出 `mcp=no MCP in this leg…` + `theme=no ThemeMode before net9`，net9/net10 腿输出真实 MCP 类型名 + `theme=Light`，退出码全 0。
+- **Risk**: 低-中（模式已验证；剩余风险是"漏包某个调用点"→ 由三腿构建兜底，因为 net6 腿一旦漏包就编译失败）。
+- **顺序**: 与 T17 同批；若采用 `external` 保留则先做 T19。
+- **Mirror**: `samples/WptDemoApp/WpfSampleApp.csproj`（`TargetFrameworks` + 条件 `WPF-UI` 引用 + `App.xaml.cs` 的 `#if NET9_0_OR_GREATER`）。
+- **Validate**: Windows 作业按腿构建；WPF 端到端在 net9/net10 腿各跑一次（`WpfDemoApp.UiTests` 保持 net9.0-windows 单腿，FlaUI 多腿收益低）。
+- **Risk**: 中（WPF 与 `Microsoft.AspNetCore.App` 共享框架在 net6 腿共存需实测；`WPF-UI`/`ScottPlot.WPF`/`Microsoft.Xaml.Behaviors.Wpf`/`CommunityToolkit.Mvvm` 都有 net6.0-windows 资产，已核实）。
+- **顺序**: T18 之后。
+
+#### Task 22（T22）—— 路径参数化 + 三语 TFM 矩阵文档 · 1.0 天
+- **Action**: 引入"默认腿"概念（如 `$(AsonDefaultTfm)`，默认 `net9.0`）供样例/测试/文档引用，替换实测出的写死路径：`samples/ConsoleBridgeAppSample.csproj:29`、`samples/RemoteRunnerService/RunnerServiceSample.csproj:23`、`samples/WpfAppOnlyDemo.csproj:31`、`samples/mcp/claude_desktop_config.json:2,8`、`tests/Ason.Bridge.Tests/TestSupport/RelayHost.cs:19`、`McpClientConfigTests`（断言 `src/bin/Release/net9.0/...`）。三语文档新增**支持矩阵**：每个包支持哪些 TFM、net6.0 宿主没有内嵌 MCP、ns2.0 宿主没有 external 执行器、中继自身需要 .NET 8+。
+- **Validate**: `grep -rn 'net9\.0'` 的剩余命中只能是 TFM 声明与"默认腿"定义本身；三语结构一致。
+- **Risk**: 低（机械但面广）。
+- **顺序**: T18/T19/T21 之后。
+
+#### Task 23（T23）—— CI / 脚本 / 发布 · 1.0 天
+- **Action**: ① `setup-dotnet` 显式加 `10.0.x`（消掉 `LibDemo.SmokeTests` net10 腿对 runner 镜像的隐含依赖；这正是 §10.11 记录的那个脆弱点）；② Linux 作业跑 net6.0/net9.0/net10.0 的库与桥测试（MCP 相关跳过 net6.0 腿）；Windows 作业加 `net472` 冒烟腿（T16 的 ns2.0 真跑验证）与 WPF 的 net9/net10 腿；③ `scripts/ci-linux.sh` 增 `--framework <tfm>`（或写死腿清单）；④ 版本 `0.9.0` → `0.10.0`（纯追加式）+ `CHANGELOG.md` + 三语文档。
+- **Validate**: 两个作业全绿；记录每条腿的耗时，据此决定"哪些腿只编译、哪些腿编译+跑测试"（当前基线：Ubuntu 作业 2.5–3 分钟、桥测试 21–33 s/腿）。
+- **Risk**: 低，但 CI 时长是腿数的乘积 → 需要一次实测再定清单。
+- **顺序**: 最后。
+
+**复杂度合计**：1.5 + 1.0 + 1.0 + 1.5 + 0.5 + 1.5 + 1.0 + 1.0 = **9.0 人日**。
+**依赖顺序**：T16 → T17 → T22 → T23，其中 T18、T19、T20、T21 与 T17 同批（T21 的 net6 腿若要保留 `--execution external` 则需先做 T19）。硬约束：T16 先于 T17；T19 先于任何"样例多腿"；T22 先于 T23。
+**本波不做的**（明确记录）：① 三个底层库不再提供 `net6.0`/`net9.0`/`net10.0` 专门腿（ns2.0 单目标，见 T16）；② **手写 MCP**（你已判定工作量不划算 → 继续用官方 SDK，代价是 MCP 服务端没有 net6 腿，由 T18 的中继形态覆盖）；③ **任何工程都不加 `net8` TFM**（你已明确 net8 不需要兼容；MCP 家族因此是 `net9.0;net10.0`）；④ MCP 的服务端推送/SSE——`log_stream` 对 MCP 仍恒 `false`，日志走 `ason_stream_script` 工具（HTTP/OpenAPI 的 SSE 不受影响）；⑤ `net472` 版的 external 执行器（.NET Framework 宿主只能用 `InProcess`）；⑥ WPF 两件的 `net6.0-windows` 腿（引用 MCP 就拿不到；要就得为演示引入条件编译，不值）；⑦ MAUI/Blazor 模板的 TFM 扩展（`Microsoft.AspNetCore.Mvc.Testing 8.0.1` 只有 net8.0、`MudBlazor 8.15.0` 无 net6.0，且与本次目标无关）。
+
+#### Wave 3 代码量估算（按最终口径；`新增`＝新增行，`改动`＝修改既有行）
+
+| 任务 | 触及文件 | 新增行 | 改动行 | 主要构成 |
+|---|---|---|---|---|
+| T16 三库单一 ns2.0 | 7–9 | 130–185 | 25–30 | 3 份 `IsExternalInit` 垫片（各 ~5 行）、`IsPrivilegedProcess` 运行时探测（~15 行）、**net472 冒烟测试 ~90–140 行**、3 行 TFM 声明、3 处 `IsWindows` 替换、STJ 包引用 |
+| T17 适配器腿（含 MCP 加 net10） | 8–10 | 0–20 | 20–35 | 全是 TFM 行与少量 `Condition`；`scripts/ci-linux.sh` 腿清单 +10–20 行 |
+| T18 net6.0 宿主经中继 | 4–6 | 95–175 | 15–25 | console 样例条件化（~30–45 行）+ **一条进程级 E2E（~60–120 行）** + 三语文档（~30–60 行） |
+| T19 ExternalExecutor 多腿 + 打包 | 6–7 | 60–95 | 10 | `buildTransitive` targets 重写（19 → ~45–60 行）、包契约断言扩展（~25–40 行）、3 处路径参数化 |
+| T20 OpenApi net6.0 代码面 | 1–2 | 0–10 | 15–30 | `Results.Empty` 等价写法 + 异步 lambda 委托类型显式化 |
+| T21 WPF 两件（三腿 + MCP 条件引入） | 6 | 30–55 | 25–40 | 条件引用与 `DefineConstants`（各 ~12 行）、MCP 调用点 `#if`、`ThemeMode` 的 `#if`、net6 腿的"无 MCP"如实上报 |
+| T22 路径参数化 + 三语矩阵 | 10–12 | 60–105 | 15 | 7 处写死的 `net9.0` + "默认腿"属性 + 三语支持矩阵 |
+| T23 CI / 脚本 / 发布 | 6–8 | 40–70 | 5 | `setup-dotnet` 加 `10.0.x`、Windows 作业加 `net472` 腿、CHANGELOG、版本号 |
+| **合计** | **48–60** | **≈ 420–715** | **≈ 130–190** | 其中**测试 ≈ 175–300 行**、**三语文档 ≈ 90–165 行**、**产品代码 ≈ 85–145 行新增 / 50–80 行改动**、**配置与 CI/脚本 ≈ 95–155 行** |
+
+> 口径说明：产品代码里**没有新功能**——新增部分主要是"垫片 + 运行时探测 + 打包选择逻辑"；测试与文档占了总量的 ~70%，这与本波的性质一致（多目标支持的成本在**验证与说明**，不在实现）。8.5 人日里约一半是"每条腿都要跑一遍 + net472 + WPF 双腿"的验证时间。
+
+---
+
 ## 6. Validation
 
 ```bash
@@ -702,3 +837,98 @@ git ls-files | Select-String -Pattern 'bridge-examples\.http|samples/mcp/'
 | **实测中抓到的两个坑（都已修）** | ① `artifacts/coverage` 会**累积**历史报告：门限脚本对 **12 个包**报"达标"（真跑只有 4 个）→ 本地脚本在跑桥测试前 `rm -rf artifacts/coverage`（陈旧的成功报告会掩盖本次回归）。② `dotnet test` 在**筛选器匹配不到任何用例时退出码为 0**（仅打印"没有测试匹配…"）→ `--filter` 打错字会伪装成全绿；本地脚本统一追加 `-- RunConfiguration.TreatNoTestsAsError=true`，并给 `emit-test-failures.ps1` 补了"TRX 零结果 → `no tests ran`"注解（否则它只会说"没有失败测试"，技术上正确但毫无用处）。 |
 | 真机验证 | `./scripts/ci-linux.sh`（`~/.dotnet` 优先，SDK 6.0.428 + 10.0.111，运行时 6.0.36 / 9.0.20 / 10.0.11）：**7 步全 ok、退出码 0**；`--suite bridge` + `--suite coverage` → 门限恰好 **4 个包**；`--filter 'FullyQualifiedName~NoSuchTestName'` → 退出码 **1** 且汇总标 `FAILED`；`--suite smoke` → ok；`bash -n` 通过；三个脚本均 **0 个非 ASCII 字节**（PowerShell 脚本仍需能被 5.1 解析）。 |
 | 收尾（run 10，`7e339e0`） | 推送到两个远端（Gitee `origin` 与 GitHub `mirror`）后 CI **全绿**：Ubuntu 作业 9/9 步 `success`（`Test failures as annotations` 为 skipped，即确无失败——注解机制只在失败时出现），Windows 作业 7/7 步 `success`（含桥测试、`Ason.Tests` 与 FlaUI UI 自动化）。至此 10 轮里暴露的问题全部关闭：语言断言的平台差异 ×2、pwsh 续行、`TestPorts.Pair` 的临时端口假设、契约包内条目名（`protos//…`）与两个版本的 `Microsoft.Extensions.Logging.Abstractions`。 |
+
+### 10.13 Wave 3 开工前的 TFM 可行性实测（本轮；临时改再逐字节还原，**未提交任何改动**）
+
+| 项 | 内容（含核实结论） |
+|---|---|
+| 方法 | 不改仓库：脚本临时改写 `<TargetFrameworks>` → `dotnet build` → **逐字节还原**（原始字节按路径只记一次）。三条方法论教训值得记住：① 只用 `-p:TargetFrameworks=` 覆盖**不会重跑 restore**（报 `NETSDK1005`）；② **逐个工程单独改会产出 `NU1201` 假象**（被引用工程仍是旧 TFM），必须"整条链同时改"才问得对问题；③ 我的第一次还原脚本按顺序还原了同一文件的两次备份，导致停在实验态 → 已用 `git checkout -- <3 个 csproj>` 撤销（`git diff` 确认只差 TFM 行，`9.0.10` pin 完好），**没有提交**。 |
+| 环境 | 本机 Windows 的 SDK：3.1/5.0/6.0/7.0/**9.0.306**/**10.0.100-rc.2** → net10 腿可在本地验证（因此这一波不必占用 CI 轮次）。 |
+| 包 TFM 实查（读 NuGet 缓存的 `lib/`，非描述文本） | `Microsoft.SemanticKernel* 1.45.0` 与 `SignalR.Client 8.0.7`：`net8.0` + **`netstandard2.0`**；`ModelContextProtocol.Core 0.4.0-preview.3`：`net10.0/net8.0/net9.0` + **`netstandard2.0`**；**`ModelContextProtocol.AspNetCore`：只有 `net10.0/net8.0/net9.0`（无 ns2.0 / 无 net6.0）**；`Grpc.AspNetCore 2.71.0`：`net6.0…net9.0`（无 net10 → net10 消费 net9 资产）；`CodeAnalysis.CSharp.Scripting 4.14.0`：`net8.0/net9.0` + `netstandard2.0`；`FlaUI.UIA3 5.0.0`：**`net6.0-windows7.0`**；`WPF-UI 3.1.1` / `ScottPlot.WPF 5.0.56` / `Microsoft.Xaml.Behaviors.Wpf 1.1.135` / `CommunityToolkit.Mvvm 8.4.0`：均含 net6.0-windows 资产；`MudBlazor 8.15.0`：仅 net8/net9；`Microsoft.AspNetCore.OpenApi 9.0.x`：仅 net9.0；`Microsoft.AspNetCore.Mvc.Testing 8.0.1`：仅 net8.0。 |
+| ns2.0 实测（→ T16 的修复清单） | 首轮 `Runner.Core → ns2.0`：**44 错**，只有两类——`CS0518 IsExternalInit`×36 与 `System.Text.Json` 相关×8。补"ns2.0 腿显式 STJ 引用 + `IsExternalInit` 垫片"→ **12 错**，全部是 `OperatingSystem.IsWindows()`。再加"IsWindows → `RuntimeInformation.IsOSPlatform(OSPlatform.Windows)`"→ **`Runner.Core` + `Ason` + `Ason.Bridge` 整条链 ns2.0 编译通过**。 |
+| 三 TFM 实测 | `Runner.Core` / `Ason` / `Ason.Bridge`（`net6.0;net9.0;net10.0`）**OK**；`Ason.Bridge.Grpc` **OK**；`Ason.RemoteBridge` **OK**；`Ason.Bridge.McpHost`（`net8.0;net9.0;net10.0`）**OK**；`Ason.Bridge.Mcp` 的 net6.0 腿 **`NU1202`**（`ModelContextProtocol.AspNetCore` 与 net6.0 不兼容）、net8.0 腿可解析；`Ason.Bridge.OpenApi` 的 net6.0 腿 **10 错**（`Results.Empty` 不存在 CS0117 + 异步 lambda→`Task<?>` CS4010×8）；`Ason.ExternalExecutor` 多腿后 **`NU5019`**（host 文件用 `$(OutputPath)`，外层求值为空）。 |
+| WPF 实测/推断 | `WpfAgentDemo` 在 **net8.0-windows 腿** 4 处 `CS0103: ThemeMode`（.NET 9 API；`WptDemoApp` 已用 `#if NET9_0_OR_GREATER` + 条件 `WPF-UI` 引用解决）；`WpfAppOnlyDemo`/`WpfAgentDemo` 都引用 `Ason.Bridge.Mcp` → 保留 MCP 则 `net6.0-windows` 不可能。WPF 侧第三方包不是瓶颈（见上）。 |
+| 本轮产出 | ① §0 追加你本轮的两条拍板（net6.0 必须支持；三个底层库换 ns2.0）；② §5 新增 **Wave 3**（T16–T23，9.0 人日，含依赖顺序与"本波不做"清单）；③ **未改动任何仓库实现文件、未提交** —— 工作区与 HEAD 一致（`git status --porcelain` 为空），实验脚本只落在被 gitignore 的 `artifacts/` 下。 |
+| 计划修订（你随后拍板 T16 的口径） | T16 从"三库加 ns2.0 **并保留** `net6.0;net9.0;net10.0` 腿"改为"**三库换成单一 ns2.0**、不再保留那些腿"（§0 与 Wave 3 目标矩阵同步）。连带把两点后果写进 T16：① `ScriptRunnerProcessHost.CanAttemptTreeKill()` 的 `#if NET8_0_OR_GREATER` 会退化成"所有消费者都走 `#else`" → **必须改成运行时探测**（`Environment.IsPrivilegedProcess`），否则 net8+ 宿主白丢精度；② 现代宿主（net9/net10）改为消费 ns2.0 资产 → `Ason.Tests`（net9.0）与桥测试（net9.0/net10.0）必须全绿，作为"换资产后行为不变"的证据。 |
+| 计划修订（你随后拍板 MCP 的口径 → **最终**） | 先要求"`Mcp`/`McpHost` 支持 net6.0 且不引入 net8"，并给出本机 net6.0 **手写 MCP** 参考实现；随后你判定**手写工作量太大 → 回到官方 SDK，且 net8 不需要兼容**。最终口径：MCP 家族 = **`net9.0;net10.0`**（SDK 有 net10 资产，无需新增 net8 腿），**net6.0 宿主不自嵌 MCP**，改由"gRPC/OpenAPI + agent 侧 net9 stdio 中继（独立进程）"覆盖；T18 因此从 3.0 天降到 **1.0 天**，Wave 3 复杂度 10.5 → **8.5 人日**；net6.0 宿主形态改由 console 样例与 WPF 两件共同示范并配一条进程级 E2E。新增"Wave 3 代码量估算"表（初版 ≈400–670 行新增）。**随后你又问"能否按编译版本自动简单控制 MCP 引入"——实测可行（见下一行），于是 WPF 两件恢复为 `net6.0-windows;net9.0-windows;net10.0-windows`、MCP 按 TFM 条件引入**：T21 1.0 → **1.5 天**，复杂度 8.5 → **9.0 人日**，代码量估算更新为 **≈420–715 行新增 / 130–190 行改动 / 48–60 个文件**。 |
+| 参考实现核实（本机 `C:\Debug\RT-feat-CodeBak260919\RT\Links-ICD-Kit`，不入本仓库） | ① `Ason.Bridge/Ason.Bridge.csproj` 就是 **`net6.0` + `FrameworkReference Microsoft.AspNetCore.App` + `Grpc.AspNetCore 2.71.0`**，注释写明"官方 `ModelContextProtocol.AspNetCore` 只支持 net8+，本仓库受 net6 约束（Phase 0 已核实）"；② `McpHttpEndpoints.cs`（250 行）实现了 `initialize` / `notifications/*`（回 202 不应答）/ `ping` / `tools/list` / `tools/call`，`Mcp-Session-Id` **只发放不强制校验**，错误码 `-32700/-32600/-32601/-32602`，`tools/call` 回 `{content:[{type:text}],isError}`；③ `BridgeMcpTools.cs` 的工具名与入参名**刻意与上游 ason 一致**（`ason_get_manifest`/`ason_list_instances`/`ason_get_script_api`/`ason_execute_script`/`ason_invoke_function`），JSON Schema 手写、`argumentsJson` 为 JSON 数组、畸形载荷给 `invalid-arguments` 而不抛；④ **未做** SSE/服务端推送（因此 `log_stream` 恒 false，列为可选追加）；⑤ 未见 stdio MCP（他们那边只有 ASON 自己的"stdio 逐行 JSON"协议，可作我们 stdio 中继的帧格式参照）。 |
+| "MCP 按 TFM 自动开关"模式已实测（本轮） | 你问"能否根据编译版本自动简单控制是否引入 MCP"→ **能**，且已用一次性证明工程（`artifacts/tfm-proof/`，gitignored）在三腿上真跑：`net6.0-windows` 输出 `mcp=no MCP in this leg (covered by the net9 stdio relay)` + `theme=no ThemeMode before net9`；`net9.0-windows`/`net10.0-windows` 输出真实类型 `Ason.Bridge.Mcp.McpAsonBridgeClient + McpAsonBridgeTransport` + `theme=Light`；三腿退出码全 0。写法＝一个属性 + 条件 `ProjectReference` + 条件 `DefineConstants`，代码侧只需包调用点。**实测踩到的坑**：`$(TargetFrameworkVersion)` 的值带 `v` 前缀（`v9.0`），拿它直接 `$([MSBuild]::VersionGreaterThanOrEquals('$(TargetFrameworkVersion)','8.0'))` 会**静默为 false**（SDK 的 `_TargetFrameworkVersionWithoutV` 在项目体求值时尚未定义）——第一版就因此三腿都没定义 `ASON_MCP`、编译却全绿。最终用版本无关的 `Condition="'$(TargetFramework)' != 'net6.0-windows'"`。 |
+| **"真实 MCP 客户端"的验证方式（可复用）** | 他们的 `AgentRT.Tests/BridgeMcpEndToEndTests.PythonMcpCaller_ListsTools_And_InvokesFunction` 直接用**本仓库**的 `samples/python/ason_mcp_caller`（纯标准库 MCP 客户端）打他们手写的 net6.0 服务端：`--transport http --http-url <mcp> --list` 断言行中含有 `ason_invoke_function`/`ason_execute_script`，再 `--call ason_invoke_function --args {...}` 断言载荷 `"success":true` / `"result":"40"`；python 或脚本不可用时 **skip 而不伪装通过**。→ 我们 T18 验证方案里"保留 SDK 当参考实现 + Python 客户端端到端"就是这条思路的加强版（双向交叉验证）。 |
+
+### 10.14 Wave 3 实施记录（TDD；本轮实做，**未提交**）
+
+| 项 | 内容（含实测证据） |
+|---|---|
+| RED 先行 | 新增 `tests/Ason.Bridge.Tests/BuildMatrixTests.cs`（17 条 TFM 矩阵规格）+ `tests/LibDemo.SmokeTests/FrameworkAssetTests.cs`（ns2.0 资产证书）+ 冒烟工程 **net472 腿**。RED 证据：矩阵测试 **9 项失败**；net472 腿 `NU1201: 项目 Ason 与 net472 不兼容（支持 net6.0/net9.0）` |
+| T16 —— 缺口从预估 3 处变成 **10 处** | ①`IsExternalInit` 垫片 ×2 ②ns2.0 无内置 `System.Text.Json`（显式 8.0.6）③`ProcessStartInfo.StandardInputEncoding`（ns2.1+，删掉——下面本就用 UTF-8 `StreamWriter` 接管）④`Process.Kill(entireProcessTree:)`（ns2.1+ → 运行时反射探测 + `Kill()` 回退）⑤非泛型 `TaskCompletionSource`（→`TaskCompletionSource<bool>`）⑥`string.Replace(…, StringComparison)`（ns2.1+ → 新增 `Ason/Compat/StringCompat.cs` **垫片扩展**，保住 `OrdinalIgnoreCase` 语义）⑦`StringBuilder.Append(ReadOnlySpan<char>)`（→`Substring(1)` ×2）⑧ `#if NET8_0_OR_GREATER` 的 `Environment.IsPrivilegedProcess` → **运行时探测**（否则所有消费者都白丢该精度）⑨**net472 腿抓到**：脚本编译缺 `System.Text.Json` 引用（.NET Framework 无共享框架可依，`CS0234`）→ `ScriptExecutor.CreateDefaultOptions` 显式 `AddReferences` ⑩**进程级测试抓到**：`Microsoft.Bcl.AsyncInterfaces` 版本分裂（`Ason.dll` 编到 10.0.0.0、消费者拿到 8.0.0.0 → 运行时 `FileNotFoundException`）→ 向上统一到 `10.0.0-rc.2.25502.107`（往下钉 8.0.0 触发 `NU1605`） |
+| T17 | `Grpc`/`OpenApi`/`RemoteBridge`/`ExternalExecutor` → `net6.0;net9.0;net10.0`；`Mcp`/`McpHost` → `net9.0;net10.0`（官方 SDK 下界；不引入 net8）。实编全通过 |
+| T19 | executor 多腿 + **打包重做**：host 文件在 `_GetPackageFiles` 之前按 `%(AsonExecutorTfm.Identity)` 批量入包到 `buildTransitive/host/<tfm>/`；`.targets` 用正则从 `$(TargetFramework)` 取 `netX.Y`（**不能用**带 `v` 前缀的 `TargetFrameworkVersion`），选不到硬报 `ASONEXEC001`。实测包内 3 对 host 文件齐全 |
+| T20 | OpenApi 的 net6 面只有一个根因：`Results.Empty` 是 net7+。第一版换 `Results.StatusCode(200)` **把 SSE 流截断**（HTTP 日志流测试立刻红）→ 改成等价于 `Results.Empty` 的 no-op `EmptyResult` |
+| T18 | console 样例三腿 + `AsonMcpSupported` 按 TFM 条件引用 + `#if ASON_MCP`；net6 腿实跑输出 `MCP : not embedded…` 与 `ASON_BRIDGE_READY … mcp=none`；新增 **`Net6ApplicationWithRelayEndToEndTests`**（真 net6.0 应用 + 真 net9 中继 + 真 MCP 客户端 SDK），断言 `ason_invoke_function` → 42、工具表**无** `ason_invoke_mcp_tool`、manifest `capabilities.invokeMcpTool == false`、且应用进程输出含 `mcp=none` |
+| T21 | 两个 WPF 样例三 windows 腿 + 同款 MCP 条件引入 + `ThemeMode` 的 `#if NET9_0_OR_GREATER` + executor 拷贝目标按 TFM。**踩坑**：csproj 编辑未落盘时 `#if ASON_MCP` 会把 MCP 在**所有**腿上静默关掉而构建仍绿 → 现以产物断言兜住（net9 腿含 `McpAsonBridgeClient`、net6 腿不含） |
+| T22（代码部分） | 三处样例 csproj 里写死的 `net9.0` executor 路径 → `$(_AsonExecutorTfm)`；"排除式" `AsonMcpSupported` 条件（版本比较会静默失效）已被矩阵测试作为回归守卫固定 |
+| T23 | `ci.yml`：两个作业的 `setup-dotnet` 都装 `6.0.x/9.0.x/10.0.x`；Linux 冒烟加 `net10.0` 腿；Windows 作业新增 **net472 证书腿**；`scripts/ci-linux.sh` 的 smoke 同步到三腿。踩坑：YAML 步骤名里的 `net472: …` 冒号破坏标量（PyYAML `mapping values are not allowed here`）→ 已修并复验；顺带修掉 `ci-linux.sh` 里两处仍写“net6.0, net9.0”的步骤名（该脚本已加 net10 腿） |
+| T16b —— 迁移副产物收尾（可空性警告对齐） | ns2.0 的引用程序集**没有可空注解**：`string.IsNullOrWhiteSpace/IsNullOrEmpty` 少了 `NotNullWhen(false)`，于是 net9.0 上靠 BCL 注解自动收窄的调用点，在 ns2.0 上变成 CS8602/8603/8604（新写的 `ScriptRunnerProcessHost` 反射段 1 处、`OperatorInvoker` 1 处 + 旧代码 12 处：`AsonClient`×3、`ProxySerializer`×4、`OrchestrationContext`×2、`AgentPrompts`/`OperatorApiCatalog`/`ScriptReplyProcessor` 各 1）。**处理方式：既不关 `Nullable` 也不 NoWarn**——在守卫已证明非空处补 `!`（编译期擦除、零行为变化；`ProxySerializer` 的 `attr?.Description` 守卫补的是 `attr!`，因为守卫通过即证明 `attr` 非空），并在 `Ason.csproj` 写下原因。本机重建两个 ns2.0 库：CS86xx = **0**；`Ason.Tests` + `Ason.Bridge.Tests` + 三腿冒烟复跑全绿 |
+| T23b —— net6.0 下界的“固有告警”（有意不隐藏） | 每个 net6.0 腿都会报 `NETSDK1138`（net6.0 已 EOL）与一批“`X 9.0.x` doesn't support net6.0”的包兼容告警（`System.Collections.Immutable 9.0.0`、`Microsoft.Extensions.* 9.0.10`、`Microsoft.Bcl.*`、`System.Net.ServerSentEvents` 等，经其 netstandard2.0/net6.0 资产消费）。这是 net6.0 下界的**真实代价**，故**不**用 `SuppressTfmSupportBuildWarnings`、**不** NoWarn：隐藏它等于把“旧宿主上这些包未被上游验证过”这件事从日志里删掉。运行时可用性由真实 E2E 兜底（console net6 宿主 + net9 中继、remote-runner net6 腿均实跑通过） |
+| T24 —— 桥测试套件补 `net10.0` 腿（收尾时发现） | 适配器发 `net9.0;net10.0`，而 `tests/Ason.Bridge.Tests` 只有 `net9.0` ⇒ net10 程序集**只被编译、从未被执行**（WPF/console 样例的 net10 腿同理只是编译）。改为 `net9.0;net10.0` 后实测发现一个真问题：多目标 `dotnet test` **只写一个 TRX**（`--logger trx;LogFileName=multi.trx` 只产出 `multi.trx`，后一腿覆盖前一腿）——照旧一条命令跑，失败注解就只会描述其中一腿。故 CI 两个作业与 `ci-linux.sh` 一律**逐腿显式**执行（net9.0 带覆盖率 + net10.0 独立 TRX 名），与冒烟步骤同款；`BuildMatrixTests` 新增一条断言钉住测试工程的腿。两处 `docs/contributing.*` 的测试矩阵表与 `CHANGELOG` 的 Verified 同步 |
+| 验证（全绿） | Windows 本机：`BuildMatrixTests` **18/18**；`Ason.Tests` **105/105**；冒烟 **13/13 × 4 腿**（net6/net9/net10/**net472**）；桥测试 **179/179 × 2 腿**（net9.0 与 net10.0，**0 跳过** ⇒ WPF 端到端在两腿上真跑）；nupkg 内 host 文件 3/3 对；net6 宿主形态实跑通过。**真实 Ubuntu 机器**（`scripts/ci-linux.sh`，`ci.yml` 的 Linux 作业逐步同款）**7/7 步全 ok**：构建 15 个工程、冒烟 13/13×3 腿、`Ason.Tests` 105/105、桥测试**两条腿各 174 通过/5 跳过/179**（WPF E2E 在 Linux 自跳过）、覆盖率地板 `coverage floor met for 4 bridge package(s)`、打包契约 `Ason.Bridge.Grpc.0.10.0.nupkg ships protos/ason_bridge.proto`，两条腿 TRX 各自独立（`ason-bridge-tests-net9.trx` / `ason-bridge-tests-net10.trx`）；Linux 侧 CS86xx 仅剩测试代码里与迁移无关的 `CS8618` ×2（`TestOperators.cs`，本机同样） |
+| 仍未做 / 已决定不做 | ① **已补齐**：T22 三语文档（`docs/app-agent-separation.*` 新增"框架支持"节：包→TFM 矩阵、net6.0 宿主经中继、`Ason.Bridge` 为何不 ns2.0、ns2.0 宿主只能用 `InProcess`）② **已补齐**：`CHANGELOG.md` 的 `0.10.0` 节 + `Directory.Build.props` 与三语 README/execution-modes/app-agent-separation 里的版本引用 → `0.10.0` ③ **已补齐**：CI 现在**全量**构建 `WptDemoApp` 三条 windows 腿（本机实测 net6/net9/net10-windows 全部编过）④ **决定不做（有依据）**：`RunnerServiceSample` 保持 `net9.0` 单腿——它靠 `Microsoft.AspNetCore.OpenApi 9.0.x`（只有 net9 资产）暴露 `/openapi/v1.json` 作为就绪探测，而该样例不是适配器、remote-runner 的进程级 E2E 也只在 net9 跑；net6.0 宿主的形态已由 console 样例 + 新增 E2E 覆盖 ⑤ 本轮改动**未提交**（51 个修改 + 7 个新文件；`git diff --shortstat` = 722 insertions / 139 deletions），等你在真实树上 review 后再决定提交与推送；行尾按 `.gitattributes` 归一（`*.cs` 用 LF、`*.targets` 用 CRLF），`git diff` 无整文件级噪声 |
+
+### 10.15 样例/测试清单普查（你追问 `ConsoleBridgeCallerSample` 为何仍是单腿；本轮实做，**未提交**）
+
+**根因（三条叠加，不是单个文件的手滑）**：① T18 的落点是"应用侧"，三腿 + MCP 条件编译全做在 `ConsoleBridgeAppSample` 上，我没把 `samples/**` 当成清单逐项过；② 我自己的回归守卫 `BuildMatrixTests` 只钉了 `src/**` 与**两个 WPF 样例**的腿，**没有任何一条断言覆盖 console 样例** ⇒ 兄弟样例保持单腿不会有东西变红；③ 因此它既没进计划的"遗漏"行，也没进 CI 清单核对范围。**"覆盖到你想到的那条轴"不是守卫**。
+
+**10 项处置（逐项：事实 → 处置 → CI 措施）**
+
+| # | 工程 | 事实（实测） | 处置 | CI 措施 |
+|---|---|---|---|---|
+| 1 | `samples/ConsoleBridgeCallerSample` | 只引用 `Ason.Bridge.Grpc`（net6/9/10），唯一 "Mcp" 是读 `manifest.Capabilities.InvokeMcpTool` 字段 | → `net6.0;net9.0;net10.0`，**零条件编译** | 已建置会构建全部腿 |
+| 2 | `samples/ConsoleAgentSample` | 引用 `Ason.Bridge.Mcp`，代码 7 处 MCP 调用 | → 三腿 + `AsonMcpSupported`/`#if ASON_MCP` 门控（与 `WpfAgentDemo` 同款）；net6 腿 `--transport mcp` 明说原因并退码 2，不出假象 | 同上 |
+| 3 | `samples/ConsoleMcpSample`、`ConsoleExtractorSample` | 只引用 `Ason`（ns2.0）⇒ 下界零成本 | → 三腿 | 首次纳入 CI 构建清单 |
+| 4 | `samples/BlazorAdvancedApp` | `MudBlazor 8.15.0` 只有 `lib/net8.0`、`lib/net9.0` ⇒ **net6 不可能**（本仓不发 net8 档 ⇒ 下界就是 net9） | 保持 `net9.0`，理由写进矩阵 | **首次纳入** CI 构建（此前无任何清单构建它） |
+| 5 | `samples/RemoteRunnerService/RemoteRunnerService.csproj` | 不在 `Ason.sln`、不在任何 CI 清单，且**根本编译不过**：仍引用已退役的 `Ason.RemoteRunner 0.2.4`，其 API 已无 `AddAsonScriptRunner`/`MapAson`（`.dll` 里 0 次命中），而同目录 `RunnerServiceSample.csproj` 用的是本地/现行 API——两者**共用同一个 `Program.cs`** | 改指现行发布包 `Ason.RemoteBridge 0.8.2`（nuget.org 该包最高版本；`Ason.RemoteRunner` 停在 0.2.14）；并给它独立的 `BaseIntermediateOutputPath`/`BaseOutputPath` + `Compile Remove="obj\**;bin\**"`（同目录双工程共用 obj 会互相覆盖 `project.assets.json`，且默认 glob 会把兄弟工程的生成文件编进来 → `CS0579` 重复特性） | **首次纳入** CI 构建；双向实测：两个工程各自都能编过 |
+| 6 | `samples/RemoteRunnerService/RunnerServiceSample.csproj` | `Microsoft.AspNetCore.OpenApi 9.0.x` 只有 net9 资产，且 `/openapi/v1.json` 是 remote-runner E2E 的就绪探测 | 保持 `net9.0`（原本已写明） | 已在清单 |
+| 7 | `tests/TestMcpServer` | 被 `McpTests.cs` 启动的进程外夹具；CI 的 hermetic 过滤把 `McpClientTests` 排除 ⇒ 它没有可跑的腿需求 | 保持 `net9.0`，理由改为"由 net9 腿的测试启动" | **首次纳入** CI 构建 |
+| 8 | `tests/TestRemoteExecutorServer` | 手动夹具（`.http` 示例），`Microsoft.AspNetCore.OpenApi 9.0.10` 无 net6 资产 | 保持 `net9.0` | **首次纳入** CI 构建 |
+| 9 | `samples/templates/*`（7 工程） | 模板内容工程；MAUI 需要 android/ios/maccatalyst workload（本机仅 `wasm-tools-net6`，未装 MAUI ⇒ 无法构建）；其余（Console / BlazorServer / Maui.Server / WinForms / Wpf）实测均可构建 | 模板保持 `net9.0` 基线；MAUI **app 半边**记为唯一例外 | CI：`pack` 模板包 + 构建 Console/BlazorServer/Maui.Server（Linux）、WinForms/Wpf（Windows） |
+| 10 | `tests/Ason.Tests`、`Ason.Runner.Tests`、`Ason.RemoteRunner.Tests`、`WpfDemoApp.UiTests` | 全为 net9 单腿。`Ason.Tests` 的 net6 阻塞项是 `Microsoft.AspNetCore.Mvc.Testing 8.0.1`（只有 `lib/net8.0`）——但**全仓 0 处使用**（无 `WebApplicationFactory`）；`FlaUI.UIA3 5.0.0` 有 `net6.0-windows7.0` 资产 ⇒ UI 测试可加腿 | 删掉未使用的 `Mvc.Testing` 引用；`Ason.Tests` → 三腿 + `LangVersion latest`（net6 默认 C# 10，源码用了主构造函数 → `CS8936`）；`Runner.Tests`/`RemoteRunner.Tests` → 三腿；`UiTests` → 三条 windows 腿 | CI 全部**逐腿显式**执行（多目标 `dotnet test` 只写一个 TRX） |
+
+**普查额外抓到的两个真缺陷**：① `tests/Ason.RemoteRunner.Tests` 的 `<ProjectReference Include="..\..\src\Ason.Runner\Ason.Runner.csproj" />` 指向**已被重命名删除**的工程（`AsonRunner` 命名空间现在 `Ason.Runner.Core` 里）——MSBuild 只报**警告** `MSB9008: 引用的项目不存在`，于是它一直构建、一直绿；已删除该引用，并新增"任何 `ProjectReference` 必须解析到存在的文件"守卫。② 上述第 5 项（样例编译不过）。
+
+**元修复（防再漏）**：`tests/Ason.Bridge.Tests/BuildMatrixTests.cs` 从"钉住我想到的几处"改为**清单全覆盖**：一张表列出 `src/**`、`samples/**`、`tests/**` 全部 **37 个工程**的期望腿、CI 触点与理由；三条仓库级断言——未列入清单 / 清单指向不存在的工程 / **悬空 `ProjectReference`** / 任何工程声明 `net8` 都直接失败；`Ci.ByDesign` 例外必须带 >40 字的理由（且理由集合被单独钉住）。RED 证据：改造后首次运行 **23/82 失败**（正是上述 1–10 项），修复后 **82/82 通过**。
+
+**本机全腿实测（修复后）**：`BuildMatrixTests` 82/82；`Ason.Bridge.Tests` **243/243 × net9.0+net10.0**；`Ason.Tests` **105/105 × net6.0+net9.0+net10.0**；`Ason.Runner.Tests` 1/1 × 3 腿；`Ason.RemoteRunner.Tests` 1 通过 + 1 跳过 × 3 腿；冒烟 **13/13 × 4 腿**（含 net472）；7 个新腿/新清单工程 + 模板五半边 + `pack` 全部构建通过。
+
+**真实 Ubuntu 机器（`scripts/ci-linux.sh`，先清空 bin/obj 做纯从零构建）8/8 步全 ok**：构建 22 个工程（含模板与首度纳入清单的 6 个）→ 冒烟 13/13×3 → runner 1/1×3 → remote-runner 1+1跳过×3 → **库测试 105/105×3** → **桥测试 238 通过/5 跳过/243 × net9+net10** → 覆盖率地板 4 包 → 打包契约 → **模板包与模板半边**。两个新发现也在这一轮被真实环境抓出并修掉：① 我新写的引用守卫只归一了 `/`，Linux 上反斜杠写法的 `ProjectReference` 被当字面文件名 → 改为两种分隔符都归一（修后 Linux 侧 82/82）；② `ci-linux.sh` 的注解调用 `-ResultsDirectory "$results" artifacts/coverage artifacts` 从 bash 传多值**绑不到 `[string[]]` 参数**（`|| true` 一直掩盖），改为用脚本默认值（已含 `TestResults` 与递归 `artifacts`），并在测试机上实跑确认输出 `No failed tests in the TRX files.`；③ 顺带把本地复跑的 `TestResults/` 也纳入开头清理（否则旧 TRX 会被注解步骤当成本次结果）。
+
+### 10.16 原 net9.0 单腿工程全部补上 net10.0（你追加要求；本轮实做，**未提交**）
+
+上一轮我把 `BlazorAdvancedApp`、`RunnerServiceSample`、`RemoteRunnerService`、`TestMcpServer`、`TestRemoteExecutorServer` 与模板（含模板包）记为"有据单腿"，你要求它们**同时支持 net10.0**。逐项处置与实测：
+
+| 工程 | 新腿 | 关键处理 | 实测 |
+|---|---|---|---|
+| `samples/BlazorAdvancedApp` | `net9.0;net10.0` | `MudBlazor 8.*` 只有 net8/net9 资产 ⇒ net9 是**下界**不是天花板，net10 腿按 NuGet 就近兼容消费 net9 资产 | 两腿均编过 |
+| `samples/RemoteRunnerService/RunnerServiceSample.csproj` | `net9.0;net10.0` | `Microsoft.AspNetCore.OpenApi` 改为**按腿钉版本**（net9→9.0.7、net10→10.0.0）；`/openapi/v1.json` 就绪探测不变；E2E 仍驱动 net9 腿 | 两腿均编过 |
+| `samples/RemoteRunnerService/RemoteRunnerService.csproj` | `net9.0;net10.0` | 已发布 `Ason.RemoteBridge 0.8.2` 只有 net9 资产 ⇒ net10 腿就近兼容；OpenApi 按腿钉版本 | 两腿均编过 |
+| `tests/TestMcpServer` | `net9.0;net10.0` | 官方 MCP SDK 有 net10 资产 | 两腿均编过 |
+| `tests/TestRemoteExecutorServer` | `net9.0;net10.0` | OpenApi 按腿钉版本（9.0.10 / 10.0.0） | 两腿均编过 |
+| `samples/templates/Ason.ProjectTemplates.csproj` | `net9.0;net10.0` | 多目标 `pack` 实测**只产出一个 nupkg**（内容相同），无重复/冲突 | `pack` 通过，产物 `Ason.ProjectTemplates.1.0.0.nupkg` |
+| `Content/Ason.Console.Template`、`Content/Ason.BlazorServer.Template` | `net9.0;net10.0` | 引用的 `Ason`/`Ason.ExternalExecutor` 用 `Version="*"`（已发布 0.8.2 只有 net9 资产）⇒ net10 腿就近兼容 | 两腿均编过 |
+| `Content/Ason.Maui.Template.Server` | `net9.0;net10.0` | 同上 + OpenApi 按腿钉版本 | 两腿均编过 |
+| `Content/Ason.WinForms.Template`、`Content/Ason.Wpf.Template` | `net9.0-windows;net10.0-windows` | Windows 作业构建两腿（本机实测两腿编过） | 两腿均编过 |
+| `Content/Ason.Maui.Template` | 追加 `net10.0-android;-ios;-maccatalyst` 与 Windows 条件行 `net10.0-windows10.0.19041.0` | **无法在本机/托管 runner 构建**（未装 MAUI workload，本机 `dotnet workload list` 仅 `wasm-tools-net6`）⇒ 仍为矩阵里唯一的 `ByDesign` 例外，理由已更新为"声明两档平台腿但不可构建，其平台无关的 server 半边两档都构建" | 未构建（已如实记录） |
+
+守则同步：12 条矩阵条目更新为新腿；`ByDesign` 例外从四个收窄到一个（MAUI app 半边）。`BuildMatrixTests` 本机 **82/82**。
+
+**仍未做 / 需你知晓**：① 模板内容里 `Ason`/`Ason.ExternalExecutor` 用的是 `Version="*"`（浮动，取已发布最新）；本仓 0.10.0 发布后可考虑改为显式版本；② `McpClientTests`（CI 用 hermetic 过滤排除）用 `dotnet TestMcpServer.dll`（**没有路径**，依赖当前工作目录）启动夹具——与本轮无关的既有缺陷，按你口径未动。
+
+**加 net6 腿当场抓到的真实差异（本机 CI 复现时暴露）→ 你已拍板"现在就做"，已完成**：`Ason.Tests.Orchestration.AsonClientAdditionalTests.Cancellation_DuringAnswerStreaming` 在 `net6.0` 上**单独跑 6/6 必失败**、`net9.0`/`net10.0` 上必通过。读代码后定位到**根因在本仓**（不只是 SK 资产差异）：`AsonClient.InternalStreaming` 把编排跑在后台任务里，其 `catch (OperationCanceledException) { }` **主动吞掉取消**并 `TryComplete()` 通道（异常无法跨通道），于是**谁先观察到 token** 成了竞态——消费侧 `WaitToReadAsync(token)` 抛 OCE，还是生产者先把通道正常结束；而**运行时决定这个竞态**：net9/net10 解析 SK 的 `net8.0` 资产、net6 解析 `netstandard2.0` 资产（实测两腿复制的 DLL 大小不同，如 `SemanticKernel.Core.dll` 218,672 vs 213,536 B）。后果是**net6 档上"被取消的回答"看起来像"正常完成"**（`SendStreamingAsync` 正常返回，上层可能把被放弃的会话报成成功）。**处置（你选"现在就做"）**：在 `InternalStreaming` 的通道循环之后补 `cancellationToken.ThrowIfCancellationRequested()`，把契约统一为 .NET 惯例——**token 被取消 ⇒ 该 enumeration 必以 `OperationCanceledException`（带调用方 token）结束，绝不静默完成**；用例恢复为**强断言**（OCE + 流未跑完），并新增反向用例 `Completed_AnswerStream_Does_Not_Throw`（未取消的完整流不得抛，防止过度归一）。三腿各 2/2 通过；这是**公开行为变更**（此前依赖"取消后优雅结束"的调用方会收到 OCE），已写入 `CHANGELOG`。范围说明：只统一**模型/agent 侧的 `AsonClient` 流式契约**；传输级客户端保持各自协议惯例（gRPC 取消仍是 `RpcException`），未擅自改动。另注：同一处的 `catch (Exception ex) { OnLog(Error, …) }` 意味着**生产者的非取消异常也不会到达消费侧**（只落日志），这与本次无关，记录备查。
+
+
+**给 `TestMcpServer` 加 net10 腿又抓到第二个更严重的**：该夹具**两档都根本起不来**——`ModelContextProtocol` 的资产要求 `Microsoft.Extensions.Primitives 9.0.0.0`，而夹具自己钉的 `Microsoft.Extensions.Hosting 8.0.1` 把 `8.0.0` 放进输出目录，宿主在应答任何请求前就抛 `FileNotFoundException`（与 net472 腿抓到的 `Microsoft.Bcl.AsyncInterfaces` 版本分裂同族）。处置：`Microsoft.Extensions.*` 按腿钉版本（net9→9.0.10、net10→10.0.0），并**真跑 stdio 握手**（`initialize` → `tools/list`）在**两档**各自确认有应答（`OK: tools/list 有应答（3 行）`）。因为 CI 的 hermetic 过滤排除了 `McpClientTests`，这个缺陷此前不会被任何东西发现。
+
+**两档运行期交叉验证（本机，`artifacts/verify-net10-runtime.ps1`）**：`RunnerServiceSample` 两档 `/openapi/v1.json` 均 **200**（net9 212 B / net10 191 B，net10 腿用 OpenApi 10.0.0）；`BlazorAdvancedApp` 两档都能起并应答 HTTP（`/` 返回 **500，两档一致**——该样例以这种方式直跑时的既有行为，不是档位回归）；`TestMcpServer` 两档 stdio 握手均通过。
+
+
+
+

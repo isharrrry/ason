@@ -33,7 +33,10 @@ internal sealed class OperatorInvoker : IOperatorInvoker {
 
         // Operator modules (static classes annotated with [AsonOperator]) carry no handle: the generated
         // proxy passes the type name as the target, so dispatch straight to the static method.
-        if (string.IsNullOrEmpty(handleId)) {
+        // `is null || Length == 0` rather than `string.IsNullOrEmpty`: the netstandard2.0 BCL is not annotated
+        // with NotNullWhen, so only the pattern the compiler proves itself narrows `handleId` for the uses below
+        // (CS8604 otherwise). The net9.0 leg narrows identically. Same meaning, same generated code.
+        if (handleId is null || handleId.Length == 0) {
             if (!_methodCache.TryGetStatic(target, method, argCount, out var staticEntry)) {
                 throw new ArgumentNullException(nameof(handleId),
                     $"Operator '{target}.{method}' was invoked without a handle. Declare the operator as a static class to make it callable without one, or expose it as an OperatorBase instance.");

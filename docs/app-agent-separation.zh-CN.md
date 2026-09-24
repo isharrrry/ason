@@ -197,13 +197,13 @@ gRPC 契约本身就是接口：Python、Go、Java、Rust 或 `grpcurl` 调用�
 
 ```xml
 <!-- 1. 从包里取：该文件随 Ason.Bridge.Grpc 一起发布 -->
-<PackageReference Include="Ason.Bridge.Grpc" Version="0.9.0" GeneratePathProperty="true" />
+<PackageReference Include="Ason.Bridge.Grpc" Version="0.10.0" GeneratePathProperty="true" />
 <!-- 契约位于 $(PkgAson_Bridge_Grpc)\protos\ason_bridge.proto -->
 ```
 
 ```bash
 # 2. 从仓库取，或从解包后的 nupkg 取
-unzip -o Ason.Bridge.Grpc.0.9.0.nupkg 'protos/*' -d ./ason-contract
+unzip -o Ason.Bridge.Grpc.0.10.0.nupkg 'protos/*' -d ./ason-contract
 # src/Ason.Bridge.Grpc/Protos/ason_bridge.proto
 ```
 
@@ -510,3 +510,23 @@ dotnet test tests/WpfDemoApp.UiTests/WpfDemoApp.UiTests.csproj --configuration R
   `GrpcChannel.ForAddress(...)`，或完整限定类型名。
 - 透传只能指定服务名与工具名；桥不会镜像应用所消费 MCP 服务的工具列表，调用方需要从应用（或 Agent 自身配置）得知，
   而不是从清单得知。
+
+## 框架支持
+
+| 包 | 资产 | 说明 |
+|---|---|---|
+| `Ason.Abstractions`、`Ason.Runner.Core`、`Ason` | `netstandard2.0` | 单一资产，.NET Framework 4.6.2+ 与所有现代 .NET 都能消费；旧宿主内嵌的就是它 |
+| `Ason.Bridge`、`Ason.Bridge.Grpc`、`Ason.Bridge.OpenApi`、`Ason.RemoteBridge`、`Ason.ExternalExecutor` | `net6.0`、`net9.0`、`net10.0` | `Ason.Bridge` 用了默认接口实现，无法降到 netstandard2.0 |
+| `Ason.Bridge.Mcp`、`Ason.Bridge.McpHost` | `net9.0`、`net10.0` | 官方 MCP SDK 需要 net8+，而本仓库不发布 net8 档 |
+
+**`net6.0` 应用无法内嵌 MCP 服务端，也不需要。** 它发布 gRPC（以及 HTTP/OpenAPI），MCP Agent 经 **stdio 中继**（独立进程）访问它：
+
+```bash
+dotnet exec src/bin/Release/net9.0/Ason.Bridge.McpHost.dll --url http://localhost:5222
+```
+
+应用的清单会如实说明这一点：`capabilities.invokeMcpTool` 为 `false`，工具清单里没有 `ason_invoke_mcp_tool`。
+其余一切 —— 清单、脚本执行、单函数调用、operator API —— 与 `net9.0`/`net10.0` 宿主完全一致。
+
+**旧宿主跟不上的地方**：`Ason.ExternalExecutor` 是可执行文件，.NET Framework 宿主只能用进程内执行
+（`ExecutionMode.InProcess`）；`ExternalProcess` 与 `docker` 需要 .NET 6+。

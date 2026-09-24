@@ -22,7 +22,7 @@
 #   -c, --configuration <cfg>   build configuration (default: Release)
 #       --skip-build            reuse what is already built
 #       --skip-smoke            skip the smoke tests (needs a .NET 10 SDK, see the warning this script prints)
-#       --suite <name>          run one suite only: smoke, runner, remoterunner, library, bridge, coverage, contract
+#       --suite <name>          run one suite only: smoke, runner, remoterunner, library, bridge, coverage, contract, templates, templates
 #       --filter <expr>         extra dotnet test --filter for that suite (requires --suite)
 #       --no-annotations        do not print GitHub-style annotations at the end
 #   -h, --help                  this text
@@ -40,7 +40,7 @@ Usage: scripts/ci-linux.sh [options]
   -c, --configuration <cfg>   build configuration (default: Release)
       --skip-build            reuse what is already built
       --skip-smoke            skip the smoke tests (needs a .NET 10 SDK, see the warning this script prints)
-      --suite <name>          run one suite only: smoke, runner, remoterunner, library, bridge, coverage, contract
+      --suite <name>          run one suite only: smoke, runner, remoterunner, library, bridge, coverage, contract, templates, templates
       --filter <expr>         extra dotnet test --filter for that suite (requires --suite)
       --no-annotations        do not print GitHub-style annotations at the end
   -h, --help                  this text
@@ -119,7 +119,21 @@ projects=(
     samples/ConsoleBridgeAppSample/ConsoleBridgeAppSample.csproj
     samples/ConsoleAgentSample/ConsoleAgentSample.csproj
     samples/ConsoleBridgeCallerSample/ConsoleBridgeCallerSample.csproj
+    samples/ConsoleMcpSample/ConsoleMcpSample.csproj
+    samples/ConsoleExtractorSample/ConsoleExtractorSample.csproj
+    samples/BlazorAdvancedApp/BlazorAdvancedApp.csproj
     samples/RemoteRunnerService/RunnerServiceSample.csproj
+    samples/RemoteRunnerService/RemoteRunnerService.csproj
+    tests/TestMcpServer/TestMcpServer.csproj
+    tests/TestRemoteExecutorServer/TestRemoteExecutorServer.csproj
+)
+
+# Template halves that need no platform workload; the MAUI app half needs android/ios/maccatalyst workloads and
+# is the one recorded exception (see tests/Ason.Bridge.Tests/BuildMatrixTests.cs).
+template_content=(
+    samples/templates/Content/Ason.Console.Template/Ason.Console.Template.csproj
+    samples/templates/Content/Ason.BlazorServer.Template/Ason.BlazorServer.Template.csproj
+    samples/templates/Content/Ason.Maui.Template/Ason.Maui.Template.Server/Ason.Maui.Template.Server.csproj
 )
 
 failed=0
@@ -159,16 +173,32 @@ if [ -n "$filter" ]; then
 fi
 
 run_smoke() {
+    # Same legs as the workflow's smoke step. The net472 certificate leg is Windows-only (no .NET Framework on
+    # Linux), which is why it lives in the other job.
     test_project libdemo-net6.trx "$results" tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --framework net6.0 "${filter_arguments[@]}" \
-        && test_project libdemo-net9.trx "$results" tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --framework net9.0 "${filter_arguments[@]}"
+        && test_project libdemo-net9.trx "$results" tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --framework net9.0 "${filter_arguments[@]}" \
+        && test_project libdemo-net10.trx "$results" tests/LibDemo.SmokeTests/LibDemo.SmokeTests.csproj --framework net10.0 "${filter_arguments[@]}"
 }
 
+# One leg per runtime for every suite that ships several, named explicitly: a multi-target `dotnet test` writes a
+# single TRX covering all of its frameworks (the last leg wins), so the annotations - the only part of a failed CI
+# run that is readable from outside - would describe one framework while the step was supposed to run three.
+runtime_legs=(net6.0 net9.0 net10.0)
+
 run_runner() {
-    test_project ason-runner-tests.trx "$results" tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj "${filter_arguments[@]}"
+    local framework
+    for framework in "${runtime_legs[@]}"; do
+        test_project "ason-runner-tests-$framework.trx" "$results" tests/Ason.Runner.Tests/Ason.Runner.Tests.csproj \
+            --framework "$framework" "${filter_arguments[@]}" || return 1
+    done
 }
 
 run_remoterunner() {
-    test_project ason-remoterunner-tests.trx "$results" tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj "${filter_arguments[@]}"
+    local framework
+    for framework in "${runtime_legs[@]}"; do
+        test_project "ason-remoterunner-tests-$framework.trx" "$results" tests/Ason.RemoteRunner.Tests/Ason.RemoteRunner.Tests.csproj \
+            --framework "$framework" "${filter_arguments[@]}" || return 1
+    done
 }
 
 run_library() {
@@ -177,7 +207,11 @@ run_library() {
     if [ -n "$filter" ]; then
         hermetic="$hermetic&($filter)"
     fi
-    test_project ason-tests.trx "$results" tests/Ason.Tests/Ason.Tests.csproj --filter "$hermetic"
+    local framework
+    for framework in "${runtime_legs[@]}"; do
+        test_project "ason-tests-$framework.trx" "$results" tests/Ason.Tests/Ason.Tests.csproj \
+            --framework "$framework" --filter "$hermetic" || return 1
+    done
 }
 
 run_bridge() {
@@ -185,9 +219,14 @@ run_bridge() {
     # Reports from earlier runs are removed first: the floor script reads every report it can find, so a stale
     # passing one would hide the regression this run was meant to catch. CI needs no cleanup (fresh runner); this
     # run showed the problem by reporting "floor met for 12 bridge package(s)" - three runs' worth of reports.
+    #
+    # One leg per runtime, explicitly. `dotnet test` on the multi-target project writes a single TRX for all of
+    # its frameworks (the last leg wins), so the annotations would describe one framework while both were run.
     rm -rf artifacts/coverage
-    test_project ason-bridge-tests.trx artifacts/coverage tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj \
-        --collect:"XPlat Code Coverage" --settings coverlet.runsettings "${filter_arguments[@]}"
+    test_project ason-bridge-tests-net9.trx artifacts/coverage tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj \
+        --framework net9.0 --collect:"XPlat Code Coverage" --settings coverlet.runsettings "${filter_arguments[@]}" \
+        && test_project ason-bridge-tests-net10.trx "$results" tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj \
+        --framework net10.0 "${filter_arguments[@]}"
 }
 
 run_coverage_floor() {
@@ -196,6 +235,16 @@ run_coverage_floor() {
 
 run_contract() {
     pwsh ./scripts/check-package-contract.ps1
+}
+
+run_template_package() {
+    # The template package plus the halves a Linux runner can build. The MAUI app half is the recorded exception:
+    # it needs the android/ios/maccatalyst workloads, which this machine and the hosted runners do not install.
+    dotnet pack samples/templates/Ason.ProjectTemplates.csproj --configuration "$configuration" --output artifacts/template-pack || return 1
+    local project
+    for project in "${template_content[@]}"; do
+        dotnet build "$project" --configuration "$configuration" || return 1
+    done
 }
 
 if [ "$skip_build" -eq 0 ]; then
@@ -209,27 +258,35 @@ if [ "$skip_build" -eq 0 ]; then
     done
 fi
 
+# Previous runs' TRX files are removed before this one writes its own: the annotation step reads every TRX it can
+# find, so a stale report from an older run is read as if it were this run's result (a failing one would annotate
+# a green run). CI needs no cleanup - the runner starts empty - but this script is meant to be re-runnable, and
+# the coverage directory gets the same treatment below.
+rm -rf "$results"
+
 if [ -n "$suite" ]; then
     case "$suite" in
-        smoke) run_step "smoke tests (net6.0, net9.0)" run_smoke ;;
-        runner) run_step "runner tests" run_runner ;;
-        remoterunner) run_step "remote-runner tests" run_remoterunner ;;
-        library) run_step "library tests (hermetic filter)" run_library ;;
-        bridge) run_step "bridge tests (with coverage)" run_bridge ;;
+        smoke) run_step "smoke tests (net6.0, net9.0, net10.0)" run_smoke ;;
+        runner) run_step "runner tests (net6.0, net9.0, net10.0)" run_runner ;;
+        remoterunner) run_step "remote-runner tests (net6.0, net9.0, net10.0)" run_remoterunner ;;
+        library) run_step "library tests (hermetic filter, net6.0 / net9.0 / net10.0)" run_library ;;
+        bridge) run_step "bridge tests (net9.0 with coverage, net10.0)" run_bridge ;;
         coverage) run_step "coverage floor (bridge adapters)" run_coverage_floor ;;
         contract) run_step "the contract ships with the package" run_contract ;;
-        *) echo "unknown suite: $suite (expected smoke, runner, remoterunner, library, bridge, coverage, contract)" >&2; exit 2 ;;
+        templates) run_step "template package and template halves" run_template_package ;;
+        *) echo "unknown suite: $suite (expected smoke, runner, remoterunner, library, bridge, coverage, contract, templates)" >&2; exit 2 ;;
     esac
 else
     if [ "$skip_smoke" -eq 0 ]; then
-        run_step "smoke tests (net6.0, net9.0)" run_smoke
+        run_step "smoke tests (net6.0, net9.0, net10.0)" run_smoke
     fi
-    run_step "runner tests" run_runner
-    run_step "remote-runner tests" run_remoterunner
-    run_step "library tests (hermetic filter)" run_library
-    run_step "bridge tests (with coverage)" run_bridge
+    run_step "runner tests (net6.0, net9.0, net10.0)" run_runner
+    run_step "remote-runner tests (net6.0, net9.0, net10.0)" run_remoterunner
+    run_step "library tests (hermetic filter, net6.0 / net9.0 / net10.0)" run_library
+    run_step "bridge tests (net9.0 with coverage, net10.0)" run_bridge
     run_step "coverage floor (bridge adapters)" run_coverage_floor
     run_step "the contract ships with the package" run_contract
+    run_step "template package and template halves" run_template_package
 fi
 
 printf '\n=== summary ===\n'
@@ -241,7 +298,12 @@ done
 
 if [ "$failed" -gt 0 ] && [ "$annotations" -eq 1 ]; then
     printf '\n=== annotations (the ones CI would publish) ===\n'
-    pwsh ./scripts/emit-test-failures.ps1 -ResultsDirectory "$results" artifacts/coverage artifacts || true
+    # No -ResultsDirectory here: its default is TestResults plus artifacts, and 'artifacts' is searched
+    # recursively, so the coverage run's TRX is covered too. Passing the paths as extra positional arguments
+    # (as this line used to) does not bind to the [string[]] parameter from bash - PowerShell answered
+    # "A positional parameter cannot be found that accepts argument 'artifacts/coverage'", and the `|| true`
+    # swallowed it, so a failing local run printed no annotations at all.
+    pwsh ./scripts/emit-test-failures.ps1 || true
 fi
 
 if [ "$failed" -gt 0 ]; then

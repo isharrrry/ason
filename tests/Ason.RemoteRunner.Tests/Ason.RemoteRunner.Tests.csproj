@@ -1,7 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- One leg per runtime the libraries admit; the integration test itself is skipped unless
+         ASON_REMOTE_RUNNER_URL points at a running remote runner. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -21,7 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Ason.Runner\Ason.Runner.csproj" />
+    <!-- Nothing here references src/Ason.Runner: that project was renamed to Ason.Runner.Core in an earlier wave
+         and the namespace AsonRunner moved with it, but the stale ProjectReference stayed behind. MSBuild reports
+         a missing project as the *warning* MSB9008, so this suite kept building - and staying green - against a
+         reference that resolved to nothing. BuildMatrixTests now fails on any dangling ProjectReference. -->
     <ProjectReference Include="..\..\src\Ason\Ason.csproj" />
   </ItemGroup>
 

@@ -104,7 +104,7 @@ public static class ProxySerializer {
         var modelTypes = GetTypesWithAttribute<AsonModelAttribute>(assemblies).Where(t => t.IsClass && !t.IsAbstract).OrderBy(t => t.Name).ToArray();
         foreach (var t in modelTypes) {
             var attr = t.GetCustomAttribute<AsonModelAttribute>();
-            if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr.Description!)) sb.AppendLine($"// {line}");
+            if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr!.Description!)) sb.AppendLine($"// {line}");
             sb.AppendLine($"public class {t.Name} {{");
             foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanRead && p.CanWrite).OrderBy(p => p.Name)) {
                 sb.AppendLine($"    public {GetFriendlyTypeName(p.PropertyType)} {p.Name};");
@@ -199,7 +199,7 @@ public static class ProxySerializer {
 
     private static void AppendStaticSignatureProxy(StringBuilder sb, Type type) {
         var attr = type.GetCustomAttribute<AsonOperatorAttribute>();
-        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr.Description!)) sb.AppendLine($"// {line}");
+        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr!.Description!)) sb.AppendLine($"// {line}");
         sb.AppendLine($"public static class {type.Name} {{");
         foreach (var mi in type.GetMethods(BindingFlags.Public | BindingFlags.Static).Where(m=>m.GetCustomAttribute<AsonMethodAttribute>()!=null).OrderBy(m=>m.Name))
             EmitSignatureMethod(sb, mi, isInstance:false);
@@ -208,7 +208,7 @@ public static class ProxySerializer {
 
     private static void AppendInstanceSignatureProxy(StringBuilder sb, Type type) {
         var attr = type.GetCustomAttribute<AsonOperatorAttribute>();
-        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr.Description!)) sb.AppendLine($"// {line}");
+        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr!.Description!)) sb.AppendLine($"// {line}");
         sb.AppendLine($"public class {type.Name} {{");
         sb.AppendLine($"    private {type.Name}();"); // discourage direct instantiation
         foreach (var mi in type.GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(m=>m.GetCustomAttribute<AsonMethodAttribute>()!=null).OrderBy(m=>m.Name))
@@ -220,7 +220,7 @@ public static class ProxySerializer {
         // Keep the agent-facing signature consistent with the generated proxy: static modules read "static".
         string mod = isInstance ? "public" : "public static";
         var attr = mi.GetCustomAttribute<AsonMethodAttribute>();
-        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr.Description!)) sb.AppendLine($"    // {line}");
+        if (!string.IsNullOrWhiteSpace(attr?.Description)) foreach (var line in SplitLines(attr!.Description!)) sb.AppendLine($"    // {line}");
         string logicalName = TrimAsyncSuffix(mi.Name);
         var pars = mi.GetParameters();
         string paramSig = string.Join(", ", pars.Select((p,i)=> $"{GetFriendlyTypeName(p.ParameterType)} {p.Name ?? "arg"+i}"));
@@ -366,7 +366,7 @@ public static class ProxySerializer {
     private static string ToPascal(string value) {
         if (string.IsNullOrWhiteSpace(value)) return value;
         var parts = value.Split(new[]{'-','_',' ','.'}, StringSplitOptions.RemoveEmptyEntries);
-        var sb = new StringBuilder(); foreach (var p in parts) sb.Append(char.ToUpperInvariant(p[0])).Append(p.AsSpan(1));
+        var sb = new StringBuilder(); foreach (var p in parts) sb.Append(char.ToUpperInvariant(p[0])).Append(p.Substring(1));
         return sb.ToString();
     }
     private static string CamelCase(string name) => string.IsNullOrEmpty(name) ? name : name.Length==1 ? name.ToLowerInvariant() : char.ToLowerInvariant(name[0]) + name[1..];

@@ -51,11 +51,11 @@ dotnet build src/Ason/Ason.csproj --configuration Release
 | 套件 | 框架 | 说明 |
 |---|---|---|
 | `tests/LibDemo.SmokeTests` | net6.0 / net9.0 / net10.0 | 标记发现、类型转发以及真实的进程内 operator 调用 |
-| `tests/Ason.Tests` | net9.0 | `E2E_AllExecutionModes(executionMode: Docker, …)` 用例需要 Docker 守护进程；`McpClientTests` 需要实时的 MCP server |
-| `tests/Ason.Runner.Tests` | net9.0 | 脚本运行器 |
-| `tests/Ason.RemoteRunner.Tests` | net9.0 | 除非 `ASON_REMOTE_RUNNER_URL` 指向正在运行的远程运行器，否则该集成测试会被跳过 |
-| `tests/Ason.Bridge.Tests` | net9.0 | 桥核心、gRPC/MCP/OpenAPI 适配器（各自在进程内起宿主并走真实链路）、runner 传输缝、中继端点，以及 WPF 示例的端到端测试（在 Linux 或未构建 Windows 示例时会跳过） |
-| `tests/WpfDemoApp.UiTests` | net9.0-windows | FlaUI UI 自动化 —— 需要交互式的 Windows 桌面会话 |
+| `tests/Ason.Tests` | net6.0 / net9.0 / net10.0 | `E2E_AllExecutionModes(executionMode: Docker, …)` 用例需要 Docker 守护进程；`McpClientTests` 需要实时的 MCP server。逐运行时一腿——原因见下面对 `Ason.Bridge.Tests` 的说明 |
+| `tests/Ason.Runner.Tests` | net6.0 / net9.0 / net10.0 | 脚本运行器，在支持的最旧与最新宿主上各跑一遍 |
+| `tests/Ason.RemoteRunner.Tests` | net6.0 / net9.0 / net10.0 | 除非 `ASON_REMOTE_RUNNER_URL` 指向正在运行的远程运行器，否则该集成测试会被跳过 |
+| `tests/Ason.Bridge.Tests` | net9.0 / net10.0 | 桥核心、gRPC/MCP/OpenAPI 适配器（各自在进程内起宿主并走真实链路）、runner 传输缝、中继端点、全仓构建矩阵守卫，以及 WPF 示例的端到端测试（在 Linux 或未构建 Windows 示例时会跳过）。两条腿都跑，因为适配器本身就发这两个框架；请逐腿用 `--framework` 执行——多目标 `dotnet test` 只会为所有框架写一个 TRX |
+| `tests/WpfDemoApp.UiTests` | net6.0-windows / net9.0-windows / net10.0-windows | FlaUI UI 自动化 —— 需要交互式的 Windows 桌面会话，因此 CI 以 `continue-on-error` 运行；`WPF_DEMO_TFM` 选择驱动哪条样例腿（默认 `net9.0-windows`） |
 
 在不使用 Docker 的情况下运行与外部环境隔离的子集：
 
@@ -97,7 +97,11 @@ dotnet test tests/Ason.Bridge.Tests/Ason.Bridge.Tests.csproj --configuration Rel
 检查适配器下限，并解包 `Ason.Bridge.Grpc` 包以证明随包发布的契约里仍有 `protos/ason_bridge.proto`。第二个任务
 （`windows-samples`）构建 WPF 示例，并在 Windows 上重新运行 `tests/Ason.Bridge.Tests` 与库测试套件，这才让那些端到端测试真正执行；
 它同时以 `continue-on-error` 运行 FlaUI UI 测试 —— 因为 UI Automation 需要交互式桌面会话，而托管运行器只能不稳定地提供。
-net10.0 分支在该 SDK 正式发布前不纳入。
+两个任务都安装 .NET 6、9、10 SDK；凡是发布多个运行时资产的测试套件都按运行时逐腿执行
+（冒烟与库/runner/远程 runner 套件跑 `net6.0`/`net9.0`/`net10.0`，桥测试跑 `net9.0`/`net10.0`，
+UI 测试跑三个 Windows 运行时，另有 Windows 上的 `net472` 腿）。构建步骤同时编译**每一个**样例、测试夹具与模板半边
+——包括此前不在任何构建清单里的那些，且覆盖本仓发布的**两档**（`net9.0` 与 `net10.0`）——并打包模板包。
+哪个工程必须声明哪些框架、少数为何刻意更窄，是**测试**而不是约定：`tests/Ason.Bridge.Tests/BuildMatrixTests.cs`。
 
 每个测试步骤都会写出 TRX 文件，最后一个步骤（`scripts/emit-test-failures.ps1`，以 `if: failure()` 守护）把它们转成
 check-run 注解。这是有意的：失败运行的作业日志只有管理员权限才能下载，而携带测试名与断言内容的注解可以匿名读取 ——

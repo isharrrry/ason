@@ -24,11 +24,11 @@ internal sealed class OrchestrationContext
 
     public void SetConsolidatedTask(string? task)
     {
-        ConsolidatedUserTask = string.IsNullOrWhiteSpace(task) ? null : task.Trim();
+        ConsolidatedUserTask = string.IsNullOrWhiteSpace(task) ? null : task!.Trim();
     }
 
     public void SetDirectScriptRoutingReason(string? reason)
     {
-        DirectScriptRoutingReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        DirectScriptRoutingReason = string.IsNullOrWhiteSpace(reason) ? null : reason!.Trim();
     }
 }

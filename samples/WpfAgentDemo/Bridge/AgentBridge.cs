@@ -5,7 +5,9 @@ using Ason.Invocation;
 using Ason.Transport;
 using Ason.Bridge;
 using Ason.Bridge.Grpc;
+#if ASON_MCP
 using Ason.Bridge.Mcp;
+#endif
 using ModelContextProtocol.Client;
 
 namespace WpfAgentDemo.Bridge;
@@ -25,8 +27,17 @@ public enum AgentTransportKind {
 internal sealed class AgentBridge : IAsyncDisposable {
 
     GrpcAsonBridgeClient? _grpc;
+#if ASON_MCP
     McpAsonBridgeClient? _mcp;
+#endif
     OperatorsLibrary? _library;
+
+    /// <summary>
+    /// This build has no MCP client: the official SDK requires net8+, and these legs exist for the legacy hosts
+    /// that cannot go above net6. Failing loudly is the point - silently falling back to gRPC would hide which
+    /// transport actually ran.
+    /// </summary>
+    const string McpUnavailable = "This build has no MCP client (the official MCP SDK requires net8+; this is the net6.0-windows leg). Use --transport grpc, or drive the application through the stdio relay (Ason.Bridge.McpHost).";
 
     AgentBridge(string endpoint, AgentTransportKind transport) {
         Endpoint = endpoint;
@@ -50,8 +61,12 @@ internal sealed class AgentBridge : IAsyncDisposable {
                 bridge._grpc = GrpcAsonBridgeClient.Connect(bridge.Endpoint);
                 break;
             case AgentTransportKind.Mcp:
+#if ASON_MCP
                 bridge._mcp = await McpAsonBridgeClient.ConnectAsync(bridge.Endpoint, cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
+#else
+                throw new PlatformNotSupportedException(McpUnavailable);
+#endif
             default:
                 throw new ArgumentOutOfRangeException(nameof(transport));
         }
@@ -64,7 +79,11 @@ internal sealed class AgentBridge : IAsyncDisposable {
     public async Task<AsonBridgeManifest> RefreshAsync(CancellationToken cancellationToken = default) {
         Manifest = Transport switch {
             AgentTransportKind.Grpc => await _grpc!.GetManifestAsync(cancellationToken).ConfigureAwait(false),
+#if ASON_MCP
             AgentTransportKind.Mcp => await _mcp!.GetManifestAsync(cancellationToken).ConfigureAwait(false),
+#else
+            AgentTransportKind.Mcp => throw new PlatformNotSupportedException(McpUnavailable),
+#endif
             _ => throw new InvalidOperationException()
         };
 
@@ -85,13 +104,21 @@ internal sealed class AgentBridge : IAsyncDisposable {
     /// <summary>The transport that carries the runner protocol to the application.</summary>
     public IRunnerTransport CreateTransport() => Transport switch {
         AgentTransportKind.Grpc => new GrpcAsonBridgeTransport(_grpc!),
+#if ASON_MCP
         AgentTransportKind.Mcp => new McpAsonBridgeTransport(_mcp!),
+#else
+        AgentTransportKind.Mcp => throw new PlatformNotSupportedException(McpUnavailable),
+#endif
         _ => throw new InvalidOperationException()
     };
 
     public Task<AsonBridgeCallResult> ExecuteScriptAsync(string code, CancellationToken cancellationToken = default) => Transport switch {
         AgentTransportKind.Grpc => _grpc!.ExecuteScriptAsync(code, cancellationToken: cancellationToken),
+#if ASON_MCP
         AgentTransportKind.Mcp => _mcp!.ExecuteScriptAsync(code, cancellationToken: cancellationToken),
+#else
+        AgentTransportKind.Mcp => throw new PlatformNotSupportedException(McpUnavailable),
+#endif
         _ => throw new InvalidOperationException()
     };
 
@@ -102,14 +129,20 @@ internal sealed class AgentBridge : IAsyncDisposable {
         var call = new AsonBridgeFunctionCall(@operator, method, null, arguments);
         return Transport switch {
             AgentTransportKind.Grpc => _grpc!.InvokeFunctionAsync(call, cancellationToken),
+#if ASON_MCP
             AgentTransportKind.Mcp => _mcp!.InvokeFunctionAsync(call, cancellationToken),
+#else
+            AgentTransportKind.Mcp => throw new PlatformNotSupportedException(McpUnavailable),
+#endif
             _ => throw new InvalidOperationException()
         };
     }
 
     public async ValueTask DisposeAsync() {
         if (_grpc is not null) await _grpc.DisposeAsync().ConfigureAwait(false);
+#if ASON_MCP
         if (_mcp is not null) await _mcp.DisposeAsync().ConfigureAwait(false);
+#endif
     }
 
     /// <summary>

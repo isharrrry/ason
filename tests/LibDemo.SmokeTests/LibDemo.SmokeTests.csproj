@@ -2,13 +2,21 @@
 
   <PropertyGroup>
     <!-- net6.0/net10.0 also run the assertions on those runtimes, so the ASON assets are
-         exercised for real instead of only being compiled. -->
-    <TargetFrameworks>net6.0;net9.0;net10.0</TargetFrameworks>
+         exercised for real instead of only being compiled. net472 is the certificate leg for the
+         netstandard2.0 asset: it is the only way to actually *run* what a .NET Framework host gets. -->
+    <TargetFrameworks>net6.0;net9.0;net10.0;net472</TargetFrameworks>
+    <!-- net472 defaults to C# 7.3, and these tests use file-scoped namespaces and implicit usings. -->
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <BaseOutputPath>..\bin</BaseOutputPath>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <!-- The .NET Framework 4.7.2 targeting pack is not part of the SDK; this package supplies it from NuGet. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
